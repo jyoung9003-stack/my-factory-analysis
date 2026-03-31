@@ -19,14 +19,14 @@ if uploaded_files:
             else:
                 temp_df = pd.read_excel(file)
             
-            # [항목명 정리] 양쪽 공백 제거
+            # [항목명 정리]
             temp_df.columns = [str(c).strip() for c in temp_df.columns]
             
             # [수정 3] Unnamed: 14 항목을 OPEN ISSUE로 변경
             temp_df = temp_df.rename(columns={'Unnamed: 14': 'OPEN ISSUE'})
             
-            # [수정 1] '분석날짜'를 '생산일'로 변경 (파일명 기준)
-            file_date = file.name.split('.')[0]
+            # [수정 1] '생산일'에서 "일일 생산성_" 단어 제거하고 날짜만 추출
+            file_date = file.name.split('.')[0].replace('일일 생산성_', '')
             temp_df['생산일'] = file_date
             
             # 결측치 처리
@@ -40,21 +40,19 @@ if uploaded_files:
         df = pd.concat(all_data, ignore_index=True)
         
         # [데이터 숫자 변환]
-        cols_to_fix = ['양품수량', '불량수량', '합게수량', '투입시간', '가동시간', '비가동시간', '종합효율', '목표효율']
+        cols_to_fix = ['양품수량', '불량수량', '합게수량', '투입시간', '가동시간', '비가동시간', '정미시간', '종합효율', '목표효율']
         for col in cols_to_fix:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-        # [수정 2] 항목 순서 재배치 (관리자님 요청 순서 + 추가 항목)
+        # 항목 순서 재배치
         desired_order = [
             '생산일', '설비명', '품명', '종합효율', '성능가동율', '시간가동율', '양품율', '목표효율',
             '투입시간', '가동시간', '비가동시간', '정미시간', '양품수량', '불량수량', '합게수량'
         ]
-        # 만약 OPEN ISSUE가 있으면 리스트 끝에 추가
         if 'OPEN ISSUE' in df.columns:
             desired_order.append('OPEN ISSUE')
         
-        # 실제 존재하는 컬럼만 선별하여 재배치
         existing_cols = [c for c in desired_order if c in df.columns]
         df = df[existing_cols]
 
@@ -94,8 +92,12 @@ if uploaded_files:
         st.write("---")
         st.subheader("📂 통합 원본 데이터 (검토용)")
         
-        # [수정 4] 목표효율 백분율 서식 추가 및 천 단위 콤마
+        # [수정 2] 시간 항목 소수점 첫째자리 및 천 단위 콤마 서식 적용
         formatted_df = df.style.format({
+            '투입시간': '{:.1f}',
+            '가동시간': '{:.1f}',
+            '비가동시간': '{:.1f}',
+            '정미시간': '{:.1f}',
             '양품수량': '{:,.0f}',
             '불량수량': '{:,.0f}',
             '합게수량': '{:,.0f}',
