@@ -1,15 +1,13 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import re
 
 # 1. 웹 화면 설정
-st.set_page_config(page_title="사출 공정 통합 분석기", layout="wide")
+st.set_page_config(page_title="사출 생산성 정밀 분석기", layout="wide")
 st.title("📊 사출 생산성 통합 분석 리포트")
-st.markdown("9개 이상의 파일을 통합하여 일별 추이 및 설비 성적을 분석합니다.")
 
 # 2. 파일 업로드
-uploaded_files = st.file_uploader("분석할 파일들을 모두 선택하세요 (Shift/Ctrl 키 활용)", type=['xlsx', 'csv'], accept_multiple_files=True)
+uploaded_files = st.file_uploader("분석할 파일들을 선택하세요", type=['xlsx', 'csv'], accept_multiple_files=True)
 
 if uploaded_files:
     all_data = []
@@ -22,14 +20,14 @@ if uploaded_files:
             else:
                 temp_df = pd.read_excel(file)
             
-            # [항목명 정리] 공백 제거 및 특수문자 정리
-            temp_df.columns = [" ".join(str(c).split()) for c in temp_df.columns]
+            # [항목명 정리]
+            temp_df.columns = [str(c).strip() for c in temp_df.columns]
             
-            # [날짜 추출] 파일명에서 20260302 또는 03.02 같은 패턴 추출
-            date_match = re.search(r'\d{4}\d{2}\d{2}|\d{2}\.\d{2}', file.name)
-            temp_df['분석날짜'] = date_match.group() if date_match else file.name
+            # [날짜 지정] 사용자의 요청대로 파일명을 그대로 사용 (확장자 제외)
+            file_date = file.name.split('.')[0]
+            temp_df['분석날짜'] = file_date
             
-            # [#N/A 및 빈칸 처리] 생산 안한 설비는 모두 0으로 채움
+            # [#N/A 및 빈칸 처리] 생산 안 한 곳은 0으로 채움
             temp_df = temp_df.fillna(0)
             
             all_data.append(temp_df)
@@ -41,21 +39,12 @@ if uploaded_files:
         df = pd.concat(all_data, ignore_index=True)
         df = df.sort_values(by='분석날짜').reset_index(drop=True)
 
-        # 3. 사이드바 항목 설정 (관리자님이 정리한 이름으로 자동 매칭)
-        st.sidebar.header("📊 분석 항목 확인")
-        
-        # 키워드로 정확한 열 찾기
-        def find_col(keywords, default_idx):
-            options = [c for c in df.columns if any(k in c for k in keywords)]
-            return options[0] if options else df.columns[default_idx]
-
-        m_col = st.sidebar.selectbox("1. 설비명 칸", df.columns, index=list(df.columns).index(find_col(['설비'], 0)))
-        o_col = st.sidebar.selectbox("2. 종합효율 칸", df.columns, index=list(df.columns).index(find_col(['종합효율'], 12)))
-        s_col = st.sidebar.selectbox("3. 비가동 시간 칸", df.columns, index=list(df.columns).index(find_col(['비가동'], 7)))
-
-        # 데이터 숫자 변환 (백분율 계산을 위해 소수점 유지)
-        df[o_col] = pd.to_numeric(df[o_col], errors='coerce').fillna(0)
-        df[s_col] = pd.to_numeric(df[s_col], errors='coerce').fillna(0)
+        # 3. 데이터 숫자 변환 (계산 가능하도록)
+        # 콤마나 문자가 섞여있을 경우를 대비해 숫자로 강제 변환
+        cols_to_fix = ['양품수량', '불량수량', '합게수량', '투입시간', '가동시간', '비가동시간', '종합효율']
+        for col in cols_to_fix:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
         # 4. 분석 결과 탭
         tab1, tab2 = st.tabs(["📈 기간별 추이 분석", "🔍 설비별 정밀 분석"])
@@ -64,31 +53,42 @@ if uploaded_files:
             col1, col2 = st.columns(2)
             with col1:
                 st.subheader("🗓️ 일별 평균 종합효율(OEE)")
-                daily_oee = df.groupby('분석날짜')[o_col].mean().reset_index()
-                # y축을 백분율(%)로 표시
-                fig1 = px.line(daily_oee, x='분석날짜', y=o_col, markers=True, text=daily_oee[o_col].apply(lambda x: f'{x:.1%}'))
-                fig1.update_layout(yaxis_tickformat='.0%') # y축 서식
+                daily_oee = df.groupby('분석날짜')['종합효율'].mean().reset_index()
+                # 그래프 소수점을 백분율(%)로 표기
+                fig1 = px.line(daily_oee, x='분석날짜', y='종합효율', markers=True, 
+                               text=daily_oee['종합효율'].apply(lambda x: f'{x:.1%}'))
+                fig1.update_layout(yaxis_tickformat='.0%')
                 fig1.update_traces(textposition="top center")
                 st.plotly_chart(fig1, use_container_width=True)
             
             with col2:
                 st.subheader("⏱️ 일별 총 비가동 시간(분)")
-                daily_stop = df.groupby('분석날짜')[s_col].sum().reset_index()
-                fig2 = px.bar(daily_stop, x='분석날짜', y=s_col, text_auto='.1f', color_discrete_sequence=['#FF4B4B'])
+                daily_stop = df.groupby('분석날짜')['비가동시간'].sum().reset_index()
+                fig2 = px.bar(daily_stop, x='분석날짜', y='비가동시간', text_auto='.1f')
                 st.plotly_chart(fig2, use_container_width=True)
 
         with tab2:
-            st.subheader("🔍 호기별 가동 현황")
-            target_machine = st.selectbox("분석할 설비를 선택하세요", sorted(df[m_col].unique()))
-            m_df = df[df[m_col] == target_machine]
+            st.subheader("🔍 설비별 성적 확인")
+            target_machine = st.selectbox("분석할 설비를 선택하세요", sorted(df['설비명'].unique()))
+            m_df = df[df['설비명'] == target_machine]
             
-            fig3 = px.area(m_df, x='분석날짜', y=o_col, title=f"{target_machine} 효율 변화")
-            fig3.update_layout(yaxis_tickformat='.0%') # y축 서식
+            fig3 = px.area(m_df, x='분석날짜', y='종합효율', title=f"{target_machine} 효율 변화")
+            fig3.update_layout(yaxis_tickformat='.0%')
             st.plotly_chart(fig3, use_container_width=True)
 
         st.write("---")
-        st.subheader("📂 통합 데이터 검토")
-        # 테이블에서도 백분율로 보이게 서식 지정
-        st.dataframe(df.style.format({o_col: '{:.1%}', '양품율': '{:.1%}', '성능가동율': '{:.1%}', '시간가동율': '{:.1%}'}))
+        st.subheader("📂 통합 원본 데이터 (검토용)")
+        
+        # [천 단위 콤마 및 백분율 서식 적용]
+        formatted_df = df.style.format({
+            '양품수량': '{:,.0f}',
+            '불량수량': '{:,.0f}',
+            '합게수량': '{:,.0f}',
+            '종합효율': '{:.1%}',
+            '양품율': '{:.1%}',
+            '성능가동율': '{:.1%}',
+            '시간가동율': '{:.1%}'
+        })
+        st.dataframe(formatted_df)
 else:
-    st.info("왼쪽 상단에서 일별 생산성 파일들을 업로드해 주세요.")
+    st.info("왼쪽 상단에서 파일을 업로드해 주세요.")
