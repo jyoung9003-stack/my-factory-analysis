@@ -15,6 +15,7 @@ target_cols = ['생산일', '설비명', '품명', '양품수량', '불량수량
 
 if uploaded_files:
     all_records = []
+    daily_totals_data = {} # 🚨 일별 M47(합계) 데이터를 저장할 바구니
     
     for file in uploaded_files:
         try:
@@ -38,11 +39,40 @@ if uploaded_files:
                     temp_df = temp_df.rename(columns={col: 'OPEN ISSUE'})
                     break
             
-            # 🚨 [수정 1] 생산일 절대 추출: 파일명에서 오직 '연속된 8자리 숫자(예:20260305)'만 강제로 뽑아냅니다.
+            # 🚨 [수정 1] 생산일 앞자리 "20" 제거 (예: 20260331 -> 260331)
             date_match = re.search(r'\d{8}', file.name)
-            clean_date = date_match.group() if date_match else "날짜오류"
+            if date_match:
+                clean_date = date_match.group()[2:] # 3번째 글자부터 가져옴
+            else:
+                clean_date = file.name.split('.')[0]
             
-            # 핀셋 추출 로직 (에러 방지)
+            # 🚨 [수정 2] M열 47행(합계/TOTAL)에 적힌 '진짜 종합효율' 추출
+            daily_total_oee = None
+            for _, row in temp_df.iterrows():
+                machine_val = str(row.get('설비명', ''))
+                if isinstance(machine_val, pd.Series): machine_val = str(machine_val.iloc[0])
+                
+                # 'TOTAL' 이나 '합계' 라는 글자가 있는 줄을 찾습니다.
+                if 'TOTAL' in machine_val.upper() or '합계' in machine_val or 'GRAND' in machine_val.upper():
+                    val = row.get('종합효율', None)
+                    if isinstance(val, pd.Series): val = val.iloc[0]
+                    try: daily_total_oee = float(val)
+                    except: pass
+                    break
+            
+            # 만약 이름으로 찾지 못했다면 47행(엑셀 기준, 파이썬 인덱스 45)에서 강제 추출
+            if daily_total_oee is None:
+                try:
+                    val = temp_df['종합효율'].iloc[45]
+                    if isinstance(val, pd.Series): val = val.iloc[0]
+                    daily_total_oee = float(val)
+                except:
+                    daily_total_oee = 0
+            
+            # 추출한 값을 날짜별로 저장
+            daily_totals_data[clean_date] = daily_total_oee
+
+            # 나머지 설비별 데이터 추출 (기존과 동일)
             for _, row in temp_df.iterrows():
                 machine_val = str(row.get('설비명', ''))
                 if isinstance(machine_val, pd.Series): 
@@ -56,8 +86,7 @@ if uploaded_files:
                     if col == '생산일': continue
                     if col in temp_df.columns:
                         val = row[col]
-                        if isinstance(val, pd.Series):
-                            val = val.iloc[0]
+                        if isinstance(val, pd.Series): val = val.iloc[0]
                         record[col] = val
                     else:
                         record[col] = None
@@ -69,6 +98,9 @@ if uploaded_files:
 
     if all_records:
         df = pd.DataFrame(all_records)
+        
+        # 🚨 날짜순으로 정렬된 공장 전체(M47) 종합효율 데이터프레임 생성
+        daily_df = pd.DataFrame(list(daily_totals_data.items()), columns=['생산일', '공장종합효율']).sort_values(by='생산일')
         
         num_cols = ['양품수량', '불량수량', '합계수량', '투입시간', '가동시간', '비가동시간', '정미시간', '종합효율', '목표효율', '양품율', '성능가동율', '시간가동율']
         for col in num_cols:
@@ -108,26 +140,21 @@ if uploaded_files:
         tab1, tab2 = st.tabs(["📈 일별 추이 분석", "🔍 상세 데이터 분석"])
 
         with tab1:
-            st.subheader("🗓️ 일별 평균 종합효율(OEE)")
-            active_oee = f_df[f_df['종합효율'] > 0]
-            if not active_oee.empty:
-                daily_oee = active_oee.groupby('생산일')['종합효율'].mean().reset_index().sort_values(by='생산일')
-                fig1 = px.line(daily_oee, x='생산일', y='종합효율', markers=True, text=daily_oee['종합효율'].apply(lambda x: f'{x:.1%}'))
-                
-                # 🚨 [수정 2] 가로축을 무조건 '문자(category)'로 인식하게 강제하여 M이 붙는 오류 차단
+            # 🚨 [수정 3] 파이썬 계산 평균 대신 M47 셀 원본 데이터 사용
+            st.subheader("🗓️ 일별 공장 전체 종합효율 (M47셀 원본 데이터)")
+            if not daily_df.empty:
+                fig1 = px.line(daily_df, x='생산일', y='공장종합효율', markers=True, text=daily_df['공장종합효율'].apply(lambda x: f'{x:.1%}'))
                 fig1.update_xaxes(type='category') 
                 fig1.update_layout(yaxis_tickformat='.0%', yaxis_range=[0, 1.1], height=400)
                 st.plotly_chart(fig1, use_container_width=True)
             else:
-                st.info("가동된 설비의 효율 데이터가 없습니다.")
+                st.info("종합효율 데이터가 없습니다.")
             
             st.write("---")
             
             st.subheader("⏱️ 일별 총 비가동 시간(분)")
             daily_stop = f_df.groupby('생산일')['비가동시간'].sum().reset_index().sort_values(by='생산일')
             fig2 = px.bar(daily_stop, x='생산일', y='비가동시간', text_auto='.1f', color_discrete_sequence=['#FF4B4B'])
-            
-            # 🚨 가로축 문자 강제
             fig2.update_xaxes(type='category')
             fig2.update_layout(height=400)
             st.plotly_chart(fig2, use_container_width=True)
@@ -137,8 +164,6 @@ if uploaded_files:
             if not f_df[f_df['종합효율'] > 0].empty:
                 plot_df = f_df[f_df['종합효율'] > 0].sort_values(by='생산일')
                 fig3 = px.line(plot_df, x='생산일', y='종합효율', color='설비명', markers=True)
-                
-                # 🚨 가로축 문자 강제
                 fig3.update_xaxes(type='category')
                 fig3.update_layout(yaxis_tickformat='.0%', yaxis_range=[0, 1.1], height=500)
                 st.plotly_chart(fig3, use_container_width=True)
@@ -179,8 +204,6 @@ if uploaded_files:
             return res
 
         final_table = display_df.apply(finalize_row, axis=1)
-        
-        # 🚨 [수정 3] hide_index=True 를 추가하여 쓸모없는 첫 번째 순번 열을 안 보이게 숨김 처리
         st.dataframe(final_table, hide_index=True, use_container_width=True)
 else:
     st.info("왼쪽 상단에서 생산성 파일을 업로드해 주세요.")
