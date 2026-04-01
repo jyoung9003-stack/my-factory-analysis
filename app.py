@@ -3,8 +3,9 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import re
+import os
 
-# 1. 웹 화면 및 폰트 강제 설정
+# 1. 웹 화면 및 폰트 강제 설정 (화이트 & 레드 테마 적용)
 st.set_page_config(page_title="사출생산팀 일일 생산성 정밀 분석", layout="wide")
 
 st.markdown("""
@@ -12,11 +13,34 @@ st.markdown("""
     /* 전체 폰트를 세련된 'Pretendard' 또는 '맑은 고딕'으로 변경 */
     html, body, [class*="css"] {
         font-family: 'Pretendard', 'Noto Sans KR', 'Malgun Gothic', sans-serif !important;
+        background-color: #FFFFFF; /* 화이트 배경 */
+    }
+    
+    /* 멀티셀렉트(선택 태그) 색상을 화이트&레드로 변경 */
+    span[data-baseweb="tag"] {
+        background-color: #FFF0F0 !important; 
+        color: #FF2A2A !important; 
+        border: 1px solid #FF2A2A !important;
+    }
+    
+    /* 사이드바 배경을 아주 옅은 그레이/화이트로 */
+    [data-testid="stSidebar"] {
+        background-color: #FAFAFA;
     }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("📊 사출생산팀 일일 생산성 정밀 분석")
+# 🚨 [수정 1 & 2] 로고 및 타이틀 삽입
+col1, col2 = st.columns([1, 10])
+with col1:
+    # 로고 파일이 같은 폴더에 있으면 불러오고, 없으면 텍스트로 대체
+    logo_path = "듀링로고_가로형_빨강_JPG.jpg"
+    if os.path.exists(logo_path):
+        st.image(logo_path, width=100)
+    else:
+        st.markdown("<h2 style='color: #FF2A2A; font-weight: 900; margin-top: 10px;'>DÜRING</h2>", unsafe_allow_html=True)
+with col2:
+    st.markdown("<h1 style='margin-top: 0px;'>사출생산팀 일일 생산성 정밀 분석</h1>", unsafe_allow_html=True)
 
 # 2. 파일 업로드
 uploaded_files = st.file_uploader("분석할 파일들을 선택하세요 (여러 개 선택 가능)", type=['xlsx', 'csv'], accept_multiple_files=True)
@@ -106,7 +130,6 @@ if uploaded_files:
         for col in num_cols:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-        # 줄바꿈 정밀 적용
         def format_issue(text):
             val = str(text).strip()
             if val in ['', '0', '0.0', 'nan', 'NaN', 'None']:
@@ -127,7 +150,8 @@ if uploaded_files:
         df['설비명'] = df['설비명'].fillna("").astype(str)
         all_machines = sorted([m for m in df['설비명'].unique() if m.strip() != ""])
         
-        selected_machines = st.sidebar.multiselect("설비 선택 (클릭하여 추가)", all_machines, default=[])
+        # 🚨 [수정 3] Placeholder "전체 설비" 로 변경
+        selected_machines = st.sidebar.multiselect("설비 선택", all_machines, default=[], placeholder="전체 설비")
         
         if len(selected_machines) == 0:
             pool_df = df.copy()
@@ -145,122 +169,57 @@ if uploaded_files:
             f_df = f_df[f_df['품명_필터'] == selected_prod]
 
         # ---------------------------------------------------------
-        # [그래프 분석 탭]
-        # ---------------------------------------------------------
-        tab1, tab2 = st.tabs(["📈 일별 추이 분석", "📝 일별 OPEN ISSUE 현황"])
-
-        with tab1:
-            is_factory_view = (len(selected_machines) == 0 and selected_prod == "전체 품목")
-            
-            if is_factory_view:
-                st.subheader("🗓️ 사출생산팀 일별 종합 효율(%)")
-                plot_df = daily_df.copy()
-                y_val = '공장종합효율'
-            else:
-                st.subheader("🗓️ 선택 조건(설비/품목) 일별 평균 종합 효율(%)")
-                active_oee = f_df[f_df['종합효율'] > 0]
-                plot_df = active_oee.groupby('생산일')['종합효율'].mean().reset_index().sort_values(by='생산일')
-                y_val = '종합효율'
-
-            if not plot_df.empty:
-                plot_df['x_label'] = plot_df.apply(lambda row: f"{row['생산일']}<br><span style='font-size:11px;color:gray;'>({row[y_val]:.1%})</span>", axis=1)
-                
-                fig1 = px.line(plot_df, x='x_label', y=y_val, text=plot_df[y_val].apply(lambda x: f'{x:.1%}'))
-                
-                # 🚨 [수정 1] 메인 라인 디자인 (잘림 방지 cliponaxis=False 적용)
-                fig1.update_traces(
-                    mode='lines+markers+text',
-                    line=dict(shape='spline', width=3, color='#1f77b4'), 
-                    marker=dict(size=10, color='white', line=dict(width=2, color='#1f77b4')),
-                    textposition="top center", 
-                    textfont=dict(size=14, color="#1f77b4", weight="bold"),
-                    fill='tozeroy', fillcolor='rgba(31, 119, 180, 0.1)',
-                    cliponaxis=False
-                )
-                
-                # 🚨 [수정 1] 목표 효율(86%)을 범례(Legend)로 생성하여 겹침 원천 차단
-                if is_factory_view:
-                    fig1.add_trace(go.Scatter(
-                        x=plot_df['x_label'], 
-                        y=[0.86] * len(plot_df), 
-                        mode='lines', 
-                        name='목표 효율 (86%)', 
-                        line=dict(color='#FF4B4B', dash='dash', width=2),
-                        hoverinfo='skip'
-                    ))
-                
-                # 좌우 여백을 넓혀 끝부분 글자 잘림 방지
-                fig1.update_xaxes(type='category', title="", showgrid=False, range=[-0.5, len(plot_df)-0.5]) 
-                fig1.update_yaxes(title="종합효율", tickformat='.0%', range=[0, 1.2], showgrid=True, gridcolor='rgba(200,200,200,0.2)') 
-                fig1.update_layout(height=450, margin=dict(l=40, r=40, t=40, b=40), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', legend=dict(yanchor="top", y=1.1, xanchor="right", x=1))
-                st.plotly_chart(fig1, use_container_width=True)
-            else:
-                st.info("종합효율 데이터가 없습니다.")
-            
-            st.write("---")
-            
-            st.subheader("⏱️ 일별 총 비가동 시간(분)")
-            daily_stop = f_df.groupby('생산일')['비가동시간'].sum().reset_index().sort_values(by='생산일')
-            fig2 = px.bar(daily_stop, x='생산일', y='비가동시간', text_auto='.1f')
-            
-            fig2.update_traces(
-                marker=dict(color='#FF4B4B', opacity=0.8), 
-                textposition="outside",
-                textfont=dict(size=13, weight="bold"),
-                cliponaxis=False
-            )
-            fig2.update_xaxes(type='category', title="", showgrid=False, range=[-0.5, len(daily_stop)-0.5])
-            fig2.update_yaxes(title="비가동시간 (분)", showgrid=True, gridcolor='rgba(200,200,200,0.2)')
-            fig2.update_layout(height=400, margin=dict(l=40, r=40, t=40, b=40), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-            st.plotly_chart(fig2, use_container_width=True)
-
-        # ---------------------------------------------------------
-        # [HTML 렌더링 헬퍼 함수] (스트림릿 표 한계 극복)
+        # [HTML 렌더링 헬퍼 함수] (화이트/레드 테마 표 디자인)
         # ---------------------------------------------------------
         def render_custom_html_table(styler_obj, is_multiindex=False):
             html = styler_obj.hide(axis="index").to_html()
             
             if is_multiindex:
-                # 🚨 [수정 2 & 4] OPEN ISSUE 2칸 병합 처리 (정규식 활용 HTML 수정)
                 html = re.sub(r'<th class="col_heading level0 col10".*?>OPEN ISSUE</th>', r'<th class="col_heading level0 col10" rowspan="2" style="vertical-align: middle;">OPEN ISSUE</th>', html)
                 html = re.sub(r'<th class="col_heading level1 col10".*?></th>', '', html)
             
-            # 🚨 [수정 3] 중앙 정렬 및 줄바꿈(pre-wrap) 강제 적용 CSS
+            # 🚨 [수정 4] 테이블 디자인을 화이트 & 레드 톤으로 트렌디하게 변경
             wrapped_html = f"""
-            <div style="width: 100%; max-height: 600px; overflow: auto; border: 1px solid #e6e9ef; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+            <div style="width: 100%; max-height: 600px; overflow: auto; border: 1px solid #FFD6D6; border-radius: 8px; box-shadow: 0 4px 12px rgba(255, 42, 42, 0.05);">
                 <style>
                     .my-perfect-table {{
                         width: 100%;
                         border-collapse: collapse;
                         background-color: white;
                         font-size: 13.5px;
-                        color: #31333F;
+                        color: #333;
                     }}
                     .my-perfect-table th {{
-                        background-color: #f8f9fb;
-                        border: 1px solid #e6e9ef;
-                        padding: 10px;
+                        background-color: #FFF0F0; /* 옅은 핑크/레드 배경 */
+                        color: #D32F2F; /* 진한 레드 글씨 */
+                        border: 1px solid #FFD6D6;
+                        padding: 12px 10px;
                         text-align: center !important;
                         vertical-align: middle !important;
-                        font-weight: 700;
+                        font-weight: 800;
                         position: sticky;
                         top: 0;
                         z-index: 1;
                     }}
                     .my-perfect-table thead tr:nth-child(2) th {{
-                        top: 40px;
+                        top: 45px;
                     }}
                     .my-perfect-table td {{
-                        border: 1px solid #e6e9ef;
-                        padding: 8px 10px;
+                        border: 1px solid #F0F0F0;
+                        padding: 10px 10px;
                         text-align: center !important;
                         vertical-align: middle !important;
+                    }}
+                    /* 마우스 오버 시 연한 빨간색 하이라이트 */
+                    .my-perfect-table tbody tr:hover {{
+                        background-color: #FFF9F9; 
                     }}
                     .my-perfect-table td:last-child {{
                         white-space: pre-wrap !important; 
                         text-align: left !important; 
                         min-width: 350px;
-                        line-height: 1.5;
+                        line-height: 1.6;
+                        color: #555;
                     }}
                 </style>
                 {html.replace('<table', '<table class="my-perfect-table"')}
@@ -269,11 +228,79 @@ if uploaded_files:
             st.markdown(wrapped_html, unsafe_allow_html=True)
 
         # ---------------------------------------------------------
+        # [그래프 분석 탭]
+        # ---------------------------------------------------------
+        tab1, tab2 = st.tabs(["📈 일별 추이 분석", "📝 일별 OPEN ISSUE 현황"])
+
+        with tab1:
+            is_factory_view = (len(selected_machines) == 0 and selected_prod == "전체 품목")
+            
+            # 🚨 [수정 1] 회사 전용 글머리 기호(■) 및 스타일 적용 (레드 포인트)
+            if is_factory_view:
+                st.markdown("<h3 style='font-weight: 800;'><span style='color: #FF2A2A;'>■</span> 사출생산팀 일별 종합 효율(%)</h3>", unsafe_allow_html=True)
+                plot_df = daily_df.copy()
+                y_val = '공장종합효율'
+            else:
+                st.markdown("<h3 style='font-weight: 800;'><span style='color: #FF2A2A;'>■</span> 선택 조건(설비/품목) 일별 평균 종합 효율(%)</h3>", unsafe_allow_html=True)
+                active_oee = f_df[f_df['종합효율'] > 0]
+                plot_df = active_oee.groupby('생산일')['종합효율'].mean().reset_index().sort_values(by='생산일')
+                y_val = '종합효율'
+
+            if not plot_df.empty:
+                plot_df['x_label'] = plot_df.apply(lambda row: f"{row['생산일']}<br><span style='font-size:11px;color:gray;'>({row[y_val]:.1%})</span>", axis=1)
+                
+                # 🚨 [수정 4] 그래프 색상 화이트&레드 조합 적용
+                fig1 = px.line(plot_df, x='x_label', y=y_val, text=plot_df[y_val].apply(lambda x: f'{x:.1%}'))
+                fig1.update_traces(
+                    mode='lines+markers+text',
+                    line=dict(shape='spline', width=3.5, color='#FF4B4B'), # 빨간색 라인
+                    marker=dict(size=10, color='white', line=dict(width=2.5, color='#FF4B4B')),
+                    textposition="top center", 
+                    textfont=dict(size=14, color="#D32F2F", weight="bold"),
+                    fill='tozeroy', fillcolor='rgba(255, 75, 75, 0.08)', # 옅은 빨간색 면적
+                    cliponaxis=False
+                )
+                
+                if is_factory_view:
+                    fig1.add_trace(go.Scatter(
+                        x=plot_df['x_label'], 
+                        y=[0.86] * len(plot_df), 
+                        mode='lines', 
+                        name='목표 효율 (86%)', 
+                        line=dict(color='#888888', dash='dash', width=2), # 점선은 그레이로 처리해 가독성 확보
+                        hoverinfo='skip'
+                    ))
+                
+                fig1.update_xaxes(type='category', title="", showgrid=False, range=[-0.5, len(plot_df)-0.5]) 
+                fig1.update_yaxes(title="종합효율", tickformat='.0%', range=[0, 1.2], showgrid=True, gridcolor='rgba(230,230,230,0.5)') 
+                fig1.update_layout(height=450, margin=dict(l=40, r=40, t=40, b=40), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', legend=dict(yanchor="top", y=1.1, xanchor="right", x=1))
+                st.plotly_chart(fig1, use_container_width=True)
+            else:
+                st.info("종합효율 데이터가 없습니다.")
+            
+            st.write("---")
+            
+            st.markdown("<h3 style='font-weight: 800;'><span style='color: #FF2A2A;'>■</span> 일별 총 비가동 시간(분)</h3>", unsafe_allow_html=True)
+            daily_stop = f_df.groupby('생산일')['비가동시간'].sum().reset_index().sort_values(by='생산일')
+            fig2 = px.bar(daily_stop, x='생산일', y='비가동시간', text_auto='.1f')
+            
+            fig2.update_traces(
+                marker=dict(color='#FF4B4B', opacity=0.85), # 비가동시간도 레드톤
+                textposition="outside",
+                textfont=dict(size=13, weight="bold", color="#D32F2F"),
+                cliponaxis=False
+            )
+            fig2.update_xaxes(type='category', title="", showgrid=False, range=[-0.5, len(daily_stop)-0.5])
+            fig2.update_yaxes(title="비가동시간 (분)", showgrid=True, gridcolor='rgba(230,230,230,0.5)')
+            fig2.update_layout(height=400, margin=dict(l=40, r=40, t=40, b=40), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig2, use_container_width=True)
+
+        # ---------------------------------------------------------
         # [표 출력 영역]
         # ---------------------------------------------------------
         with tab2:
-            st.subheader("📝 일별 특이사항(OPEN ISSUE) 현황")
-            st.markdown("발생한 주요 이슈와 당일의 효율을 확인하세요. (클릭 없이 바로 줄바꿈되어 보입니다)")
+            st.markdown("<h3 style='font-weight: 800;'><span style='color: #FF2A2A;'>■</span> 일별 특이사항(OPEN ISSUE) 현황</h3>", unsafe_allow_html=True)
+            st.markdown("발생한 주요 이슈와 당일의 효율을 확인하세요. (효율 텍스트 빨간색은 목표 미달)")
             
             issue_df = f_df[f_df['OPEN ISSUE'] != ""].copy()
             if not issue_df.empty:
@@ -285,7 +312,7 @@ if uploaded_files:
                         oee = float(issue_df.loc[idx, '종합효율'])
                         target = float(issue_df.loc[idx, '목표효율'])
                         if oee < target:
-                            style_issue.iloc[i, style_issue.columns.get_loc('종합효율')] = 'color: #FF4B4B; font-weight: bold;'
+                            style_issue.iloc[i, style_issue.columns.get_loc('종합효율')] = 'color: #FF2A2A; font-weight: bold;'
                     except: pass
                 
                 issue_display['종합효율'] = issue_display['종합효율'].apply(lambda x: f"{float(x):.1%}" if pd.notnull(x) and str(x).strip()!="" else "")
@@ -296,7 +323,7 @@ if uploaded_files:
                 st.info("선택된 조건에 해당하는 특이사항(OPEN ISSUE)이 없습니다.")
 
         st.write("---")
-        st.subheader("📂 사출생산팀 일일 생산성 자료")
+        st.markdown("<h3 style='font-weight: 800;'><span style='color: #FF2A2A;'>■</span> 사출생산팀 일일 생산성 자료</h3>", unsafe_allow_html=True)
         
         display_df = f_df.sort_values(by=['생산일', '설비명']).copy()
         
@@ -311,7 +338,7 @@ if uploaded_files:
                 oee = float(display_df.iloc[i]['종합효율'])
                 target = float(display_df.iloc[i]['목표효율'])
                 if oee < target:
-                    style_main.iloc[i, style_main.columns.get_loc('종합효율')] = 'color: #FF4B4B; font-weight: bold;'
+                    style_main.iloc[i, style_main.columns.get_loc('종합효율')] = 'color: #FF2A2A; font-weight: bold;'
             except: pass
 
         display_df = display_df[[c for c in target_order if c in display_df.columns]]
@@ -343,7 +370,7 @@ if uploaded_files:
             ('구분', '생산일'), ('구분', '설비명'), ('구분', '품명'),
             ('생산성', '종합효율'), ('생산성', '양품율'), ('생산성', '성능가동율'), ('생산성', '시간가동율'),
             ('생산실적', '총 생산수량'), ('생산실적', '양품수량'), ('생산실적', '불량수량'),
-            ('OPEN ISSUE', '') # 🚨 아랫단을 빈칸으로 처리하고 HTML에서 병합합니다.
+            ('OPEN ISSUE', '') 
         ]
         final_table.columns = pd.MultiIndex.from_tuples(multi_cols)
         style_main.columns = pd.MultiIndex.from_tuples(multi_cols)
