@@ -38,14 +38,9 @@ if uploaded_files:
                     temp_df = temp_df.rename(columns={col: 'OPEN ISSUE'})
                     break
             
-            # 🚨 [수정 1] 생산일 정밀 추출: 파일명 꼬리(.csv, - Sheet 등)를 다 자르고 '_' 뒤의 날짜만 뽑기
-            name_only = re.sub(r'\.xlsx?.*$', '', file.name) # .xlsx 뒤에 붙은 찌꺼기 제거
-            name_only = re.sub(r'\.csv$', '', name_only)     # .csv 제거
-            
-            if '_' in name_only:
-                clean_date = name_only.split('_')[-1].strip()
-            else:
-                clean_date = name_only.strip()
+            # 🚨 [수정 1] 생산일 절대 추출: 파일명에서 오직 '연속된 8자리 숫자(예:20260305)'만 강제로 뽑아냅니다.
+            date_match = re.search(r'\d{8}', file.name)
+            clean_date = date_match.group() if date_match else "날짜오류"
             
             # 핀셋 추출 로직 (에러 방지)
             for _, row in temp_df.iterrows():
@@ -87,7 +82,6 @@ if uploaded_files:
         df['설비명'] = df['설비명'].fillna("").astype(str)
         all_machines = sorted([m for m in df['설비명'].unique() if m.strip() != ""])
         
-        # 🚨 [수정 2] 설비 선택: 다 지우는 방식에서 -> 빈칸에서 클릭해 추가하는 방식으로 변경
         selected_machines = st.sidebar.multiselect(
             "설비 선택 (클릭하여 추가하세요)", 
             all_machines, 
@@ -100,7 +94,6 @@ if uploaded_files:
         actual_prods = sorted([p for p in df['품명_필터'].unique() if p != ""])
         selected_prod = st.sidebar.selectbox("품목 선택", ["전체 품목"] + actual_prods)
 
-        # 미선택 시 전체 데이터 보여주기
         if len(selected_machines) == 0:
             f_df = df.copy()
         else:
@@ -110,27 +103,32 @@ if uploaded_files:
             f_df = f_df[f_df['품명_필터'] == selected_prod]
 
         # ---------------------------------------------------------
-        # [그래프 분석 탭] - 세로로 넓게 배치
+        # [그래프 분석 탭]
         # ---------------------------------------------------------
         tab1, tab2 = st.tabs(["📈 일별 추이 분석", "🔍 상세 데이터 분석"])
 
         with tab1:
-            # 🚨 [수정 3] 좌우 분할(columns)을 없애고 위아래로 큼직하게 배치
             st.subheader("🗓️ 일별 평균 종합효율(OEE)")
             active_oee = f_df[f_df['종합효율'] > 0]
             if not active_oee.empty:
                 daily_oee = active_oee.groupby('생산일')['종합효율'].mean().reset_index().sort_values(by='생산일')
                 fig1 = px.line(daily_oee, x='생산일', y='종합효율', markers=True, text=daily_oee['종합효율'].apply(lambda x: f'{x:.1%}'))
-                fig1.update_layout(yaxis_tickformat='.0%', yaxis_range=[0, 1.1], height=400) # 높이도 넉넉하게
+                
+                # 🚨 [수정 2] 가로축을 무조건 '문자(category)'로 인식하게 강제하여 M이 붙는 오류 차단
+                fig1.update_xaxes(type='category') 
+                fig1.update_layout(yaxis_tickformat='.0%', yaxis_range=[0, 1.1], height=400)
                 st.plotly_chart(fig1, use_container_width=True)
             else:
                 st.info("가동된 설비의 효율 데이터가 없습니다.")
             
-            st.write("---") # 위아래 그래프 구분선
+            st.write("---")
             
             st.subheader("⏱️ 일별 총 비가동 시간(분)")
             daily_stop = f_df.groupby('생산일')['비가동시간'].sum().reset_index().sort_values(by='생산일')
             fig2 = px.bar(daily_stop, x='생산일', y='비가동시간', text_auto='.1f', color_discrete_sequence=['#FF4B4B'])
+            
+            # 🚨 가로축 문자 강제
+            fig2.update_xaxes(type='category')
             fig2.update_layout(height=400)
             st.plotly_chart(fig2, use_container_width=True)
 
@@ -139,6 +137,9 @@ if uploaded_files:
             if not f_df[f_df['종합효율'] > 0].empty:
                 plot_df = f_df[f_df['종합효율'] > 0].sort_values(by='생산일')
                 fig3 = px.line(plot_df, x='생산일', y='종합효율', color='설비명', markers=True)
+                
+                # 🚨 가로축 문자 강제
+                fig3.update_xaxes(type='category')
                 fig3.update_layout(yaxis_tickformat='.0%', yaxis_range=[0, 1.1], height=500)
                 st.plotly_chart(fig3, use_container_width=True)
             else:
@@ -178,6 +179,8 @@ if uploaded_files:
             return res
 
         final_table = display_df.apply(finalize_row, axis=1)
-        st.dataframe(final_table, use_container_width=True)
+        
+        # 🚨 [수정 3] hide_index=True 를 추가하여 쓸모없는 첫 번째 순번 열을 안 보이게 숨김 처리
+        st.dataframe(final_table, hide_index=True, use_container_width=True)
 else:
     st.info("왼쪽 상단에서 생산성 파일을 업로드해 주세요.")
