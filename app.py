@@ -9,82 +9,90 @@ st.title("📊 사출 생산성 통합 분석 리포트")
 # 2. 파일 업로드
 uploaded_files = st.file_uploader("분석할 파일들을 선택하세요 (여러 개 선택 가능)", type=['xlsx', 'csv'], accept_multiple_files=True)
 
+# 🚨 반드시 추출해야 할 16개 항목 고정
+target_cols = ['생산일', '설비명', '품명', '양품수량', '불량수량', '합계수량', '투입시간', '가동시간', '비가동시간', '정미시간', '양품율', '성능가동율', '시간가동율', '종합효율', '목표효율', 'OPEN ISSUE']
+
 if uploaded_files:
-    all_data = []
+    all_records = []
     
     for file in uploaded_files:
         try:
-            # 🚨 [근본 해결] 복잡한 꼼수 삭제! 파일의 첫 줄을 정직하게 제목으로 바로 읽습니다.
             if file.name.endswith('.csv'):
                 temp_df = pd.read_csv(file)
             else:
                 temp_df = pd.read_excel(file)
             
-            # 컬럼명에 섞인 엔터키나 공백을 깔끔하게 제거
+            # 컬럼명 공백/줄바꿈 완벽 제거
             temp_df.columns = [str(c).replace('\n', '').replace('\r', '').strip() for c in temp_df.columns]
             
-            # 엑셀마다 조금씩 다른 이름을 표준 이름으로 강제 변경
+            # 항목명 강제 통일
             name_map = {
-                '작업장 [설비]': '설비명', '작업장[설비]': '설비명',
-                '품목명': '품명',
-                '합계': '합계수량', '합게수량': '합계수량', 
-                '종합 효율': '종합효율', '목표 효율': '목표효율'
+                '작업장 [설비]': '설비명', '작업장[설비]': '설비명', '품목명': '품명',
+                '합계': '합계수량', '합게수량': '합계수량', '종합 효율': '종합효율', '목표 효율': '목표효율'
             }
             temp_df = temp_df.rename(columns=name_map)
             
-            # OPEN ISSUE 처리 (Unnamed로 표기된 마지막 비고란을 찾아 이름 변경)
+            # 비고란(OPEN ISSUE) 이름 맞추기
             for col in temp_df.columns:
                 if 'Unnamed' in col or 'ISSUE' in col.upper():
                     temp_df = temp_df.rename(columns={col: 'OPEN ISSUE'})
                     break
             
-            # 중복 컬럼 원천 차단 (만약 동일한 이름이 있으면 첫 번째 1개만 남김)
-            temp_df = temp_df.loc[:, ~temp_df.columns.duplicated(keep='first')]
-            
-            if '품명' not in temp_df.columns:
-                temp_df['품명'] = ""
-            
-            # 생산일 추출 (파일명에서 글자 제거)
+            # 파일명에서 날짜만 추출
             clean_date = file.name.split('.')[0].replace('일일 생산성_', '').replace('사출생산팀 일일 생산성자료_', '')
-            temp_df['생산일'] = clean_date
             
-            # 불필요한 합계 행 제거
-            if '설비명' in temp_df.columns:
-                temp_df = temp_df[~temp_df['설비명'].astype(str).str.contains('TOTAL|합계|GRAND', na=False, case=False)]
-            
-            all_data.append(temp_df)
+            # 🚨 [핵심 해결 로직] 병합 에러 방지를 위해 데이터를 한 줄씩 핀셋으로 뽑아냄
+            for _, row in temp_df.iterrows():
+                # 합계(TOTAL) 행은 분석에서 제외
+                machine_val = str(row.get('설비명', ''))
+                if isinstance(machine_val, pd.Series): 
+                    machine_val = str(machine_val.iloc[0])
+                if 'TOTAL' in machine_val.upper() or '합계' in machine_val or 'GRAND' in machine_val.upper():
+                    continue
+                    
+                record = {'생산일': clean_date}
+                
+                for col in target_cols:
+                    if col == '생산일': continue
+                    
+                    if col in temp_df.columns:
+                        val = row[col]
+                        # 엑셀 오류로 이름이 중복된 열이 있으면 첫 번째 값만 강제로 가져옴
+                        if isinstance(val, pd.Series):
+                            val = val.iloc[0]
+                        record[col] = val
+                    else:
+                        record[col] = None # 없는 항목은 빈칸 처리
+                        
+                all_records.append(record)
+                
         except Exception as e:
             st.error(f"파일 읽기 오류 ({file.name}): {e}")
 
-    if all_data:
-        df = pd.concat(all_data, ignore_index=True)
+    if all_records:
+        # 안전하게 추출된 데이터로만 새 표를 만듦 (에러 0%)
+        df = pd.DataFrame(all_records)
         
-        # 병합 후 혹시 모를 중복 컬럼 한 번 더 제거
-        df = df.loc[:, ~df.columns.duplicated(keep='first')]
-        
-        # 숫자 데이터 변환 (계산을 위해)
+        # 확실한 숫자 변환
         num_cols = ['양품수량', '불량수량', '합계수량', '투입시간', '가동시간', '비가동시간', '정미시간', '종합효율', '목표효율', '양품율', '성능가동율', '시간가동율']
         for col in num_cols:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
         # ---------------------------------------------------------
-        # [사이드바 정밀 필터]
+        # [사이드바 필터]
         # ---------------------------------------------------------
         st.sidebar.header("🎯 정밀 필터링")
-        if '설비명' in df.columns:
-            all_machines = sorted(df['설비명'].astype(str).unique())
-            selected_machines = st.sidebar.multiselect("설비 선택", all_machines, default=all_machines)
-        else:
-            selected_machines = []
         
-        # 안전한 품목 필터링 (에러 방지용 문자열 변환)
+        df['설비명'] = df['설비명'].fillna("").astype(str)
+        all_machines = sorted([m for m in df['설비명'].unique() if m.strip() != ""])
+        selected_machines = st.sidebar.multiselect("설비 선택", all_machines, default=all_machines)
+        
         df['품명_필터'] = df['품명'].fillna("").astype(str).str.strip()
-        df['품명_필터'] = df['품명_필터'].replace(['0', '0.0', 'nan', 'NaN'], "")
+        df['품명_필터'] = df['품명_필터'].replace(['0', '0.0', 'nan', 'NaN', 'None'], "")
         actual_prods = sorted([p for p in df['품명_필터'].unique() if p != ""])
         selected_prod = st.sidebar.selectbox("품목 선택", ["전체 품목"] + actual_prods)
 
-        f_df = df[df['설비명'].isin(selected_machines)] if '설비명' in df.columns else df.copy()
+        f_df = df[df['설비명'].isin(selected_machines)].copy()
         if selected_prod != "전체 품목":
             f_df = f_df[f_df['품명_필터'] == selected_prod]
 
@@ -97,26 +105,28 @@ if uploaded_files:
             c1, c2 = st.columns(2)
             with c1:
                 st.subheader("일별 평균 종합효율(OEE)")
-                if '종합효율' in f_df.columns:
-                    active_oee = f_df[f_df['종합효율'] > 0]
-                    if not active_oee.empty:
-                        daily_oee = active_oee.groupby('생산일')['종합효율'].mean().reset_index()
-                        fig1 = px.line(daily_oee, x='생산일', y='종합효율', markers=True, text=daily_oee['종합효율'].apply(lambda x: f'{x:.1%}'))
-                        fig1.update_layout(yaxis_tickformat='.0%', yaxis_range=[0, 1.1])
-                        st.plotly_chart(fig1, use_container_width=True)
+                active_oee = f_df[f_df['종합효율'] > 0]
+                if not active_oee.empty:
+                    daily_oee = active_oee.groupby('생산일')['종합효율'].mean().reset_index()
+                    fig1 = px.line(daily_oee, x='생산일', y='종합효율', markers=True, text=daily_oee['종합효율'].apply(lambda x: f'{x:.1%}'))
+                    fig1.update_layout(yaxis_tickformat='.0%', yaxis_range=[0, 1.1])
+                    st.plotly_chart(fig1, use_container_width=True)
+                else:
+                    st.info("가동된 설비의 효율 데이터가 없습니다.")
             with c2:
                 st.subheader("일별 총 비가동 시간(분)")
-                if '비가동시간' in f_df.columns:
-                    daily_stop = f_df.groupby('생산일')['비가동시간'].sum().reset_index()
-                    fig2 = px.bar(daily_stop, x='생산일', y='비가동시간', text_auto='.1f', color_discrete_sequence=['#FF4B4B'])
-                    st.plotly_chart(fig2, use_container_width=True)
+                daily_stop = f_df.groupby('생산일')['비가동시간'].sum().reset_index()
+                fig2 = px.bar(daily_stop, x='생산일', y='비가동시간', text_auto='.1f', color_discrete_sequence=['#FF4B4B'])
+                st.plotly_chart(fig2, use_container_width=True)
 
         with tab2:
             st.subheader("설비별 가동 효율 변화")
-            if '종합효율' in f_df.columns and not f_df[f_df['종합효율'] > 0].empty:
+            if not f_df[f_df['종합효율'] > 0].empty:
                 fig3 = px.line(f_df[f_df['종합효율'] > 0], x='생산일', y='종합효율', color='설비명', markers=True)
                 fig3.update_layout(yaxis_tickformat='.0%', yaxis_range=[0, 1.1])
                 st.plotly_chart(fig3, use_container_width=True)
+            else:
+                st.info("가동된 설비의 효율 데이터가 없습니다.")
 
         # ---------------------------------------------------------
         # [통합 원본 데이터 표]
@@ -124,22 +134,13 @@ if uploaded_files:
         st.write("---")
         st.subheader("📂 통합 원본 데이터 (검토용)")
         
-        if '설비명' in f_df.columns:
-            display_df = f_df.sort_values(by=['생산일', '설비명']).copy()
-        else:
-            display_df = f_df.copy()
-        
-        # 관리자님 요청 순서
-        target_order = [
-            '생산일', '설비명', '품명', '종합효율', '성능가동율', '시간가동율', '양품율', '목표효율',
-            '투입시간', '가동시간', '비가동시간', '정미시간', '양품수량', '불량수량', '합계수량', 'OPEN ISSUE'
-        ]
-        display_df = display_df[[c for c in target_order if c in display_df.columns]]
+        display_df = f_df.sort_values(by=['생산일', '설비명']).copy()
+        display_df = display_df[target_cols] # 무조건 지정된 16개 항목 순서로 고정
 
-        # 비가동 설비 빈칸 처리 및 서식(소수점/콤마) 지정
+        # 비가동 빈칸 처리 및 엑셀 스타일 서식
         def finalize_row(row):
             val = str(row.get('품명', '')).strip()
-            is_idle = (val == '') or (val in ['0', '0.0', 'nan', 'NaN'])
+            is_idle = (val == '') or (val in ['0', '0.0', 'nan', 'NaN', 'None'])
             
             res = row.copy()
             for col in res.index:
@@ -147,18 +148,22 @@ if uploaded_files:
                     res[col] = ""
                 else:
                     if col in ['종합효율', '성능가동율', '시간가동율', '양품율', '목표효율']:
-                        try: res[col] = f"{float(res[col]):.1%}" if res[col] != "" else ""
+                        try: res[col] = f"{float(res[col]):.1%}" if pd.notnull(res[col]) and res[col] != "" else ""
                         except: pass
                     elif col in ['양품수량', '불량수량', '합계수량']:
-                        try: res[col] = f"{int(float(res[col])):,.0f}" if res[col] != "" else ""
+                        try: res[col] = f"{int(float(res[col])):,.0f}" if pd.notnull(res[col]) and res[col] != "" else ""
                         except: pass
                     elif col in ['투입시간', '가동시간', '비가동시간', '정미시간']:
-                        try: res[col] = f"{float(res[col]):.1f}" if res[col] != "" else ""
+                        try: res[col] = f"{float(res[col]):.1f}" if pd.notnull(res[col]) and res[col] != "" else ""
                         except: pass
             if is_idle: 
                 res['품명'] = ""
+            # 보기 싫은 nan 값을 완전한 빈칸으로 청소
+            for k, v in res.items():
+                if pd.isna(v) or v == 'None': res[k] = ""
             return res
 
-        st.dataframe(display_df.apply(finalize_row, axis=1), use_container_width=True)
+        final_table = display_df.apply(finalize_row, axis=1)
+        st.dataframe(final_table, use_container_width=True)
 else:
     st.info("왼쪽 상단에서 생산성 파일을 업로드해 주세요.")
