@@ -1,9 +1,10 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import re
 
-# 1. 웹 화면 및 폰트/정렬 CSS 강제 설정 (수정 3, 5 적용)
+# 1. 웹 화면 및 폰트 강제 설정
 st.set_page_config(page_title="사출생산팀 일일 생산성 정밀 분석", layout="wide")
 
 st.markdown("""
@@ -11,15 +12,6 @@ st.markdown("""
     /* 전체 폰트를 세련된 'Pretendard' 또는 '맑은 고딕'으로 변경 */
     html, body, [class*="css"] {
         font-family: 'Pretendard', 'Noto Sans KR', 'Malgun Gothic', sans-serif !important;
-    }
-    
-    /* 데이터프레임 헤더(카테고리) 및 셀 정중앙 정렬 강제 지정 */
-    [data-testid="stDataFrame"] th {
-        text-align: center !important;
-        justify-content: center !important;
-    }
-    [data-testid="stDataFrame"] td {
-        text-align: center !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -42,7 +34,6 @@ if uploaded_files:
             else:
                 temp_df = pd.read_excel(file)
             
-            # 컬럼명 찌꺼기 제거
             temp_df.columns = [str(c).replace('\n', '').replace('\r', '').strip() for c in temp_df.columns]
             
             name_map = {
@@ -62,7 +53,6 @@ if uploaded_files:
             else:
                 clean_date = file.name.split('.')[0]
             
-            # M47 셀(합계) 추출
             daily_total_oee = None
             for _, row in temp_df.iterrows():
                 machine_val = str(row.get('설비명', ''))
@@ -116,13 +106,12 @@ if uploaded_files:
         for col in num_cols:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-        # 🚨 [수정 2] 줄바꿈 데이터 정밀 보존
+        # 줄바꿈 정밀 적용
         def format_issue(text):
             val = str(text).strip()
             if val in ['', '0', '0.0', 'nan', 'NaN', 'None']:
                 return ""
             val = val.replace('\r\n', '\n')
-            # 엑셀에 줄바꿈이 없는 경우에만 기호 앞에 줄바꿈 강제 추가
             val = re.sub(r'(?<!\n)\*', '\n*', val)
             val = re.sub(r'(?<!\n)-\.', '\n-.', val)
             val = re.sub(r'(?<!\n)→', '\n→', val)
@@ -155,15 +144,6 @@ if uploaded_files:
         if selected_prod != "전체 품목":
             f_df = f_df[f_df['품명_필터'] == selected_prod]
 
-        def highlight_under_86(val):
-            if isinstance(val, str) and '%' in val:
-                try:
-                    num = float(val.replace('%', ''))
-                    if num < 86.0:
-                        return 'color: #FF4B4B; font-weight: bold;'
-                except: pass
-            return ''
-
         # ---------------------------------------------------------
         # [그래프 분석 탭]
         # ---------------------------------------------------------
@@ -187,7 +167,7 @@ if uploaded_files:
                 
                 fig1 = px.line(plot_df, x='x_label', y=y_val, text=plot_df[y_val].apply(lambda x: f'{x:.1%}'))
                 
-                # 🚨 [수정 1] 좌우 끝 숫자 잘림 방지 (cliponaxis=False 및 x축 범위 패딩)
+                # 🚨 [수정 1] 메인 라인 디자인 (잘림 방지 cliponaxis=False 적용)
                 fig1.update_traces(
                     mode='lines+markers+text',
                     line=dict(shape='spline', width=3, color='#1f77b4'), 
@@ -195,16 +175,24 @@ if uploaded_files:
                     textposition="top center", 
                     textfont=dict(size=14, color="#1f77b4", weight="bold"),
                     fill='tozeroy', fillcolor='rgba(31, 119, 180, 0.1)',
-                    cliponaxis=False  # 잘림 방지
+                    cliponaxis=False
                 )
                 
+                # 🚨 [수정 1] 목표 효율(86%)을 범례(Legend)로 생성하여 겹침 원천 차단
                 if is_factory_view:
-                    fig1.add_hline(y=0.86, line_dash="dash", line_color="#FF4B4B", annotation_text="목표 효율 (86%)", annotation_font_color="#FF4B4B")
+                    fig1.add_trace(go.Scatter(
+                        x=plot_df['x_label'], 
+                        y=[0.86] * len(plot_df), 
+                        mode='lines', 
+                        name='목표 효율 (86%)', 
+                        line=dict(color='#FF4B4B', dash='dash', width=2),
+                        hoverinfo='skip'
+                    ))
                 
-                # 🚨 X축 양끝에 여백을 주어 글자가 완전히 보이게 함
+                # 좌우 여백을 넓혀 끝부분 글자 잘림 방지
                 fig1.update_xaxes(type='category', title="", showgrid=False, range=[-0.5, len(plot_df)-0.5]) 
                 fig1.update_yaxes(title="종합효율", tickformat='.0%', range=[0, 1.2], showgrid=True, gridcolor='rgba(200,200,200,0.2)') 
-                fig1.update_layout(height=450, margin=dict(l=40, r=40, t=40, b=40), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                fig1.update_layout(height=450, margin=dict(l=40, r=40, t=40, b=40), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', legend=dict(yanchor="top", y=1.1, xanchor="right", x=1))
                 st.plotly_chart(fig1, use_container_width=True)
             else:
                 st.info("종합효율 데이터가 없습니다.")
@@ -227,11 +215,65 @@ if uploaded_files:
             st.plotly_chart(fig2, use_container_width=True)
 
         # ---------------------------------------------------------
-        # [표 데이터 가공 및 스타일 설정 영역]
+        # [HTML 렌더링 헬퍼 함수] (스트림릿 표 한계 극복)
+        # ---------------------------------------------------------
+        def render_custom_html_table(styler_obj, is_multiindex=False):
+            html = styler_obj.hide(axis="index").to_html()
+            
+            if is_multiindex:
+                # 🚨 [수정 2 & 4] OPEN ISSUE 2칸 병합 처리 (정규식 활용 HTML 수정)
+                html = re.sub(r'<th class="col_heading level0 col10".*?>OPEN ISSUE</th>', r'<th class="col_heading level0 col10" rowspan="2" style="vertical-align: middle;">OPEN ISSUE</th>', html)
+                html = re.sub(r'<th class="col_heading level1 col10".*?></th>', '', html)
+            
+            # 🚨 [수정 3] 중앙 정렬 및 줄바꿈(pre-wrap) 강제 적용 CSS
+            wrapped_html = f"""
+            <div style="width: 100%; max-height: 600px; overflow: auto; border: 1px solid #e6e9ef; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                <style>
+                    .my-perfect-table {{
+                        width: 100%;
+                        border-collapse: collapse;
+                        background-color: white;
+                        font-size: 13.5px;
+                        color: #31333F;
+                    }}
+                    .my-perfect-table th {{
+                        background-color: #f8f9fb;
+                        border: 1px solid #e6e9ef;
+                        padding: 10px;
+                        text-align: center !important;
+                        vertical-align: middle !important;
+                        font-weight: 700;
+                        position: sticky;
+                        top: 0;
+                        z-index: 1;
+                    }}
+                    .my-perfect-table thead tr:nth-child(2) th {{
+                        top: 40px;
+                    }}
+                    .my-perfect-table td {{
+                        border: 1px solid #e6e9ef;
+                        padding: 8px 10px;
+                        text-align: center !important;
+                        vertical-align: middle !important;
+                    }}
+                    .my-perfect-table td:last-child {{
+                        white-space: pre-wrap !important; 
+                        text-align: left !important; 
+                        min-width: 350px;
+                        line-height: 1.5;
+                    }}
+                </style>
+                {html.replace('<table', '<table class="my-perfect-table"')}
+            </div>
+            """
+            st.markdown(wrapped_html, unsafe_allow_html=True)
+
+        # ---------------------------------------------------------
+        # [표 출력 영역]
         # ---------------------------------------------------------
         with tab2:
             st.subheader("📝 일별 특이사항(OPEN ISSUE) 현황")
-            st.markdown("선택하신 설비/품목에서 발생한 주요 이슈와 당일의 효율을 나란히 확인하세요.")
+            st.markdown("발생한 주요 이슈와 당일의 효율을 확인하세요. (클릭 없이 바로 줄바꿈되어 보입니다)")
             
             issue_df = f_df[f_df['OPEN ISSUE'] != ""].copy()
             if not issue_df.empty:
@@ -248,11 +290,8 @@ if uploaded_files:
                 
                 issue_display['종합효율'] = issue_display['종합효율'].apply(lambda x: f"{float(x):.1%}" if pd.notnull(x) and str(x).strip()!="" else "")
                 
-                # 🚨 [수정 2] OPEN ISSUE 탭 표에도 줄바꿈 허용 적용 (white-space: pre-wrap)
                 styler = issue_display.style.apply(lambda _: style_issue, axis=None)
-                styler = styler.set_properties(subset=['OPEN ISSUE'], **{'white-space': 'pre-wrap', 'text-align': 'left'})
-                
-                st.dataframe(styler, hide_index=True, use_container_width=True)
+                render_custom_html_table(styler, is_multiindex=False)
             else:
                 st.info("선택된 조건에 해당하는 특이사항(OPEN ISSUE)이 없습니다.")
 
@@ -300,20 +339,19 @@ if uploaded_files:
 
         final_table = display_df.apply(finalize_row, axis=1)
         
-        # 🚨 [수정 4] OPEN ISSUE 헤더 병합 (아랫단 빈칸 처리)
         multi_cols = [
             ('구분', '생산일'), ('구분', '설비명'), ('구분', '품명'),
             ('생산성', '종합효율'), ('생산성', '양품율'), ('생산성', '성능가동율'), ('생산성', '시간가동율'),
             ('생산실적', '총 생산수량'), ('생산실적', '양품수량'), ('생산실적', '불량수량'),
-            ('OPEN ISSUE', '') 
+            ('OPEN ISSUE', '') # 🚨 아랫단을 빈칸으로 처리하고 HTML에서 병합합니다.
         ]
         final_table.columns = pd.MultiIndex.from_tuples(multi_cols)
         style_main.columns = pd.MultiIndex.from_tuples(multi_cols)
         
-        # 🚨 [수정 2 & 3] 줄바꿈(pre-wrap) 적용 및 가운데 정렬
         final_styler = final_table.style.apply(lambda _: style_main, axis=None)
-        final_styler = final_styler.set_properties(subset=[('OPEN ISSUE', '')], **{'white-space': 'pre-wrap', 'text-align': 'left'})
         
-        st.dataframe(final_styler, hide_index=True, use_container_width=True)
+        # HTML 커스텀 렌더링 호출
+        render_custom_html_table(final_styler, is_multiindex=True)
+
 else:
     st.info("왼쪽 상단에서 생산성 파일을 업로드해 주세요.")
