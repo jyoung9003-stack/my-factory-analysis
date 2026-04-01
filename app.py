@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import re
 
 # 1. 웹 화면 설정
 st.set_page_config(page_title="사출 생산성 통합 분석기", layout="wide")
@@ -38,12 +39,12 @@ if uploaded_files:
                     temp_df = temp_df.rename(columns={col: 'OPEN ISSUE'})
                     break
             
-            # 파일명에서 날짜만 추출
-            clean_date = file.name.split('.')[0].replace('일일 생산성_', '').replace('사출생산팀 일일 생산성자료_', '')
+            # 🚨 [수정 1] 생산일 정밀 추출: 파일명에서 숫자 8자리만 쏙 뽑아옵니다.
+            date_match = re.search(r'\d{8}', file.name)
+            clean_date = date_match.group() if date_match else file.name.split('.')[0]
             
-            # 🚨 [핵심 해결 로직] 병합 에러 방지를 위해 데이터를 한 줄씩 핀셋으로 뽑아냄
+            # 핀셋 추출 로직
             for _, row in temp_df.iterrows():
-                # 합계(TOTAL) 행은 분석에서 제외
                 machine_val = str(row.get('설비명', ''))
                 if isinstance(machine_val, pd.Series): 
                     machine_val = str(machine_val.iloc[0])
@@ -57,12 +58,11 @@ if uploaded_files:
                     
                     if col in temp_df.columns:
                         val = row[col]
-                        # 엑셀 오류로 이름이 중복된 열이 있으면 첫 번째 값만 강제로 가져옴
                         if isinstance(val, pd.Series):
                             val = val.iloc[0]
                         record[col] = val
                     else:
-                        record[col] = None # 없는 항목은 빈칸 처리
+                        record[col] = None
                         
                 all_records.append(record)
                 
@@ -70,10 +70,8 @@ if uploaded_files:
             st.error(f"파일 읽기 오류 ({file.name}): {e}")
 
     if all_records:
-        # 안전하게 추출된 데이터로만 새 표를 만듦 (에러 0%)
         df = pd.DataFrame(all_records)
         
-        # 확실한 숫자 변환
         num_cols = ['양품수량', '불량수량', '합계수량', '투입시간', '가동시간', '비가동시간', '정미시간', '종합효율', '목표효율', '양품율', '성능가동율', '시간가동율']
         for col in num_cols:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
@@ -85,14 +83,21 @@ if uploaded_files:
         
         df['설비명'] = df['설비명'].fillna("").astype(str)
         all_machines = sorted([m for m in df['설비명'].unique() if m.strip() != ""])
-        selected_machines = st.sidebar.multiselect("설비 선택", all_machines, default=all_machines)
+        
+        # 🚨 [수정 2] 설비 선택 방식 변경: 처음엔 비워두고(default=[]), 선택해서 추가하는 방식
+        selected_machines = st.sidebar.multiselect("분석할 설비를 고르세요 (미선택 시 전체)", all_machines, default=[])
         
         df['품명_필터'] = df['품명'].fillna("").astype(str).str.strip()
         df['품명_필터'] = df['품명_필터'].replace(['0', '0.0', 'nan', 'NaN', 'None'], "")
         actual_prods = sorted([p for p in df['품명_필터'].unique() if p != ""])
         selected_prod = st.sidebar.selectbox("품목 선택", ["전체 품목"] + actual_prods)
 
-        f_df = df[df['설비명'].isin(selected_machines)].copy()
+        # 설비를 아무것도 선택하지 않으면 전체 데이터를 보여줍니다.
+        if len(selected_machines) == 0:
+            f_df = df.copy()
+        else:
+            f_df = df[df['설비명'].isin(selected_machines)].copy()
+            
         if selected_prod != "전체 품목":
             f_df = f_df[f_df['품명_필터'] == selected_prod]
 
@@ -135,9 +140,8 @@ if uploaded_files:
         st.subheader("📂 통합 원본 데이터 (검토용)")
         
         display_df = f_df.sort_values(by=['생산일', '설비명']).copy()
-        display_df = display_df[target_cols] # 무조건 지정된 16개 항목 순서로 고정
+        display_df = display_df[target_cols] 
 
-        # 비가동 빈칸 처리 및 엑셀 스타일 서식
         def finalize_row(row):
             val = str(row.get('품명', '')).strip()
             is_idle = (val == '') or (val in ['0', '0.0', 'nan', 'NaN', 'None'])
@@ -158,7 +162,6 @@ if uploaded_files:
                         except: pass
             if is_idle: 
                 res['품명'] = ""
-            # 보기 싫은 nan 값을 완전한 빈칸으로 청소
             for k, v in res.items():
                 if pd.isna(v) or v == 'None': res[k] = ""
             return res
