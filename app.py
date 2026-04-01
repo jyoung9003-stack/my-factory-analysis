@@ -4,10 +4,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 import re
 import os
-import html
 from collections import Counter
 
-# 1. 웹 화면 및 폰트 설정
+# 1. 웹 화면 및 차분한 폰트/스타일 설정
 st.set_page_config(page_title="사출생산팀 일일 생산성 정밀 분석", layout="wide")
 
 st.markdown("""
@@ -19,11 +18,11 @@ st.markdown("""
     .metric-card {
         background-color: white; border: 1px solid #E9ECEF; border-radius: 8px;
         padding: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); text-align: center; margin-bottom: 20px;
+        min-height: 160px;
     }
     .metric-title { font-size: 14px; color: #6C757D; font-weight: bold; margin-bottom: 5px; }
     .metric-value.best { font-size: 20px; color: #1F77B4; font-weight: 900; }
     .metric-value.worst { font-size: 20px; color: #FF4B4B; font-weight: 900; }
-    .metric-date { font-size: 12px; color: #ADB5BD; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -36,7 +35,7 @@ with col1:
 with col2:
     st.markdown("<h1 style='margin-top: 0px; color: #212529;'>사출생산팀 일일 생산성 정밀 분석</h1>", unsafe_allow_html=True)
 
-# 3. 데이터 수집 및 정제
+# 3. 데이터 수집 및 정제 (첨부 파일 기반)
 uploaded_files = st.file_uploader("분석할 파일들을 선택하세요 (여러 개 선택 가능)", type=['xlsx', 'csv'], accept_multiple_files=True)
 
 target_cols = ['생산일', '설비명', '품명', '양품수량', '불량수량', '총 생산수량', '투입시간', '가동시간', '비가동시간', '정미시간', '양품율', '성능가동율', '시간가동율', '종합효율', '목표효율', 'OPEN ISSUE']
@@ -109,7 +108,6 @@ if uploaded_files:
         for col in num_cols:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-        # 줄바꿈 정제 함수
         def format_issue(text):
             val = str(text).strip()
             if val in ['', '0', '0.0', 'nan', 'NaN', 'None']: return ""
@@ -122,15 +120,25 @@ if uploaded_files:
         df['OPEN ISSUE'] = df['OPEN ISSUE'].apply(format_issue)
 
         # ---------------------------------------------------------
-        # [사이드바 필터]
+        # [사이드바 필터] - 🚨 생산일 필터 추가
         # ---------------------------------------------------------
         st.sidebar.header("🎯 정밀 필터링")
-        df['설비명'] = df['설비명'].fillna("").astype(str)
-        all_machines = sorted([m for m in df['설비명'].unique() if m.strip() != ""])
+        
+        all_dates = sorted([d for d in df['생산일'].unique() if str(d).strip() != ""])
+        selected_dates = st.sidebar.multiselect("생산일 선택", all_dates, default=[], placeholder="전체 생산일")
+        
+        if len(selected_dates) == 0: 
+            date_filtered_df = df.copy()
+            daily_df_filtered = daily_df.copy()
+        else: 
+            date_filtered_df = df[df['생산일'].isin(selected_dates)].copy()
+            daily_df_filtered = daily_df[daily_df['생산일'].isin(selected_dates)].copy()
+
+        all_machines = sorted([m for m in date_filtered_df['설비명'].unique() if m.strip() != ""])
         selected_machines = st.sidebar.multiselect("설비 선택", all_machines, default=[], placeholder="전체 설비")
         
-        if len(selected_machines) == 0: pool_df = df.copy()
-        else: pool_df = df[df['설비명'].isin(selected_machines)].copy()
+        if len(selected_machines) == 0: pool_df = date_filtered_df.copy()
+        else: pool_df = date_filtered_df[date_filtered_df['설비명'].isin(selected_machines)].copy()
             
         pool_df['품명_필터'] = pool_df['품명'].fillna("").astype(str).str.strip()
         pool_df['품명_필터'] = pool_df['품명_필터'].replace(['0', '0.0', 'nan', 'NaN', 'None'], "")
@@ -142,13 +150,10 @@ if uploaded_files:
             f_df = f_df[f_df['품명_필터'] == selected_prod]
 
         # ---------------------------------------------------------
-        # [HTML 테이블 렌더링 헬퍼 함수] - 에러 방지 및 디자인
+        # [HTML 테이블 렌더링 헬퍼 함수] 
         # ---------------------------------------------------------
         def render_styler_to_html(styler, is_multi=False):
-            # 🚨 특수문자 충돌 에러 완전 방지를 위해 Pandas Styler 내장 기능 사용
             html_str = styler.to_html(escape=True) 
-            
-            # 🚨 강제 줄바꿈 및 정중앙 정렬 CSS 주입
             wrapped_html = f"""
             <div style="width: 100%; max-height: 500px; overflow: auto; border: 1px solid #DEE2E6; border-radius: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 30px;">
                 <style>
@@ -157,33 +162,27 @@ if uploaded_files:
                     .custom-table thead tr:nth-child(2) th {{ top: 38px; }}
                     .custom-table td {{ border: 1px solid #DEE2E6; padding: 8px 10px; text-align: center !important; vertical-align: middle !important; }}
                     .custom-table tbody tr:hover {{ background-color: #F1F3F5; }}
-                    /* OPEN ISSUE 열(가장 마지막 열) 왼쪽 정렬 및 줄바꿈 강제 적용 */
                     .custom-table td:last-child {{ text-align: left !important; white-space: pre-wrap !important; min-width: 300px; line-height: 1.5; }}
                 </style>
                 {html_str.replace('<table', '<table class="custom-table"')}
             </div>
             """
-            # 멀티인덱스(OPEN ISSUE 두칸) 강제 병합 처리
             if is_multi:
                 wrapped_html = re.sub(r'<th class="col_heading level0 col10".*?>OPEN ISSUE</th>', r'<th class="col_heading level0 col10" rowspan="2" style="vertical-align: middle;">OPEN ISSUE</th>', wrapped_html)
                 wrapped_html = re.sub(r'<th class="col_heading level1 col10".*?>OPEN ISSUE</th>', '', wrapped_html)
-            
             st.markdown(wrapped_html, unsafe_allow_html=True)
 
         # ---------------------------------------------------------
-        # 탭 구성: [Tab 1. 생산 추이 및 요약] / [Tab 2. OPEN ISSUE 정밀 분석]
+        # [탭 1] 생산 추이 및 요약
         # ---------------------------------------------------------
         tab1, tab2 = st.tabs(["📈 생산 추이 및 요약", "📝 OPEN ISSUE 정밀 분석"])
 
-        # =========================================================
-        # TAB 1: 생산 추이 및 요약
-        # =========================================================
         with tab1:
             is_factory_view = (len(selected_machines) == 0 and selected_prod == "전체 품목")
             
             if is_factory_view:
                 st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 사출생산팀 일별 종합 효율(%)</h3>", unsafe_allow_html=True)
-                plot_df = daily_df.copy()
+                plot_df = daily_df_filtered.copy()
                 plot_df['목표효율'] = 0.86
                 y_val = '공장종합효율'
             else:
@@ -220,18 +219,32 @@ if uploaded_files:
                 fig1.update_layout(height=450, margin=dict(l=40, r=40, t=40, b=40), plot_bgcolor='white', paper_bgcolor='white', legend=dict(yanchor="top", y=1.1, xanchor="right", x=1))
                 st.plotly_chart(fig1, use_container_width=True)
                 
+                # 🚨 [수정 1] BEST 3 / WORST 3 정밀 추적 (날짜 + 기여 설비/품목 강조)
                 sorted_df = plot_df.sort_values(by=y_val, ascending=False)
                 best_3 = sorted_df.head(3)
                 worst_3 = sorted_df.tail(3).sort_values(by=y_val, ascending=True)
                 
+                def get_contributors(target_date, is_best):
+                    day_df = f_df[(f_df['생산일'] == target_date) & (f_df['종합효율'] > 0)].sort_values(by='종합효율', ascending=not is_best).head(2)
+                    res = ""
+                    for _, r in day_df.iterrows():
+                        m_name = str(r['설비명']).split(' - ')[0][:8] # 설비명 간략화 (예: 04호기)
+                        p_name = str(r['품명'])[:10] + ".." if len(str(r['품명'])) > 10 else str(r['품명'])
+                        res += f"<div style='font-size:11px; color:#6C757D; text-align:left; margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>• [{m_name}] {p_name} ({r['종합효율']:.1%})</div>"
+                    return res if res else "<div style='font-size:11px; color:#ADB5BD;'>세부 데이터 없음</div>"
+
                 st.markdown("#### 🏆 종합효율 BEST 3 & 🚨 WORST 3")
                 b_cols = st.columns(3)
                 w_cols = st.columns(3)
                 
                 for i, (_, r) in enumerate(best_3.iterrows()):
-                    with b_cols[i]: st.markdown(f"<div class='metric-card'><div class='metric-title'>BEST {i+1}</div><div class='metric-value best'>{r[y_val]:.1%}</div><div class='metric-date'>{r['생산일']}</div></div>", unsafe_allow_html=True)
+                    with b_cols[i]: 
+                        card_html = f"<div class='metric-card'><div class='metric-title' style='color:#1F77B4;'>BEST {i+1}</div><div style='font-size:18px; font-weight:900; color:#343A40; margin:5px 0;'>{r['생산일']}</div><div class='metric-value best' style='margin-bottom:10px;'>{r[y_val]:.1%}</div><div style='border-top:1px dashed #E9ECEF; padding-top:5px;'><div style='font-size:10px; color:#ADB5BD; text-align:left; margin-bottom:2px;'>[주요 기여 설비/품목]</div>{get_contributors(r['생산일'], True)}</div></div>"
+                        st.markdown(card_html, unsafe_allow_html=True)
                 for i, (_, r) in enumerate(worst_3.iterrows()):
-                    with w_cols[i]: st.markdown(f"<div class='metric-card'><div class='metric-title'>WORST {i+1}</div><div class='metric-value worst'>{r[y_val]:.1%}</div><div class='metric-date'>{r['생산일']}</div></div>", unsafe_allow_html=True)
+                    with w_cols[i]: 
+                        card_html = f"<div class='metric-card'><div class='metric-title' style='color:#FF4B4B;'>WORST {i+1}</div><div style='font-size:18px; font-weight:900; color:#343A40; margin:5px 0;'>{r['생산일']}</div><div class='metric-value worst' style='margin-bottom:10px;'>{r[y_val]:.1%}</div><div style='border-top:1px dashed #E9ECEF; padding-top:5px;'><div style='font-size:10px; color:#ADB5BD; text-align:left; margin-bottom:2px;'>[효율 저하 주요 요인]</div>{get_contributors(r['생산일'], False)}</div></div>"
+                        st.markdown(card_html, unsafe_allow_html=True)
             else:
                 st.info("종합효율 데이터가 없습니다.")
             
@@ -246,14 +259,13 @@ if uploaded_files:
             fig2.update_layout(height=350, margin=dict(l=40, r=40, t=40, b=40), plot_bgcolor='white', paper_bgcolor='white')
             st.plotly_chart(fig2, use_container_width=True)
 
-            # 🚨 [수정 3] Tab 1 하단에 '사출생산팀 일일 생산성 자료' 복구 및 배치
+            # Tab 1 하단 '사출생산팀 일일 생산성 자료' (OPEN ISSUE 탭에서는 삭제됨)
             st.write("---")
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 사출생산팀 일일 생산성 자료</h3>", unsafe_allow_html=True)
             
             display_df = f_df.sort_values(by=['생산일', '설비명']).copy()
             target_order = ['생산일', '설비명', '품명', '종합효율', '양품율', '성능가동율', '시간가동율', '총 생산수량', '양품수량', '불량수량', 'OPEN ISSUE']
             
-            # 목표 미달 빨간색 강조용 마스크 생성
             style_main = pd.DataFrame('', index=display_df.index, columns=target_order)
             for i in range(len(display_df)):
                 try:
@@ -283,7 +295,6 @@ if uploaded_files:
 
             final_table = display_df.apply(finalize_row, axis=1)
             
-            # 멀티인덱스(카테고리) 설정
             multi_cols = [
                 ('구분', '생산일'), ('구분', '설비명'), ('구분', '품명'),
                 ('생산성', '종합효율'), ('생산성', '양품율'), ('생산성', '성능가동율'), ('생산성', '시간가동율'),
@@ -293,42 +304,53 @@ if uploaded_files:
             final_table.columns = pd.MultiIndex.from_tuples(multi_cols)
             style_main.columns = pd.MultiIndex.from_tuples(multi_cols)
             
-            # 스타일러 적용 및 HTML 렌더링 호출
             final_styler = final_table.style.apply(lambda _: style_main, axis=None).hide(axis="index")
             render_styler_to_html(final_styler, is_multi=True)
 
         # =========================================================
-        # TAB 2: OPEN ISSUE 정밀 분석
+        # [탭 2] OPEN ISSUE 정밀 분석
         # =========================================================
         with tab2:
-            st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 빈출 이슈 (OPEN ISSUE 키워드 분석)</h3>", unsafe_allow_html=True)
-            st.markdown("선택된 기간/조건 동안 가장 많이 발생한 특이사항의 핵심 단어입니다. (효율 개선 집중 포인트)")
+            # 🚨 [수정 3 & 4] 명칭 변경 및 구체적 문맥(Bi-gram) 키워드 분석
+            st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> OPEN ISSUE 키워드 분석</h3>", unsafe_allow_html=True)
+            st.markdown("선택된 기간/조건 동안 반복적으로 발생한 주요 불량 및 이슈 문구입니다.")
             
             issue_df = f_df[f_df['OPEN ISSUE'] != ""].copy()
             
             if not issue_df.empty:
                 all_text = " ".join(issue_df['OPEN ISSUE'].astype(str))
-                words = re.findall(r'[가-힣]+', all_text)
-                stopwords = {'주간', '야간', '확인', '점검', '가동', '조치', '이상', '완료', '발생', '후', '및', '설비', '생산', '연속', '특이사항', '동작'}
+                # 불필요한 접두사 1차 제거
+                all_text = re.sub(r'(주간|야간|주,|야,|주야간)\s*', '', all_text)
+                
+                words = re.findall(r'[가-힣A-Za-z0-9]+', all_text)
+                # 의미 없는 단순 동작/상태 단어 제거
+                stopwords = {'확인', '점검', '가동', '조치', '완료', '발생', '설비', '생산', '연속', '특이사항', '대기', '진행', '시간', '정도', '이후'}
                 filtered_words = [w for w in words if w not in stopwords and len(w) > 1]
                 
-                if filtered_words:
-                    word_counts = Counter(filtered_words).most_common(5)
+                # 2단어 조합(Bi-gram)을 통해 맥락 있는 키워드 생성 (예: '금형보호' + '알람')
+                bigrams = []
+                for i in range(len(filtered_words) - 1):
+                    bigrams.append(f"{filtered_words[i]} {filtered_words[i+1]}")
+                
+                # Bi-gram이 안 나올 정도로 짧으면 단일 단어 사용
+                if not bigrams and filtered_words:
+                    bigrams = filtered_words
+
+                if bigrams:
+                    word_counts = Counter(bigrams).most_common(5)
                     wc_cols = st.columns(len(word_counts))
                     for i, (word, count) in enumerate(word_counts):
                         with wc_cols[i]:
-                            st.markdown(f"<div style='background-color:white; padding:15px; border-radius:8px; text-align:center; border:1px solid #E9ECEF; box-shadow: 0 2px 4px rgba(0,0,0,0.05);'><div style='font-size:18px; font-weight:900; color:#1F77B4;'>{word}</div><div style='font-size:13px; color:#6C757D; margin-top:5px;'>{count}건 발생</div></div>", unsafe_allow_html=True)
+                            st.markdown(f"<div style='background-color:white; padding:15px; border-radius:8px; text-align:center; border:1px solid #E9ECEF; box-shadow: 0 2px 4px rgba(0,0,0,0.05);'><div style='font-size:16px; font-weight:900; color:#1F77B4;'>{word}</div><div style='font-size:13px; color:#6C757D; margin-top:5px;'>{count}건 감지</div></div>", unsafe_allow_html=True)
                 else:
                     st.write("반복되는 유의미한 키워드가 감지되지 않았습니다.")
                 
                 st.write("---")
                 
-                # 🚨 [수정 1] Tab 2 하단에 '일별, 설비별 OPEN ISSUE' 복구
                 st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 일별, 설비별 OPEN ISSUE 상세</h3>", unsafe_allow_html=True)
                 
                 issue_display = issue_df[['생산일', '설비명', '품명', '종합효율', 'OPEN ISSUE']].sort_values(by=['생산일', '설비명'])
                 
-                # 목표 미달 빨간색 강조용 마스크 생성
                 style_issue = pd.DataFrame('', index=issue_display.index, columns=issue_display.columns)
                 for i, idx in enumerate(issue_display.index):
                     try:
@@ -338,7 +360,6 @@ if uploaded_files:
                 
                 issue_display['종합효율'] = issue_display['종합효율'].apply(lambda x: f"{float(x):.1%}" if pd.notnull(x) and str(x).strip()!="" else "")
                 
-                # 스타일러 적용 및 HTML 렌더링 호출
                 issue_styler = issue_display.style.apply(lambda _: style_issue, axis=None).hide(axis="index")
                 render_styler_to_html(issue_styler, is_multi=False)
             else:
