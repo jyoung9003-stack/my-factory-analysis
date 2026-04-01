@@ -10,7 +10,6 @@ st.title("📊 사출 생산성 통합 분석 리포트")
 # 2. 파일 업로드
 uploaded_files = st.file_uploader("분석할 파일들을 선택하세요 (여러 개 선택 가능)", type=['xlsx', 'csv'], accept_multiple_files=True)
 
-# 🚨 [수정 5] 합계수량 -> 총 생산수량 명칭 변경
 target_cols = ['생산일', '설비명', '품명', '양품수량', '불량수량', '총 생산수량', '투입시간', '가동시간', '비가동시간', '정미시간', '양품율', '성능가동율', '시간가동율', '종합효율', '목표효율', 'OPEN ISSUE']
 
 if uploaded_files:
@@ -26,7 +25,6 @@ if uploaded_files:
             
             temp_df.columns = [str(c).replace('\n', '').replace('\r', '').strip() for c in temp_df.columns]
             
-            # 항목명 강제 통일
             name_map = {
                 '작업장 [설비]': '설비명', '작업장[설비]': '설비명', '품목명': '품명',
                 '합계': '총 생산수량', '합게수량': '총 생산수량', '종합 효율': '종합효율', '목표 효율': '목표효율'
@@ -68,7 +66,7 @@ if uploaded_files:
             
             daily_totals_data[clean_date] = daily_total_oee
 
-            # 핀셋 추출 로직
+            # 핀셋 데이터 추출
             for _, row in temp_df.iterrows():
                 machine_val = str(row.get('설비명', ''))
                 if isinstance(machine_val, pd.Series): 
@@ -94,12 +92,23 @@ if uploaded_files:
 
     if all_records:
         df = pd.DataFrame(all_records)
-        
         daily_df = pd.DataFrame(list(daily_totals_data.items()), columns=['생산일', '공장종합효율']).sort_values(by='생산일')
         
         num_cols = ['양품수량', '불량수량', '총 생산수량', '투입시간', '가동시간', '비가동시간', '정미시간', '종합효율', '목표효율', '양품율', '성능가동율', '시간가동율']
         for col in num_cols:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+
+        # 🚨 [수정 3] OPEN ISSUE 가독성 향상 (줄바꿈 처리)
+        def format_issue(text):
+            val = str(text).strip()
+            if val in ['', '0', '0.0', 'nan', 'NaN', 'None']:
+                return ""
+            val = val.replace('\r\n', ' ').replace('\n', ' ') # 기존 엉킨 줄바꿈 제거
+            val = val.replace('*', '\n*').replace('-.', '\n-.').replace('→', '\n→') # 기호 기준 줄바꿈
+            lines = [line.strip() for line in val.split('\n') if line.strip()]
+            return '\n'.join(lines)
+
+        df['OPEN ISSUE'] = df['OPEN ISSUE'].apply(format_issue)
 
         # ---------------------------------------------------------
         # [사이드바 필터]
@@ -116,7 +125,6 @@ if uploaded_files:
             placeholder="여기를 클릭하여 설비를 고르세요"
         )
         
-        # 🚨 [수정 6] 선택한 설비에서 생산된 제품만 목록에 표시되도록 연동!
         if len(selected_machines) == 0:
             pool_df = df.copy()
         else:
@@ -132,13 +140,22 @@ if uploaded_files:
         if selected_prod != "전체 품목":
             f_df = f_df[f_df['품명_필터'] == selected_prod]
 
+        # 🚨 [수정 2] 종합효율 86% 미달 시 빨간색 강조 함수
+        def highlight_under_86(val):
+            if isinstance(val, str) and '%' in val:
+                try:
+                    num = float(val.replace('%', ''))
+                    if num < 86.0:
+                        return 'color: #FF4B4B; font-weight: bold;'
+                except: pass
+            return ''
+
         # ---------------------------------------------------------
         # [그래프 분석 탭]
         # ---------------------------------------------------------
-        tab1, tab2 = st.tabs(["📈 일별 추이 분석", "📝 일별 OPEN ISSUE 분석"])
+        tab1, tab2 = st.tabs(["📈 일별 추이 분석", "📝 일별 OPEN ISSUE 현황"])
 
         with tab1:
-            # 🚨 [수정 1 & 수정 6 대응] 필터 적용 여부에 따라 그래프가 자동으로 바뀝니다.
             if len(selected_machines) == 0 and selected_prod == "전체 품목":
                 st.subheader("🗓️ 사출생산팀 일별 종합 효율(%)")
                 plot_df = daily_df.copy()
@@ -150,15 +167,15 @@ if uploaded_files:
                 y_val = '종합효율'
 
             if not plot_df.empty:
-                # 🚨 [수정 2] 가로축(X축) 날짜 아래에 효율(%) 텍스트를 겹치지 않게 두 줄로 배치
                 plot_df['x_label'] = plot_df.apply(lambda row: f"{row['생산일']}<br><span style='font-size:12px;color:gray;'>({row[y_val]:.1%})</span>", axis=1)
-                
                 fig1 = px.line(plot_df, x='x_label', y=y_val, markers=True, text=plot_df[y_val].apply(lambda x: f'{x:.1%}'))
                 
-                # 🚨 [수정 2] 그래프 선 위에 있는 숫자도 천장에 닿지 않도록 공간 확보 및 위치 조정
+                # 🚨 [수정 2] 86% 목표 효율 가이드라인 추가
+                fig1.add_hline(y=0.86, line_dash="dash", line_color="#FF4B4B", annotation_text="목표 효율 (86%)", annotation_position="bottom right")
+                
                 fig1.update_traces(textposition="top center", textfont=dict(size=14, color="#1f77b4")) 
                 fig1.update_xaxes(type='category', title="") 
-                fig1.update_yaxes(title="종합효율", tickformat='.0%', range=[0, 1.2]) # 천장을 120%까지 높임
+                fig1.update_yaxes(title="종합효율", tickformat='.0%', range=[0, 1.2]) 
                 fig1.update_layout(height=450, margin=dict(t=50))
                 st.plotly_chart(fig1, use_container_width=True)
             else:
@@ -169,28 +186,24 @@ if uploaded_files:
             st.subheader("⏱️ 일별 총 비가동 시간(분)")
             daily_stop = f_df.groupby('생산일')['비가동시간'].sum().reset_index().sort_values(by='생산일')
             fig2 = px.bar(daily_stop, x='생산일', y='비가동시간', text_auto='.1f', color_discrete_sequence=['#FF4B4B'])
-            fig2.update_traces(textposition="outside") # 막대그래프 숫자도 밖으로 빼냄
+            fig2.update_traces(textposition="outside")
             fig2.update_xaxes(type='category', title="")
             fig2.update_yaxes(title="비가동시간 (분)")
             fig2.update_layout(height=400, margin=dict(t=50))
             st.plotly_chart(fig2, use_container_width=True)
 
         with tab2:
-            # 🚨 [수정 3] 어지러운 상세 그래프를 없애고 '일별 OPEN ISSUE 현황' 표로 대체!
             st.subheader("📝 일별 특이사항(OPEN ISSUE) 현황")
-            st.markdown("선택하신 설비/품목에서 발생한 주요 이슈와 당일의 효율을 나란히 확인하세요.")
+            st.markdown("선택하신 설비/품목에서 발생한 주요 이슈와 당일의 효율을 나란히 확인하세요. (목표 86% 미달 시 강조)")
             
-            def has_issue(val):
-                val_str = str(val).strip()
-                return val_str != "" and val_str.lower() not in ['0', '0.0', 'nan', 'none']
-                
-            issue_df = f_df[f_df['OPEN ISSUE'].apply(has_issue)].copy()
-            
+            issue_df = f_df[f_df['OPEN ISSUE'] != ""].copy()
             if not issue_df.empty:
                 issue_display = issue_df[['생산일', '설비명', '품명', '종합효율', 'OPEN ISSUE']].sort_values(by=['생산일', '설비명'])
                 issue_display['종합효율'] = issue_display['종합효율'].apply(lambda x: f"{float(x):.1%}" if pd.notnull(x) and str(x).strip()!="" else "")
                 
-                st.dataframe(issue_display, hide_index=True, use_container_width=True)
+                # 🚨 [수정 2] OPEN ISSUE 표에도 86% 미달 강조 적용
+                styler = issue_display.style.map(highlight_under_86, subset=['종합효율'])
+                st.dataframe(styler, hide_index=True, use_container_width=True)
             else:
                 st.info("선택된 조건에 해당하는 특이사항(OPEN ISSUE)이 없습니다.")
 
@@ -202,7 +215,6 @@ if uploaded_files:
         
         display_df = f_df.sort_values(by=['생산일', '설비명']).copy()
         
-        # 🚨 [수정 4] 관리자님이 요청하신 11개 항목 순서 재배치
         target_order = [
             '생산일', '설비명', '품명', '종합효율', '양품율', '성능가동율', '시간가동율', 
             '총 생산수량', '양품수량', '불량수량', 'OPEN ISSUE'
@@ -232,7 +244,6 @@ if uploaded_files:
 
         final_table = display_df.apply(finalize_row, axis=1)
         
-        # 🚨 [수정 2] 표 상단 헤더를 그룹화(MultiIndex)하여 구분 / 생산성 / 생산실적 분류!
         multi_cols = [
             ('구분', '생산일'), ('구분', '설비명'), ('구분', '품명'),
             ('생산성', '종합효율'), ('생산성', '양품율'), ('생산성', '성능가동율'), ('생산성', '시간가동율'),
@@ -241,6 +252,11 @@ if uploaded_files:
         ]
         final_table.columns = pd.MultiIndex.from_tuples(multi_cols)
         
-        st.dataframe(final_table, hide_index=True, use_container_width=True)
+        # 🚨 [수정 1 & 2] 카테고리(헤더) 가운데 정렬 적용 + 86% 미달 강조 적용
+        final_styler = final_table.style.set_table_styles([
+            dict(selector='th', props=[('text-align', 'center')])
+        ]).map(highlight_under_86, subset=[('생산성', '종합효율')])
+        
+        st.dataframe(final_styler, hide_index=True, use_container_width=True)
 else:
     st.info("왼쪽 상단에서 생산성 파일을 업로드해 주세요.")
