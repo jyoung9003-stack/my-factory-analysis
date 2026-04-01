@@ -36,12 +36,7 @@ with col1:
 with col2:
     st.markdown("<h1 style='margin-top: 0px; color: #212529;'>사출생산팀 일일 생산성 정밀 분석</h1>", unsafe_allow_html=True)
 
-# 3. 데이터 수집 및 정제
-uploaded_files = st.file_uploader("분석할 파일들을 선택하세요 (여러 개 선택 가능)", type=['xlsx', 'csv'], accept_multiple_files=True)
-
-target_cols = ['생산일', '설비명', '품명', '양품수량', '불량수량', '총 생산수량', '투입시간', '가동시간', '비가동시간', '정미시간', '양품율', '성능가동율', '시간가동율', '종합효율', '목표효율', 'OPEN ISSUE']
-
-# 🚨 [핵심 에러 방지 함수] Series 충돌을 막기 위해 무조건 단일 숫자로 변환
+# 🚨 에러 방지 함수
 def safe_float(val):
     try:
         if isinstance(val, pd.Series): return float(val.iloc[0])
@@ -50,68 +45,90 @@ def safe_float(val):
     except:
         return 0.0
 
+target_cols = ['생산일', '설비명', '품명', '양품수량', '불량수량', '총 생산수량', '투입시간', '가동시간', '비가동시간', '정미시간', '양품율', '성능가동율', '시간가동율', '종합효율', '목표효율', 'OPEN ISSUE']
+
+# 🚨 [수정된 파일 수집 로직] 고정 파일(로컬) + 추가 업로드 파일 통합 처리
+data_to_process = []
+
+# (1) 고정된 로컬 데이터 폴더('data')에서 파일 자동 수집
+DATA_DIR = "data"
+if os.path.exists(DATA_DIR):
+    for file_name in os.listdir(DATA_DIR):
+        if file_name.startswith("~$"): continue # 엑셀 임시파일 무시
+        if file_name.endswith('.xlsx') or file_name.endswith('.csv'):
+            file_path = os.path.join(DATA_DIR, file_name)
+            try:
+                if file_name.endswith('.csv'): df = pd.read_csv(file_path)
+                else: df = pd.read_excel(file_path)
+                data_to_process.append((file_name, df))
+            except Exception as e:
+                st.error(f"고정 데이터 읽기 오류 ({file_name}): {e}")
+
+# (2) 사용자가 직접 화면에서 추가하는 파일 수집 (선택사항)
+uploaded_files = st.file_uploader("📂 새로운 일일 생산성 파일이 있다면 추가로 업로드하세요 (선택사항)", type=['xlsx', 'csv'], accept_multiple_files=True)
 if uploaded_files:
+    for file in uploaded_files:
+        try:
+            if file.name.endswith('.csv'): df = pd.read_csv(file)
+            else: df = pd.read_excel(file)
+            data_to_process.append((file.name, df))
+        except Exception as e:
+            st.error(f"업로드 파일 읽기 오류 ({file.name}): {e}")
+
+# 3. 통합된 데이터 처리 진행
+if data_to_process:
     all_records = []
     daily_totals_data = {} 
     
-    for file in uploaded_files:
-        try:
-            if file.name.endswith('.csv'): temp_df = pd.read_csv(file)
-            else: temp_df = pd.read_excel(file)
-            
-            # 중복 컬럼 제거 (에러 방지)
-            temp_df = temp_df.loc[:, ~temp_df.columns.duplicated(keep='first')]
-            temp_df.columns = [str(c).replace('\n', '').replace('\r', '').strip() for c in temp_df.columns]
-            
-            name_map = {
-                '작업장 [설비]': '설비명', '작업장[설비]': '설비명', '품목명': '품명',
-                '합계': '총 생산수량', '합게수량': '총 생산수량', '종합 효율': '종합효율', '목표 효율': '목표효율'
-            }
-            temp_df = temp_df.rename(columns=name_map)
-            
-            for col in temp_df.columns:
-                if 'Unnamed' in col or 'ISSUE' in col.upper():
-                    temp_df = temp_df.rename(columns={col: 'OPEN ISSUE'})
-                    break
-            
-            date_match = re.search(r'\d{8}', file.name)
-            clean_date = date_match.group()[2:] if date_match else file.name.split('.')[0]
-            
-            daily_total_oee = None
-            for _, row in temp_df.iterrows():
-                machine_val = str(row.get('설비명', ''))
-                if isinstance(machine_val, pd.Series): machine_val = str(machine_val.iloc[0])
-                if 'TOTAL' in machine_val.upper() or '합계' in machine_val or 'GRAND' in machine_val.upper():
-                    val = row.get('종합효율', None)
-                    daily_total_oee = safe_float(val)
-                    break
-            
-            if daily_total_oee is None or daily_total_oee == 0.0:
-                try: daily_total_oee = safe_float(temp_df['종합효율'].iloc[45])
-                except: daily_total_oee = 0.0
-            
-            daily_totals_data[clean_date] = daily_total_oee
+    for file_name, temp_df in data_to_process:
+        temp_df = temp_df.loc[:, ~temp_df.columns.duplicated(keep='first')]
+        temp_df.columns = [str(c).replace('\n', '').replace('\r', '').strip() for c in temp_df.columns]
+        
+        name_map = {
+            '작업장 [설비]': '설비명', '작업장[설비]': '설비명', '품목명': '품명',
+            '합계': '총 생산수량', '합게수량': '총 생산수량', '종합 효율': '종합효율', '목표 효율': '목표효율'
+        }
+        temp_df = temp_df.rename(columns=name_map)
+        
+        for col in temp_df.columns:
+            if 'Unnamed' in col or 'ISSUE' in col.upper():
+                temp_df = temp_df.rename(columns={col: 'OPEN ISSUE'})
+                break
+        
+        date_match = re.search(r'\d{8}', file_name)
+        clean_date = date_match.group()[2:] if date_match else file_name.split('.')[0]
+        
+        daily_total_oee = None
+        for _, row in temp_df.iterrows():
+            machine_val = str(row.get('설비명', ''))
+            if isinstance(machine_val, pd.Series): machine_val = str(machine_val.iloc[0])
+            if 'TOTAL' in machine_val.upper() or '합계' in machine_val or 'GRAND' in machine_val.upper():
+                val = row.get('종합효율', None)
+                daily_total_oee = safe_float(val)
+                break
+        
+        if daily_total_oee is None or daily_total_oee == 0.0:
+            try: daily_total_oee = safe_float(temp_df['종합효율'].iloc[45])
+            except: daily_total_oee = 0.0
+        
+        daily_totals_data[clean_date] = daily_total_oee
 
-            for _, row in temp_df.iterrows():
-                machine_val = str(row.get('설비명', ''))
-                if isinstance(machine_val, pd.Series): machine_val = str(machine_val.iloc[0])
-                if 'TOTAL' in machine_val.upper() or '합계' in machine_val or 'GRAND' in machine_val.upper(): continue
-                    
-                record = {'생산일': clean_date}
-                for col in target_cols:
-                    if col == '생산일': continue
-                    if col in temp_df.columns:
-                        val = row[col]
-                        if isinstance(val, pd.Series): val = val.iloc[0]
-                        record[col] = val
-                    else: record[col] = None
-                all_records.append(record)
+        for _, row in temp_df.iterrows():
+            machine_val = str(row.get('설비명', ''))
+            if isinstance(machine_val, pd.Series): machine_val = str(machine_val.iloc[0])
+            if 'TOTAL' in machine_val.upper() or '합계' in machine_val or 'GRAND' in machine_val.upper(): continue
                 
-        except Exception as e:
-            st.error(f"파일 읽기 오류 ({file.name}): {e}")
+            record = {'생산일': clean_date}
+            for col in target_cols:
+                if col == '생산일': continue
+                if col in temp_df.columns:
+                    val = row[col]
+                    if isinstance(val, pd.Series): val = val.iloc[0]
+                    record[col] = val
+                else: record[col] = None
+            all_records.append(record)
 
     if all_records:
-        # 🚨 인덱스 초기화 (표 병합 시 Series 에러 방지)
         df = pd.DataFrame(all_records).reset_index(drop=True)
         daily_df = pd.DataFrame(list(daily_totals_data.items()), columns=['생산일', '공장종합효율']).sort_values(by='생산일').reset_index(drop=True)
         
@@ -131,7 +148,7 @@ if uploaded_files:
         df['OPEN ISSUE'] = df['OPEN ISSUE'].apply(format_issue)
 
         # ---------------------------------------------------------
-        # [사이드바 필터] - 생산일 필터는 제거하고 설비/품목만 유지
+        # [사이드바 필터]
         # ---------------------------------------------------------
         st.sidebar.header("🎯 정밀 필터링")
         
@@ -151,9 +168,6 @@ if uploaded_files:
         if selected_prod != "전체 품목":
             f_df = f_df[f_df['품명_필터'] == selected_prod]
 
-        # ---------------------------------------------------------
-        # [HTML 테이블 렌더링 헬퍼 함수]
-        # ---------------------------------------------------------
         def render_styler_to_html(styler, is_multi=False):
             html_str = styler.to_html(escape=True) 
             wrapped_html = f"""
@@ -174,14 +188,8 @@ if uploaded_files:
                 wrapped_html = re.sub(r'<th class="col_heading level1 col10".*?>OPEN ISSUE</th>', '', wrapped_html)
             st.markdown(wrapped_html, unsafe_allow_html=True)
 
-        # ---------------------------------------------------------
-        # 탭 구성: [Tab 1. 추이] / [Tab 2. 이슈] / [Tab 3. 특정일 상세] 🚨 신규
-        # ---------------------------------------------------------
         tab1, tab2, tab3 = st.tabs(["📈 생산 추이 및 요약", "📝 OPEN ISSUE 정밀 분석", "📅 특정 생산일 상세 조회"])
 
-        # =========================================================
-        # TAB 1: 생산 추이 및 요약 (트렌드 복구)
-        # =========================================================
         with tab1:
             is_factory_view = (len(selected_machines) == 0 and selected_prod == "전체 품목")
             
@@ -197,7 +205,6 @@ if uploaded_files:
                 y_val = '종합효율'
 
             if not plot_df.empty:
-                # 🚨 안전한 숫자로 비교하여 에러 방지
                 colors = []
                 for _, row in plot_df.iterrows():
                     if safe_float(row[y_val]) < safe_float(row['목표효율']): colors.append('#FF4B4B')
@@ -206,23 +213,10 @@ if uploaded_files:
                 plot_df['x_label'] = plot_df.apply(lambda row: f"{row['생산일']}<br><span style='font-size:11px;color:gray;'>({safe_float(row[y_val]):.1%})</span>", axis=1)
                 
                 fig1 = go.Figure()
-                fig1.add_trace(go.Scatter(
-                    x=plot_df['x_label'], y=plot_df[y_val], mode='lines',
-                    line=dict(shape='spline', width=3, color='#1F77B4'),
-                    fill='tozeroy', fillcolor='rgba(31, 119, 180, 0.05)', hoverinfo='skip', showlegend=False
-                ))
-                fig1.add_trace(go.Scatter(
-                    x=plot_df['x_label'], y=plot_df[y_val], mode='markers+text',
-                    text=plot_df[y_val].apply(lambda x: f'{safe_float(x):.1%}'), textposition="top center",
-                    marker=dict(size=10, color='white', line=dict(width=2.5, color=colors)),
-                    textfont=dict(size=14, color=colors, weight="bold"), showlegend=False, cliponaxis=False
-                ))
-                
+                fig1.add_trace(go.Scatter(x=plot_df['x_label'], y=plot_df[y_val], mode='lines', line=dict(shape='spline', width=3, color='#1F77B4'), fill='tozeroy', fillcolor='rgba(31, 119, 180, 0.05)', hoverinfo='skip', showlegend=False))
+                fig1.add_trace(go.Scatter(x=plot_df['x_label'], y=plot_df[y_val], mode='markers+text', text=plot_df[y_val].apply(lambda x: f'{safe_float(x):.1%}'), textposition="top center", marker=dict(size=10, color='white', line=dict(width=2.5, color=colors)), textfont=dict(size=14, color=colors, weight="bold"), showlegend=False, cliponaxis=False))
                 target_val = 0.86 if is_factory_view else plot_df['목표효율'].mean()
-                fig1.add_trace(go.Scatter(
-                    x=plot_df['x_label'], y=[target_val] * len(plot_df), mode='lines', 
-                    name=f'목표 효율 ({target_val:.1%})', line=dict(color='#ADB5BD', dash='dash', width=2)
-                ))
+                fig1.add_trace(go.Scatter(x=plot_df['x_label'], y=[target_val] * len(plot_df), mode='lines', name=f'목표 효율 ({target_val:.1%})', line=dict(color='#ADB5BD', dash='dash', width=2)))
                 
                 fig1.update_xaxes(type='category', title="", showgrid=False, range=[-0.5, len(plot_df)-0.5]) 
                 fig1.update_yaxes(title="종합효율", tickformat='.0%', range=[0, 1.2], showgrid=True, gridcolor='rgba(230,230,230,0.5)') 
@@ -245,23 +239,16 @@ if uploaded_files:
                 st.markdown("#### 🏆 종합효율 BEST 3 & 🚨 WORST 3")
                 b_cols = st.columns(3)
                 w_cols = st.columns(3)
-                
                 for i, (_, r) in enumerate(best_3.iterrows()):
-                    with b_cols[i]: 
-                        card_html = f"<div class='metric-card'><div class='metric-title' style='color:#1F77B4;'>BEST {i+1}</div><div style='font-size:18px; font-weight:900; color:#343A40; margin:5px 0;'>{r['생산일']}</div><div class='metric-value best' style='margin-bottom:10px;'>{safe_float(r[y_val]):.1%}</div><div style='border-top:1px dashed #E9ECEF; padding-top:5px;'><div style='font-size:10px; color:#ADB5BD; text-align:left; margin-bottom:2px;'>[주요 기여 설비/품목]</div>{get_contributors(r['생산일'], True)}</div></div>"
-                        st.markdown(card_html, unsafe_allow_html=True)
+                    with b_cols[i]: st.markdown(f"<div class='metric-card'><div class='metric-title' style='color:#1F77B4;'>BEST {i+1}</div><div style='font-size:18px; font-weight:900; color:#343A40; margin:5px 0;'>{r['생산일']}</div><div class='metric-value best' style='margin-bottom:10px;'>{safe_float(r[y_val]):.1%}</div><div style='border-top:1px dashed #E9ECEF; padding-top:5px;'><div style='font-size:10px; color:#ADB5BD; text-align:left; margin-bottom:2px;'>[주요 기여 설비/품목]</div>{get_contributors(r['생산일'], True)}</div></div>", unsafe_allow_html=True)
                 for i, (_, r) in enumerate(worst_3.iterrows()):
-                    with w_cols[i]: 
-                        card_html = f"<div class='metric-card'><div class='metric-title' style='color:#FF4B4B;'>WORST {i+1}</div><div style='font-size:18px; font-weight:900; color:#343A40; margin:5px 0;'>{r['생산일']}</div><div class='metric-value worst' style='margin-bottom:10px;'>{safe_float(r[y_val]):.1%}</div><div style='border-top:1px dashed #E9ECEF; padding-top:5px;'><div style='font-size:10px; color:#ADB5BD; text-align:left; margin-bottom:2px;'>[효율 저하 주요 요인]</div>{get_contributors(r['생산일'], False)}</div></div>"
-                        st.markdown(card_html, unsafe_allow_html=True)
-            else:
-                st.info("종합효율 데이터가 없습니다.")
+                    with w_cols[i]: st.markdown(f"<div class='metric-card'><div class='metric-title' style='color:#FF4B4B;'>WORST {i+1}</div><div style='font-size:18px; font-weight:900; color:#343A40; margin:5px 0;'>{r['생산일']}</div><div class='metric-value worst' style='margin-bottom:10px;'>{safe_float(r[y_val]):.1%}</div><div style='border-top:1px dashed #E9ECEF; padding-top:5px;'><div style='font-size:10px; color:#ADB5BD; text-align:left; margin-bottom:2px;'>[효율 저하 주요 요인]</div>{get_contributors(r['생산일'], False)}</div></div>", unsafe_allow_html=True)
+            else: st.info("종합효율 데이터가 없습니다.")
             
             st.write("---")
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 일별 총 비가동 시간(분)</h3>", unsafe_allow_html=True)
             daily_stop = f_df.groupby('생산일')['비가동시간'].sum().reset_index().sort_values(by='생산일')
             fig2 = px.bar(daily_stop, x='생산일', y='비가동시간', text_auto='.1f')
-            
             fig2.update_traces(marker=dict(color='#E07A5F', opacity=0.9), textposition="outside", textfont=dict(size=13, weight="bold", color="#E07A5F"), cliponaxis=False)
             fig2.update_xaxes(type='category', title="", showgrid=False, range=[-0.5, len(daily_stop)-0.5])
             fig2.update_yaxes(title="비가동시간 (분)", showgrid=True, gridcolor='rgba(230,230,230,0.5)')
@@ -273,18 +260,15 @@ if uploaded_files:
             
             display_df = f_df.sort_values(by=['생산일', '설비명']).reset_index(drop=True)
             target_order = ['생산일', '설비명', '품명', '종합효율', '양품율', '성능가동율', '시간가동율', '총 생산수량', '양품수량', '불량수량', 'OPEN ISSUE']
-            
             style_main = pd.DataFrame('', index=display_df.index, columns=target_order)
             
-            # 🚨 절대 에러 안나는 안전한 비교
             col_idx = style_main.columns.get_loc('종합효율')
             if isinstance(col_idx, np.ndarray): col_idx = np.where(col_idx)[0][0]
             
             for i in range(len(display_df)):
                 oee = safe_float(display_df.iloc[i]['종합효율'])
                 tgt = safe_float(display_df.iloc[i]['목표효율'])
-                if oee > 0 and oee < tgt:
-                    style_main.iat[i, col_idx] = 'color: #FF4B4B; font-weight: bold;'
+                if oee > 0 and oee < tgt: style_main.iat[i, col_idx] = 'color: #FF4B4B; font-weight: bold;'
 
             display_df = display_df[[c for c in target_order if c in display_df.columns]]
 
@@ -307,36 +291,24 @@ if uploaded_files:
                 return res
 
             final_table = display_df.apply(finalize_row, axis=1)
-            
-            multi_cols = [
-                ('구분', '생산일'), ('구분', '설비명'), ('구분', '품명'),
-                ('생산성', '종합효율'), ('생산성', '양품율'), ('생산성', '성능가동율'), ('생산성', '시간가동율'),
-                ('생산실적', '총 생산수량'), ('생산실적', '양품수량'), ('생산실적', '불량수량'),
-                ('OPEN ISSUE', 'OPEN ISSUE') 
-            ]
+            multi_cols = [('구분', '생산일'), ('구분', '설비명'), ('구분', '품명'), ('생산성', '종합효율'), ('생산성', '양품율'), ('생산성', '성능가동율'), ('생산성', '시간가동율'), ('생산실적', '총 생산수량'), ('생산실적', '양품수량'), ('생산실적', '불량수량'), ('OPEN ISSUE', 'OPEN ISSUE')]
             final_table.columns = pd.MultiIndex.from_tuples(multi_cols)
             style_main.columns = pd.MultiIndex.from_tuples(multi_cols)
             
             final_styler = final_table.style.apply(lambda _: style_main, axis=None).hide(axis="index")
             render_styler_to_html(final_styler, is_multi=True)
 
-        # =========================================================
-        # [탭 2] OPEN ISSUE 정밀 분석
-        # =========================================================
         with tab2:
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> OPEN ISSUE 키워드 분석</h3>", unsafe_allow_html=True)
             st.markdown("선택된 조건 동안 반복적으로 발생한 주요 불량 및 이슈 문구입니다.")
             
             issue_df = f_df[f_df['OPEN ISSUE'] != ""].copy()
-            
             if not issue_df.empty:
                 all_text = " ".join(issue_df['OPEN ISSUE'].astype(str))
                 all_text = re.sub(r'(주간|야간|주,|야,|주야간)\s*', '', all_text)
-                
                 words = re.findall(r'[가-힣A-Za-z0-9]+', all_text)
                 stopwords = {'확인', '점검', '가동', '조치', '완료', '발생', '설비', '생산', '연속', '특이사항', '대기', '진행', '시간', '정도', '이후'}
                 filtered_words = [w for w in words if w not in stopwords and len(w) > 1]
-                
                 bigrams = [f"{filtered_words[i]} {filtered_words[i+1]}" for i in range(len(filtered_words) - 1)]
                 if not bigrams and filtered_words: bigrams = filtered_words
 
@@ -344,39 +316,32 @@ if uploaded_files:
                     word_counts = Counter(bigrams).most_common(5)
                     wc_cols = st.columns(len(word_counts))
                     for i, (word, count) in enumerate(word_counts):
-                        with wc_cols[i]:
-                            st.markdown(f"<div style='background-color:white; padding:15px; border-radius:8px; text-align:center; border:1px solid #E9ECEF; box-shadow: 0 2px 4px rgba(0,0,0,0.05);'><div style='font-size:16px; font-weight:900; color:#1F77B4;'>{word}</div><div style='font-size:13px; color:#6C757D; margin-top:5px;'>{count}건 감지</div></div>", unsafe_allow_html=True)
-                else:
-                    st.write("반복되는 유의미한 키워드가 감지되지 않았습니다.")
+                        with wc_cols[i]: st.markdown(f"<div style='background-color:white; padding:15px; border-radius:8px; text-align:center; border:1px solid #E9ECEF; box-shadow: 0 2px 4px rgba(0,0,0,0.05);'><div style='font-size:16px; font-weight:900; color:#1F77B4;'>{word}</div><div style='font-size:13px; color:#6C757D; margin-top:5px;'>{count}건 감지</div></div>", unsafe_allow_html=True)
+                else: st.write("반복되는 유의미한 키워드가 감지되지 않았습니다.")
                 
                 st.write("---")
-                
                 st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 일별, 설비별 OPEN ISSUE 상세</h3>", unsafe_allow_html=True)
                 
                 issue_display = issue_df[['생산일', '설비명', '품명', '종합효율', '목표효율', 'OPEN ISSUE']].sort_values(by=['생산일', '설비명']).reset_index(drop=True)
                 style_issue = pd.DataFrame('', index=issue_display.index, columns=issue_display.columns)
-                
                 col_idx = style_issue.columns.get_loc('종합효율')
                 if isinstance(col_idx, np.ndarray): col_idx = np.where(col_idx)[0][0]
                 
                 for i in range(len(issue_display)):
                     oee = safe_float(issue_display.iloc[i]['종합효율'])
                     tgt = safe_float(issue_display.iloc[i]['목표효율'])
-                    if oee > 0 and oee < tgt:
-                        style_issue.iat[i, col_idx] = 'color: #FF4B4B; font-weight: bold;'
+                    if oee > 0 and oee < tgt: style_issue.iat[i, col_idx] = 'color: #FF4B4B; font-weight: bold;'
                 
                 issue_display = issue_display.drop(columns=['목표효율'])
                 style_issue = style_issue.drop(columns=['목표효율'])
-                
                 issue_display['종합효율'] = issue_display['종합효율'].apply(lambda x: f"{safe_float(x):.1%}" if pd.notnull(x) and str(x).strip()!="" else "")
                 
                 issue_styler = issue_display.style.apply(lambda _: style_issue, axis=None).hide(axis="index")
                 render_styler_to_html(issue_styler, is_multi=False)
-            else:
-                st.info("선택된 조건에 해당하는 특이사항(OPEN ISSUE)이 없습니다.")
+            else: st.info("선택된 조건에 해당하는 특이사항(OPEN ISSUE)이 없습니다.")
 
         # =========================================================
-        # [탭 3] 특정 생산일 정밀 분석 (신규 탭) 🚨
+        # [탭 3] 특정 생산일 정밀 데이터 조회
         # =========================================================
         with tab3:
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 특정 생산일 정밀 데이터 조회</h3>", unsafe_allow_html=True)
@@ -388,38 +353,31 @@ if uploaded_files:
                 day_df = f_df[f_df['생산일'] == selected_date].copy().reset_index(drop=True)
                 
                 st.write("---")
-                
-                # 해당 일자의 설비별 효율 비교 바 차트
                 st.markdown(f"#### 📊 {selected_date} 설비별 종합효율 비교")
                 active_day = day_df[day_df['종합효율'] > 0].sort_values(by='종합효율', ascending=False)
                 
                 if not active_day.empty:
-                    # 목표 미달인 설비는 빨간색으로 표시
                     bar_colors = ['#FF4B4B' if safe_float(row['종합효율']) < safe_float(row['목표효율']) else '#1F77B4' for _, row in active_day.iterrows()]
-                    
                     fig3 = px.bar(active_day, x='설비명', y='종합효율', text_auto='.1%')
                     fig3.update_traces(marker_color=bar_colors, textposition="outside", textfont=dict(size=12, weight="bold"))
                     fig3.update_xaxes(title="", tickangle=45)
                     fig3.update_yaxes(title="종합효율", tickformat='.0%', range=[0, 1.2], showgrid=True, gridcolor='rgba(230,230,230,0.5)')
                     fig3.update_layout(height=400, margin=dict(l=40, r=40, t=40, b=80), plot_bgcolor='white', paper_bgcolor='white')
                     st.plotly_chart(fig3, use_container_width=True)
-                else:
-                    st.info("해당 일자에 가동된 설비 데이터가 없습니다.")
+                else: st.info("해당 일자에 가동된 설비 데이터가 없습니다.")
                 
                 st.write("---")
                 st.markdown(f"#### 📂 {selected_date} 상세 데이터")
                 
                 display_day = day_df.sort_values(by='설비명').copy()
                 style_day = pd.DataFrame('', index=display_day.index, columns=target_order)
-                
                 col_idx = style_day.columns.get_loc('종합효율')
                 if isinstance(col_idx, np.ndarray): col_idx = np.where(col_idx)[0][0]
                 
                 for i in range(len(display_day)):
                     oee = safe_float(display_day.iloc[i]['종합효율'])
                     tgt = safe_float(display_day.iloc[i]['목표효율'])
-                    if oee > 0 and oee < tgt:
-                        style_day.iat[i, col_idx] = 'color: #FF4B4B; font-weight: bold;'
+                    if oee > 0 and oee < tgt: style_day.iat[i, col_idx] = 'color: #FF4B4B; font-weight: bold;'
                         
                 display_day = display_day[[c for c in target_order if c in display_day.columns]]
                 final_day_table = display_day.apply(finalize_row, axis=1)
@@ -429,9 +387,6 @@ if uploaded_files:
                 
                 day_styler = final_day_table.style.apply(lambda _: style_day, axis=None).hide(axis="index")
                 render_styler_to_html(day_styler, is_multi=True)
-
-            else:
-                st.info("분석할 생산일 데이터가 없습니다.")
-
+            else: st.info("분석할 생산일 데이터가 없습니다.")
 else:
-    st.info("왼쪽 상단에서 생산성 파일을 업로드해 주세요.")
+    st.info("데이터 파일이 없습니다. GitHub의 'data' 폴더에 엑셀 파일을 넣거나, 아래 버튼을 통해 직접 파일을 업로드해주세요.")
