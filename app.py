@@ -10,12 +10,12 @@ st.title("📊 사출 생산성 통합 분석 리포트")
 # 2. 파일 업로드
 uploaded_files = st.file_uploader("분석할 파일들을 선택하세요 (여러 개 선택 가능)", type=['xlsx', 'csv'], accept_multiple_files=True)
 
-# 🚨 반드시 추출해야 할 16개 항목
-target_cols = ['생산일', '설비명', '품명', '양품수량', '불량수량', '합계수량', '투입시간', '가동시간', '비가동시간', '정미시간', '양품율', '성능가동율', '시간가동율', '종합효율', '목표효율', 'OPEN ISSUE']
+# 🚨 [수정 5] 합계수량 -> 총 생산수량 명칭 변경
+target_cols = ['생산일', '설비명', '품명', '양품수량', '불량수량', '총 생산수량', '투입시간', '가동시간', '비가동시간', '정미시간', '양품율', '성능가동율', '시간가동율', '종합효율', '목표효율', 'OPEN ISSUE']
 
 if uploaded_files:
     all_records = []
-    daily_totals_data = {} # 🚨 일별 M47(합계) 데이터를 저장할 바구니
+    daily_totals_data = {} 
     
     for file in uploaded_files:
         try:
@@ -24,13 +24,12 @@ if uploaded_files:
             else:
                 temp_df = pd.read_excel(file)
             
-            # 컬럼명 공백/줄바꿈 제거
             temp_df.columns = [str(c).replace('\n', '').replace('\r', '').strip() for c in temp_df.columns]
             
-            # 항목명 강제 통일
+            # 항목명 강제 통일 (합계수량을 총 생산수량으로)
             name_map = {
                 '작업장 [설비]': '설비명', '작업장[설비]': '설비명', '품목명': '품명',
-                '합계': '합계수량', '합게수량': '합계수량', '종합 효율': '종합효율', '목표 효율': '목표효율'
+                '합계': '총 생산수량', '합게수량': '총 생산수량', '종합 효율': '종합효율', '목표 효율': '목표효율'
             }
             temp_df = temp_df.rename(columns=name_map)
             
@@ -39,20 +38,19 @@ if uploaded_files:
                     temp_df = temp_df.rename(columns={col: 'OPEN ISSUE'})
                     break
             
-            # 🚨 [수정 1] 생산일 앞자리 "20" 제거 (예: 20260331 -> 260331)
+            # 생산일 추출 (예: 260331)
             date_match = re.search(r'\d{8}', file.name)
             if date_match:
-                clean_date = date_match.group()[2:] # 3번째 글자부터 가져옴
+                clean_date = date_match.group()[2:]
             else:
                 clean_date = file.name.split('.')[0]
             
-            # 🚨 [수정 2] M열 47행(합계/TOTAL)에 적힌 '진짜 종합효율' 추출
+            # M47 셀(합계) 종합효율 원본 추출
             daily_total_oee = None
             for _, row in temp_df.iterrows():
                 machine_val = str(row.get('설비명', ''))
                 if isinstance(machine_val, pd.Series): machine_val = str(machine_val.iloc[0])
                 
-                # 'TOTAL' 이나 '합계' 라는 글자가 있는 줄을 찾습니다.
                 if 'TOTAL' in machine_val.upper() or '합계' in machine_val or 'GRAND' in machine_val.upper():
                     val = row.get('종합효율', None)
                     if isinstance(val, pd.Series): val = val.iloc[0]
@@ -60,7 +58,6 @@ if uploaded_files:
                     except: pass
                     break
             
-            # 만약 이름으로 찾지 못했다면 47행(엑셀 기준, 파이썬 인덱스 45)에서 강제 추출
             if daily_total_oee is None:
                 try:
                     val = temp_df['종합효율'].iloc[45]
@@ -69,10 +66,9 @@ if uploaded_files:
                 except:
                     daily_total_oee = 0
             
-            # 추출한 값을 날짜별로 저장
             daily_totals_data[clean_date] = daily_total_oee
 
-            # 나머지 설비별 데이터 추출 (기존과 동일)
+            # 핀셋 추출 로직
             for _, row in temp_df.iterrows():
                 machine_val = str(row.get('설비명', ''))
                 if isinstance(machine_val, pd.Series): 
@@ -99,10 +95,9 @@ if uploaded_files:
     if all_records:
         df = pd.DataFrame(all_records)
         
-        # 🚨 날짜순으로 정렬된 공장 전체(M47) 종합효율 데이터프레임 생성
         daily_df = pd.DataFrame(list(daily_totals_data.items()), columns=['생산일', '공장종합효율']).sort_values(by='생산일')
         
-        num_cols = ['양품수량', '불량수량', '합계수량', '투입시간', '가동시간', '비가동시간', '정미시간', '종합효율', '목표효율', '양품율', '성능가동율', '시간가동율']
+        num_cols = ['양품수량', '불량수량', '총 생산수량', '투입시간', '가동시간', '비가동시간', '정미시간', '종합효율', '목표효율', '양품율', '성능가동율', '시간가동율']
         for col in num_cols:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
@@ -121,16 +116,18 @@ if uploaded_files:
             placeholder="여기를 클릭하여 설비를 고르세요"
         )
         
-        df['품명_필터'] = df['품명'].fillna("").astype(str).str.strip()
-        df['품명_필터'] = df['품명_필터'].replace(['0', '0.0', 'nan', 'NaN', 'None'], "")
-        actual_prods = sorted([p for p in df['품명_필터'].unique() if p != ""])
-        selected_prod = st.sidebar.selectbox("품목 선택", ["전체 품목"] + actual_prods)
-
+        # 🚨 [수정 6] 선택된 설비에서만 생산된 품목 목록을 연동하여 필터링
         if len(selected_machines) == 0:
-            f_df = df.copy()
+            pool_df = df.copy()
         else:
-            f_df = df[df['설비명'].isin(selected_machines)].copy()
+            pool_df = df[df['설비명'].isin(selected_machines)].copy()
             
+        pool_df['품명_필터'] = pool_df['품명'].fillna("").astype(str).str.strip()
+        pool_df['품명_필터'] = pool_df['품명_필터'].replace(['0', '0.0', 'nan', 'NaN', 'None'], "")
+        actual_prods = sorted([p for p in pool_df['품명_필터'].unique() if p != ""])
+        selected_prod = st.sidebar.selectbox("품목 선택 (해당 설비 생산품)", ["전체 품목"] + actual_prods)
+
+        f_df = pool_df.copy()
         if selected_prod != "전체 품목":
             f_df = f_df[f_df['품명_필터'] == selected_prod]
 
@@ -140,12 +137,19 @@ if uploaded_files:
         tab1, tab2 = st.tabs(["📈 일별 추이 분석", "🔍 상세 데이터 분석"])
 
         with tab1:
-            # 🚨 [수정 3] 파이썬 계산 평균 대신 M47 셀 원본 데이터 사용
-            st.subheader("🗓️ 일별 공장 전체 종합효율 (M47셀 원본 데이터)")
+            # 🚨 [수정 1] 명칭 변경
+            st.subheader("🗓️ 사출생산팀 일별 종합 효율(%)")
             if not daily_df.empty:
-                fig1 = px.line(daily_df, x='생산일', y='공장종합효율', markers=True, text=daily_df['공장종합효율'].apply(lambda x: f'{x:.1%}'))
-                fig1.update_xaxes(type='category') 
-                fig1.update_layout(yaxis_tickformat='.0%', yaxis_range=[0, 1.1], height=400)
+                # 🚨 [수정 2] X축 날짜 밑에 겹치지 않게 효율 텍스트 추가 배치
+                daily_df['x_label'] = daily_df.apply(lambda row: f"{row['생산일']}<br><span style='font-size:12px;color:gray;'>({row['공장종합효율']:.1%})</span>", axis=1)
+                
+                fig1 = px.line(daily_df, x='x_label', y='공장종합효율', markers=True, text=daily_df['공장종합효율'].apply(lambda x: f'{x:.1%}'))
+                
+                # 🚨 [수정 2] 그래프 숫자 겹침 방지: 글씨를 위로 올리고 여백 확보
+                fig1.update_traces(textposition="top center", textfont=dict(size=14, color="#1f77b4")) 
+                fig1.update_xaxes(type='category', title="") 
+                fig1.update_yaxes(title="종합효율", tickformat='.0%', range=[0, 1.2]) # 천장이 안 닿게 높이 120%까지 확장
+                fig1.update_layout(height=450, margin=dict(t=50))
                 st.plotly_chart(fig1, use_container_width=True)
             else:
                 st.info("종합효율 데이터가 없습니다.")
@@ -155,8 +159,10 @@ if uploaded_files:
             st.subheader("⏱️ 일별 총 비가동 시간(분)")
             daily_stop = f_df.groupby('생산일')['비가동시간'].sum().reset_index().sort_values(by='생산일')
             fig2 = px.bar(daily_stop, x='생산일', y='비가동시간', text_auto='.1f', color_discrete_sequence=['#FF4B4B'])
-            fig2.update_xaxes(type='category')
-            fig2.update_layout(height=400)
+            fig2.update_traces(textposition="outside") # 막대그래프 숫자도 밖으로 빼서 겹침 방지
+            fig2.update_xaxes(type='category', title="")
+            fig2.update_yaxes(title="비가동시간 (분)")
+            fig2.update_layout(height=400, margin=dict(t=50))
             st.plotly_chart(fig2, use_container_width=True)
 
         with tab2:
@@ -165,7 +171,8 @@ if uploaded_files:
                 plot_df = f_df[f_df['종합효율'] > 0].sort_values(by='생산일')
                 fig3 = px.line(plot_df, x='생산일', y='종합효율', color='설비명', markers=True)
                 fig3.update_xaxes(type='category')
-                fig3.update_layout(yaxis_tickformat='.0%', yaxis_range=[0, 1.1], height=500)
+                fig3.update_yaxes(tickformat='.0%', range=[0, 1.2])
+                fig3.update_layout(height=500)
                 st.plotly_chart(fig3, use_container_width=True)
             else:
                 st.info("가동된 설비의 효율 데이터가 없습니다.")
@@ -174,10 +181,17 @@ if uploaded_files:
         # [통합 원본 데이터 표]
         # ---------------------------------------------------------
         st.write("---")
-        st.subheader("📂 통합 원본 데이터 (검토용)")
+        # 🚨 [수정 3] 명칭 변경
+        st.subheader("📂 사출생산팀 일일 생산성 자료")
         
         display_df = f_df.sort_values(by=['생산일', '설비명']).copy()
-        display_df = display_df[target_cols] 
+        
+        # 🚨 [수정 4] 관리자님 요청 순서대로 정확하게 재배치 및 불필요한 항목 숨김
+        target_order = [
+            '생산일', '설비명', '품명', '종합효율', '양품율', '성능가동율', '시간가동율', 
+            '총 생산수량', '양품수량', '불량수량', 'OPEN ISSUE'
+        ]
+        display_df = display_df[[c for c in target_order if c in display_df.columns]]
 
         def finalize_row(row):
             val = str(row.get('품명', '')).strip()
@@ -188,14 +202,11 @@ if uploaded_files:
                 if is_idle and col not in ['생산일', '설비명']:
                     res[col] = ""
                 else:
-                    if col in ['종합효율', '성능가동율', '시간가동율', '양품율', '목표효율']:
+                    if col in ['종합효율', '성능가동율', '시간가동율', '양품율']:
                         try: res[col] = f"{float(res[col]):.1%}" if pd.notnull(res[col]) and res[col] != "" else ""
                         except: pass
-                    elif col in ['양품수량', '불량수량', '합계수량']:
+                    elif col in ['양품수량', '불량수량', '총 생산수량']:
                         try: res[col] = f"{int(float(res[col])):,.0f}" if pd.notnull(res[col]) and res[col] != "" else ""
-                        except: pass
-                    elif col in ['투입시간', '가동시간', '비가동시간', '정미시간']:
-                        try: res[col] = f"{float(res[col]):.1f}" if pd.notnull(res[col]) and res[col] != "" else ""
                         except: pass
             if is_idle: 
                 res['품명'] = ""
