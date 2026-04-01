@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 import re
 import io
+import unicodedata
 
 # 1. 웹 화면 설정
 st.set_page_config(page_title="사출 생산성 통합 분석기", layout="wide")
@@ -22,7 +23,7 @@ if uploaded_files:
             else:
                 raw_df = pd.read_excel(io.BytesIO(file_bytes))
             
-            # [헤더 자동 찾기] '설비' 글자가 있는 행을 찾아 데이터 시작점으로 지정
+            # [헤더 자동 찾기]
             header_row = 0
             for i, row in raw_df.iterrows():
                 row_str = " ".join(row.astype(str))
@@ -30,32 +31,42 @@ if uploaded_files:
                     header_row = i + 1
                     break
             
-            # 헤더 위치를 반영하여 다시 읽기
+            # 헤더 위치 반영 읽기
             if file.name.endswith('.csv'):
                 temp_df = pd.read_csv(io.BytesIO(file_bytes), skiprows=header_row-1 if header_row > 0 else 0)
             else:
                 temp_df = pd.read_excel(io.BytesIO(file_bytes), skiprows=header_row-1 if header_row > 0 else 0)
             
-            # 항목명 정화 및 표준화
-            temp_df.columns = [" ".join(str(c).split()) for c in temp_df.columns]
+            # 🚨 [가장 강력한 방어막 1] 
+            # 항목명 정화 및 Mac/Windows 글자 깨짐(유니코드) 완벽 통일
+            temp_df.columns = [unicodedata.normalize('NFC', " ".join(str(c).split())) for c in temp_df.columns]
+            
             name_map = {
                 '작업장 [설비]': '설비명', '품목명': '품명', '합계': '합계수량', '합게수량': '합계수량', 
                 '종합 효율': '종합효율', '목표 효율': '목표효율', 'Unnamed: 14': 'OPEN ISSUE'
             }
             temp_df = temp_df.rename(columns=name_map)
             
-            # 🚨 [핵심 에러 해결] 이름이 중복된 열(칸)이 존재할 경우 첫 번째 열만 남기고 제거
-            temp_df = temp_df.loc[:, ~temp_df.columns.duplicated()]
+            # 🚨 [가장 강력한 방어막 2] 
+            # 숨겨진 칸이나 중복된 이름이 발견되면, 무조건 첫 번째 열만 가져오도록 강제 단일화
+            clean_temp = []
+            for col in temp_df.columns.unique():
+                col_data = temp_df[col]
+                if isinstance(col_data, pd.DataFrame):
+                    clean_temp.append(col_data.iloc[:, 0].rename(col))
+                else:
+                    clean_temp.append(col_data)
+            temp_df = pd.concat(clean_temp, axis=1)
             
-            # 만약 엑셀에 품명 칸이 아예 누락된 경우를 대비한 안전장치
+            # 품명 누락 대비 안전장치
             if '품명' not in temp_df.columns:
                 temp_df['품명'] = ""
             
-            # 생산일 추출 (파일명에서 특정 단어 제거)
+            # 생산일 추출
             clean_date = file.name.split('.')[0].replace('일일 생산성_', '').replace('사출생산팀 일일 생산성자료_', '')
             temp_df['생산일'] = clean_date
             
-            # 합계 행 제거
+            # 불필요한 합계 행 제거
             if '설비명' in temp_df.columns:
                 temp_df = temp_df[~temp_df['설비명'].astype(str).str.contains('TOTAL|합계|GRAND', na=False, case=False)]
             
@@ -66,8 +77,15 @@ if uploaded_files:
     if all_data:
         df = pd.concat(all_data, ignore_index=True)
         
-        # 🚨 통합 후에도 중복 열 재확인 및 제거
-        df = df.loc[:, ~df.columns.duplicated()]
+        # 🚨 [가장 강력한 방어막 3] 파일 병합 후에도 중복 열 재확인
+        clean_cols = []
+        for col in df.columns.unique():
+            col_data = df[col]
+            if isinstance(col_data, pd.DataFrame):
+                clean_cols.append(col_data.iloc[:, 0].rename(col))
+            else:
+                clean_cols.append(col_data)
+        df = pd.concat(clean_cols, axis=1)
         
         # 숫자 데이터 변환
         num_cols = ['양품수량', '불량수량', '합계수량', '투입시간', '가동시간', '비가동시간', '정미시간', '종합효율', '목표효율', '양품율', '성능가동율', '시간가동율']
@@ -81,7 +99,6 @@ if uploaded_files:
         st.sidebar.header("🎯 정밀 필터링")
         selected_machines = st.sidebar.multiselect("설비 선택", sorted(df['설비명'].unique()), default=sorted(df['설비명'].unique()))
         
-        # 빈칸이 아닌 진짜 품명만 필터 목록에 표시
         df['품명_필터'] = df['품명'].fillna("").replace(0, "").astype(str)
         actual_prods = sorted([p for p in df['품명_필터'].unique() if p.strip() != "" and p != "nan"])
         selected_prod = st.sidebar.selectbox("품목 선택", ["전체 품목"] + actual_prods)
