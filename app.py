@@ -44,7 +44,14 @@ if uploaded_files:
             }
             temp_df = temp_df.rename(columns=name_map)
             
-            # [요청 1] 생산일 추출 (파일명에서 특정 단어 제거)
+            # 🚨 [핵심 에러 해결] 이름이 중복된 열(칸)이 존재할 경우 첫 번째 열만 남기고 제거
+            temp_df = temp_df.loc[:, ~temp_df.columns.duplicated()]
+            
+            # 만약 엑셀에 품명 칸이 아예 누락된 경우를 대비한 안전장치
+            if '품명' not in temp_df.columns:
+                temp_df['품명'] = ""
+            
+            # 생산일 추출 (파일명에서 특정 단어 제거)
             clean_date = file.name.split('.')[0].replace('일일 생산성_', '').replace('사출생산팀 일일 생산성자료_', '')
             temp_df['생산일'] = clean_date
             
@@ -59,6 +66,9 @@ if uploaded_files:
     if all_data:
         df = pd.concat(all_data, ignore_index=True)
         
+        # 🚨 통합 후에도 중복 열 재확인 및 제거
+        df = df.loc[:, ~df.columns.duplicated()]
+        
         # 숫자 데이터 변환
         num_cols = ['양품수량', '불량수량', '합계수량', '투입시간', '가동시간', '비가동시간', '정미시간', '종합효율', '목표효율', '양품율', '성능가동율', '시간가동율']
         for col in num_cols:
@@ -71,6 +81,7 @@ if uploaded_files:
         st.sidebar.header("🎯 정밀 필터링")
         selected_machines = st.sidebar.multiselect("설비 선택", sorted(df['설비명'].unique()), default=sorted(df['설비명'].unique()))
         
+        # 빈칸이 아닌 진짜 품명만 필터 목록에 표시
         df['품명_필터'] = df['품명'].fillna("").replace(0, "").astype(str)
         actual_prods = sorted([p for p in df['품명_필터'].unique() if p.strip() != "" and p != "nan"])
         selected_prod = st.sidebar.selectbox("품목 선택", ["전체 품목"] + actual_prods)
@@ -115,14 +126,14 @@ if uploaded_files:
         
         display_df = f_df.sort_values(by=['생산일', '설비명']).copy()
         
-        # [요청 2] 항목 순서 재배치
+        # 항목 순서 재배치
         target_order = [
             '생산일', '설비명', '품명', '종합효율', '성능가동율', '시간가동율', '양품율', '목표효율',
             '투입시간', '가동시간', '비가동시간', '정미시간', '양품수량', '불량수량', '합계수량', 'OPEN ISSUE'
         ]
         display_df = display_df[[c for c in target_order if c in display_df.columns]]
 
-        # [요청 7] 비가동 설비 빈칸 처리 및 서식 적용
+        # 비가동 설비 빈칸 처리 및 서식 적용
         def finalize_row(row):
             is_idle = pd.isna(row['품명']) or str(row['품명']).strip() in ['0', '0.0', '', 'nan', 'NaN']
             res = row.copy()
