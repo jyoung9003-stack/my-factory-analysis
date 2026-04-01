@@ -3,9 +3,27 @@ import pandas as pd
 import plotly.express as px
 import re
 
-# 1. 웹 화면 설정
+# 1. 웹 화면 및 폰트/정렬 CSS 강제 설정 (수정 3, 5 적용)
 st.set_page_config(page_title="사출생산팀 일일 생산성 정밀 분석", layout="wide")
-# 🚨 [수정 5] 메인 타이틀 변경
+
+st.markdown("""
+<style>
+    /* 전체 폰트를 세련된 'Pretendard' 또는 '맑은 고딕'으로 변경 */
+    html, body, [class*="css"] {
+        font-family: 'Pretendard', 'Noto Sans KR', 'Malgun Gothic', sans-serif !important;
+    }
+    
+    /* 데이터프레임 헤더(카테고리) 및 셀 정중앙 정렬 강제 지정 */
+    [data-testid="stDataFrame"] th {
+        text-align: center !important;
+        justify-content: center !important;
+    }
+    [data-testid="stDataFrame"] td {
+        text-align: center !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 st.title("📊 사출생산팀 일일 생산성 정밀 분석")
 
 # 2. 파일 업로드
@@ -24,6 +42,7 @@ if uploaded_files:
             else:
                 temp_df = pd.read_excel(file)
             
+            # 컬럼명 찌꺼기 제거
             temp_df.columns = [str(c).replace('\n', '').replace('\r', '').strip() for c in temp_df.columns]
             
             name_map = {
@@ -43,7 +62,7 @@ if uploaded_files:
             else:
                 clean_date = file.name.split('.')[0]
             
-            # M47 셀(합계) 종합효율 추출
+            # M47 셀(합계) 추출
             daily_total_oee = None
             for _, row in temp_df.iterrows():
                 machine_val = str(row.get('설비명', ''))
@@ -66,7 +85,6 @@ if uploaded_files:
             
             daily_totals_data[clean_date] = daily_total_oee
 
-            # 데이터 핀셋 추출
             for _, row in temp_df.iterrows():
                 machine_val = str(row.get('설비명', ''))
                 if isinstance(machine_val, pd.Series): 
@@ -98,13 +116,13 @@ if uploaded_files:
         for col in num_cols:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-        # 🚨 [수정 2] OPEN ISSUE 가독성 향상 (기존 엑셀 줄바꿈 유지 + 기호 앞 줄바꿈 강제)
+        # 🚨 [수정 2] 줄바꿈 데이터 정밀 보존
         def format_issue(text):
             val = str(text).strip()
             if val in ['', '0', '0.0', 'nan', 'NaN', 'None']:
                 return ""
-            val = val.replace('\r\n', '\n') # 엑셀 고유 줄바꿈 살리기
-            # 특정 기호 앞에 줄바꿈이 없으면 강제로 추가
+            val = val.replace('\r\n', '\n')
+            # 엑셀에 줄바꿈이 없는 경우에만 기호 앞에 줄바꿈 강제 추가
             val = re.sub(r'(?<!\n)\*', '\n*', val)
             val = re.sub(r'(?<!\n)-\.', '\n-.', val)
             val = re.sub(r'(?<!\n)→', '\n→', val)
@@ -137,6 +155,15 @@ if uploaded_files:
         if selected_prod != "전체 품목":
             f_df = f_df[f_df['품명_필터'] == selected_prod]
 
+        def highlight_under_86(val):
+            if isinstance(val, str) and '%' in val:
+                try:
+                    num = float(val.replace('%', ''))
+                    if num < 86.0:
+                        return 'color: #FF4B4B; font-weight: bold;'
+                except: pass
+            return ''
+
         # ---------------------------------------------------------
         # [그래프 분석 탭]
         # ---------------------------------------------------------
@@ -158,24 +185,26 @@ if uploaded_files:
             if not plot_df.empty:
                 plot_df['x_label'] = plot_df.apply(lambda row: f"{row['생산일']}<br><span style='font-size:11px;color:gray;'>({row[y_val]:.1%})</span>", axis=1)
                 
-                # 🚨 [수정 4] 그래프 스타일리쉬하게 (부드러운 곡선 spline, 면적 채우기, 선 굵기 조절)
                 fig1 = px.line(plot_df, x='x_label', y=y_val, text=plot_df[y_val].apply(lambda x: f'{x:.1%}'))
+                
+                # 🚨 [수정 1] 좌우 끝 숫자 잘림 방지 (cliponaxis=False 및 x축 범위 패딩)
                 fig1.update_traces(
                     mode='lines+markers+text',
-                    line=dict(shape='spline', width=3, color='#1f77b4'), # 부드러운 곡선
+                    line=dict(shape='spline', width=3, color='#1f77b4'), 
                     marker=dict(size=10, color='white', line=dict(width=2, color='#1f77b4')),
                     textposition="top center", 
                     textfont=dict(size=14, color="#1f77b4", weight="bold"),
-                    fill='tozeroy', fillcolor='rgba(31, 119, 180, 0.1)' # 아래 면적 은은하게 채우기
+                    fill='tozeroy', fillcolor='rgba(31, 119, 180, 0.1)',
+                    cliponaxis=False  # 잘림 방지
                 )
                 
-                # 🚨 [수정 3] 목표효율(86%)은 일일 전체 종합효율(Factory view)일 때만 표시!
                 if is_factory_view:
                     fig1.add_hline(y=0.86, line_dash="dash", line_color="#FF4B4B", annotation_text="목표 효율 (86%)", annotation_font_color="#FF4B4B")
                 
-                fig1.update_xaxes(type='category', title="", showgrid=False) 
+                # 🚨 X축 양끝에 여백을 주어 글자가 완전히 보이게 함
+                fig1.update_xaxes(type='category', title="", showgrid=False, range=[-0.5, len(plot_df)-0.5]) 
                 fig1.update_yaxes(title="종합효율", tickformat='.0%', range=[0, 1.2], showgrid=True, gridcolor='rgba(200,200,200,0.2)') 
-                fig1.update_layout(height=450, margin=dict(t=40), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                fig1.update_layout(height=450, margin=dict(l=40, r=40, t=40, b=40), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
                 st.plotly_chart(fig1, use_container_width=True)
             else:
                 st.info("종합효율 데이터가 없습니다.")
@@ -186,15 +215,15 @@ if uploaded_files:
             daily_stop = f_df.groupby('생산일')['비가동시간'].sum().reset_index().sort_values(by='생산일')
             fig2 = px.bar(daily_stop, x='생산일', y='비가동시간', text_auto='.1f')
             
-            # 🚨 [수정 4] 비가동 그래프 스타일리쉬하게
             fig2.update_traces(
-                marker=dict(color='#FF4B4B', opacity=0.8), # 세련된 톤 다운 레드
+                marker=dict(color='#FF4B4B', opacity=0.8), 
                 textposition="outside",
-                textfont=dict(size=13, weight="bold")
+                textfont=dict(size=13, weight="bold"),
+                cliponaxis=False
             )
-            fig2.update_xaxes(type='category', title="", showgrid=False)
+            fig2.update_xaxes(type='category', title="", showgrid=False, range=[-0.5, len(daily_stop)-0.5])
             fig2.update_yaxes(title="비가동시간 (분)", showgrid=True, gridcolor='rgba(200,200,200,0.2)')
-            fig2.update_layout(height=400, margin=dict(t=40), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+            fig2.update_layout(height=400, margin=dict(l=40, r=40, t=40, b=40), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
             st.plotly_chart(fig2, use_container_width=True)
 
         # ---------------------------------------------------------
@@ -202,13 +231,12 @@ if uploaded_files:
         # ---------------------------------------------------------
         with tab2:
             st.subheader("📝 일별 특이사항(OPEN ISSUE) 현황")
-            st.markdown("선택하신 설비/품목에서 발생한 주요 이슈와 당일의 효율을 나란히 확인하세요. (설비/품목별 목표 효율 미달 시 강조)")
+            st.markdown("선택하신 설비/품목에서 발생한 주요 이슈와 당일의 효율을 나란히 확인하세요.")
             
             issue_df = f_df[f_df['OPEN ISSUE'] != ""].copy()
             if not issue_df.empty:
                 issue_display = issue_df[['생산일', '설비명', '품명', '종합효율', 'OPEN ISSUE']].sort_values(by=['생산일', '설비명'])
                 
-                # 🚨 [수정 3] 개별 설비의 목표효율과 비교하여 스타일 마스크 생성
                 style_issue = pd.DataFrame('', index=issue_display.index, columns=issue_display.columns)
                 for i, idx in enumerate(issue_display.index):
                     try:
@@ -220,7 +248,10 @@ if uploaded_files:
                 
                 issue_display['종합효율'] = issue_display['종합효율'].apply(lambda x: f"{float(x):.1%}" if pd.notnull(x) and str(x).strip()!="" else "")
                 
+                # 🚨 [수정 2] OPEN ISSUE 탭 표에도 줄바꿈 허용 적용 (white-space: pre-wrap)
                 styler = issue_display.style.apply(lambda _: style_issue, axis=None)
+                styler = styler.set_properties(subset=['OPEN ISSUE'], **{'white-space': 'pre-wrap', 'text-align': 'left'})
+                
                 st.dataframe(styler, hide_index=True, use_container_width=True)
             else:
                 st.info("선택된 조건에 해당하는 특이사항(OPEN ISSUE)이 없습니다.")
@@ -235,7 +266,6 @@ if uploaded_files:
             '총 생산수량', '양품수량', '불량수량', 'OPEN ISSUE'
         ]
         
-        # 🚨 [수정 3] 개별 목표효율 미달 스타일 마스크 (메인 표 용)
         style_main = pd.DataFrame('', index=display_df.index, columns=target_order)
         for i in range(len(display_df)):
             try:
@@ -270,21 +300,19 @@ if uploaded_files:
 
         final_table = display_df.apply(finalize_row, axis=1)
         
+        # 🚨 [수정 4] OPEN ISSUE 헤더 병합 (아랫단 빈칸 처리)
         multi_cols = [
             ('구분', '생산일'), ('구분', '설비명'), ('구분', '품명'),
             ('생산성', '종합효율'), ('생산성', '양품율'), ('생산성', '성능가동율'), ('생산성', '시간가동율'),
             ('생산실적', '총 생산수량'), ('생산실적', '양품수량'), ('생산실적', '불량수량'),
-            ('OPEN ISSUE', 'OPEN ISSUE')
+            ('OPEN ISSUE', '') 
         ]
         final_table.columns = pd.MultiIndex.from_tuples(multi_cols)
         style_main.columns = pd.MultiIndex.from_tuples(multi_cols)
         
-        # 🚨 [수정 1] 카테고리 헤더(th) 및 데이터(td) 한가운데 정렬 + [수정 3] 미달 강조 적용
-        final_styler = final_table.style.apply(lambda _: style_main, axis=None).set_table_styles([
-            dict(selector="th", props=[("text-align", "center !important")]),
-            dict(selector="th.col_heading", props=[("text-align", "center !important")]),
-            dict(selector="td", props=[("text-align", "center !important")])
-        ])
+        # 🚨 [수정 2 & 3] 줄바꿈(pre-wrap) 적용 및 가운데 정렬
+        final_styler = final_table.style.apply(lambda _: style_main, axis=None)
+        final_styler = final_styler.set_properties(subset=[('OPEN ISSUE', '')], **{'white-space': 'pre-wrap', 'text-align': 'left'})
         
         st.dataframe(final_styler, hide_index=True, use_container_width=True)
 else:
