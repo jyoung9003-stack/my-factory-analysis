@@ -166,7 +166,7 @@ if data_to_process:
         df['OPEN ISSUE'] = df['OPEN ISSUE'].apply(format_issue)
 
         # ---------------------------------------------------------
-        # [사이드바 필터] (모든 탭 공통 적용)
+        # [사이드바 필터]
         # ---------------------------------------------------------
         st.sidebar.header("🎯 정밀 필터링")
         
@@ -194,7 +194,6 @@ if data_to_process:
 
         f_df = pool_df[pool_df['품명_필터'] == selected_prod].copy() if selected_prod != "전체 품목" else pool_df.copy()
 
-        # HTML 테이블 렌더링 헬퍼 함수
         def render_styler_to_html(styler, is_multi=False):
             html_str = styler.to_html(escape=True) 
             wrapped_html = f"""
@@ -216,12 +215,18 @@ if data_to_process:
             st.markdown(wrapped_html, unsafe_allow_html=True)
 
         # ---------------------------------------------------------
-        # 🚨 4개 탭 구성
+        # 🚨 5개 탭 구성 (명칭 변경 및 탭 5 추가)
         # ---------------------------------------------------------
-        tab1, tab2, tab3, tab4 = st.tabs(["📈 생산 추이 및 요약", "📝 OPEN ISSUE 정밀 분석", "📅 상세 데이터 조회", "🏆/🚨 BEST & WORST 요인 분석"])
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+            "📈 종합 효율 및 비가동 추이 분석", 
+            "📝 OPEN ISSUE 현황", 
+            "📅 일별 생산성 및 비가동 현황", 
+            "🏆/🚨 종합효율 BEST & WORST 분석 현황",
+            "🛑 비가동시간 BEST & WORST 분석 현황"
+        ])
 
         # =========================================================
-        # TAB 1: 생산 추이 및 요약
+        # TAB 1: 종합 효율 및 비가동 추이 분석
         # =========================================================
         with tab1:
             is_factory_view = (len(selected_machines) == 0 and selected_prod == "전체 품목")
@@ -312,51 +317,8 @@ if data_to_process:
                 for i, (_, r) in enumerate(dt_worst_3.iterrows()):
                     with dw_cols[i]: st.markdown(f"<div class='metric-card'><div class='metric-title' style='color:#E07A5F;'>WORST {i+1} (최대 비가동)</div><div style='font-size:16px; font-weight:900; color:#212529; margin:5px 0;'>{r['생산일']}</div><div style='font-size:20px; font-weight:900; color:#E07A5F; margin-bottom:8px;'>{safe_float(r['비가동시간']):.1f}분</div><div style='border-top:1px dashed #E9ECEF; padding-top:8px;'><div style='font-size:11px; color:#868E96; text-align:left; margin-bottom:4px;'>[최다 비가동 설비/품목]</div>{get_dt_contributors(r['생산일'])}</div></div>", unsafe_allow_html=True)
 
-            st.write("---")
-            st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 사출생산팀 일일 생산성 자료</h3>", unsafe_allow_html=True)
-            
-            display_df = f_df.reset_index(drop=True)
-            target_order = ['생산일', '설비명', '품명', '종합효율', '양품율', '성능가동율', '시간가동율', '총 생산수량', '양품수량', '불량수량', 'OPEN ISSUE']
-            style_main = pd.DataFrame('', index=display_df.index, columns=target_order)
-            
-            col_idx = style_main.columns.get_loc('종합효율')
-            if isinstance(col_idx, np.ndarray): col_idx = np.where(col_idx)[0][0]
-            
-            for i in range(len(display_df)):
-                oee = safe_float(display_df.iloc[i]['종합효율'])
-                tgt = safe_float(display_df.iloc[i]['목표효율'])
-                if oee > 0 and oee < tgt: style_main.iat[i, col_idx] = 'color: #FF4B4B; font-weight: bold;'
-
-            display_df = display_df[[c for c in target_order if c in display_df.columns]]
-
-            def finalize_row(row):
-                val = str(row.get('품명', '')).strip()
-                is_idle = (val == '') or (val in ['0', '0.0', 'nan', 'NaN', 'None'])
-                res = row.copy()
-                for col in res.index:
-                    if is_idle and col not in ['생산일', '설비명']: res[col] = ""
-                    else:
-                        if col in ['종합효율', '성능가동율', '시간가동율', '양품율']:
-                            try: res[col] = f"{float(res[col]):.1%}" if pd.notnull(res[col]) and res[col] != "" else ""
-                            except: pass
-                        elif col in ['양품수량', '불량수량', '총 생산수량']:
-                            try: res[col] = f"{int(float(res[col])):,.0f}" if pd.notnull(res[col]) and res[col] != "" else ""
-                            except: pass
-                if is_idle: res['품명'] = ""
-                for k, v in res.items():
-                    if pd.isna(v) or v == 'None': res[k] = ""
-                return res
-
-            final_table = display_df.apply(finalize_row, axis=1)
-            multi_cols = [('구분', '생산일'), ('구분', '설비명'), ('구분', '품명'), ('생산성', '종합효율'), ('생산성', '양품율'), ('생산성', '성능가동율'), ('생산성', '시간가동율'), ('생산실적', '총 생산수량'), ('생산실적', '양품수량'), ('생산실적', '불량수량'), ('OPEN ISSUE', 'OPEN ISSUE')]
-            final_table.columns = pd.MultiIndex.from_tuples(multi_cols)
-            style_main.columns = pd.MultiIndex.from_tuples(multi_cols)
-            
-            final_styler = final_table.style.apply(lambda _: style_main, axis=None).hide(axis="index")
-            render_styler_to_html(final_styler, is_multi=True)
-
         # =========================================================
-        # TAB 2: OPEN ISSUE 정밀 분석
+        # TAB 2: OPEN ISSUE 현황
         # =========================================================
         with tab2:
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> OPEN ISSUE 키워드 분석</h3>", unsafe_allow_html=True)
@@ -401,7 +363,7 @@ if data_to_process:
             else: st.info("선택된 조건에 해당하는 특이사항(OPEN ISSUE)이 없습니다.")
 
         # =========================================================
-        # TAB 3: 상세 데이터 조회 (선택 조건)
+        # TAB 3: 일별 생산성 및 비가동 현황
         # =========================================================
         with tab3:
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 특정 생산일 정밀 데이터 조회</h3>", unsafe_allow_html=True)
@@ -453,8 +415,28 @@ if data_to_process:
                     if oee > 0 and oee < tgt: style_day.iat[i, col_idx] = 'color: #FF4B4B; font-weight: bold;'
                         
                 display_day = display_day[[c for c in target_order if c in display_day.columns]]
+                
+                def finalize_row(row):
+                    val = str(row.get('품명', '')).strip()
+                    is_idle = (val == '') or (val in ['0', '0.0', 'nan', 'NaN', 'None'])
+                    res = row.copy()
+                    for col in res.index:
+                        if is_idle and col not in ['생산일', '설비명']: res[col] = ""
+                        else:
+                            if col in ['종합효율', '성능가동율', '시간가동율', '양품율']:
+                                try: res[col] = f"{float(res[col]):.1%}" if pd.notnull(res[col]) and res[col] != "" else ""
+                                except: pass
+                            elif col in ['양품수량', '불량수량', '총 생산수량']:
+                                try: res[col] = f"{int(float(res[col])):,.0f}" if pd.notnull(res[col]) and res[col] != "" else ""
+                                except: pass
+                    if is_idle: res['품명'] = ""
+                    for k, v in res.items():
+                        if pd.isna(v) or v == 'None': res[k] = ""
+                    return res
+                
                 final_day_table = display_day.apply(finalize_row, axis=1)
                 
+                multi_cols = [('구분', '생산일'), ('구분', '설비명'), ('구분', '품명'), ('생산성', '종합효율'), ('생산성', '양품율'), ('생산성', '성능가동율'), ('생산성', '시간가동율'), ('생산실적', '총 생산수량'), ('생산실적', '양품수량'), ('생산실적', '불량수량'), ('OPEN ISSUE', 'OPEN ISSUE')]
                 final_day_table.columns = pd.MultiIndex.from_tuples(multi_cols)
                 style_day.columns = pd.MultiIndex.from_tuples(multi_cols)
                 
@@ -463,7 +445,7 @@ if data_to_process:
             else: st.info("분석할 생산일 데이터가 없습니다.")
 
         # =========================================================
-        # 🚨 [신규] TAB 4: BEST & WORST 요인 분석
+        # TAB 4: 종합효율 BEST & WORST 분석 현황
         # =========================================================
         with tab4:
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 종합효율 BEST 5 & WORST 5 요인 분석</h3>", unsafe_allow_html=True)
@@ -479,12 +461,9 @@ if data_to_process:
                 style_best = pd.DataFrame('', index=best5_display.index, columns=best5_display.columns)
                 col_idx_b = style_best.columns.get_loc('종합효율')
                 if isinstance(col_idx_b, np.ndarray): col_idx_b = np.where(col_idx_b)[0][0]
-                
-                for i in range(len(best5_display)):
-                    style_best.iat[i, col_idx_b] = 'color: #1F77B4; font-weight: bold;'
+                for i in range(len(best5_display)): style_best.iat[i, col_idx_b] = 'color: #1F77B4; font-weight: bold;'
                     
                 best5_display['종합효율'] = best5_display['종합효율'].apply(lambda x: f"{safe_float(x):.1%}")
-                
                 best_styler = best5_display.style.apply(lambda _: style_best, axis=None).hide(axis="index")
                 render_styler_to_html(best_styler, is_multi=False)
                 
@@ -496,14 +475,51 @@ if data_to_process:
                 style_worst = pd.DataFrame('', index=worst5_display.index, columns=worst5_display.columns)
                 col_idx_w = style_worst.columns.get_loc('종합효율')
                 if isinstance(col_idx_w, np.ndarray): col_idx_w = np.where(col_idx_w)[0][0]
-                
-                for i in range(len(worst5_display)):
-                    style_worst.iat[i, col_idx_w] = 'color: #FF4B4B; font-weight: bold;'
+                for i in range(len(worst5_display)): style_worst.iat[i, col_idx_w] = 'color: #FF4B4B; font-weight: bold;'
                     
                 worst5_display['종합효율'] = worst5_display['종합효율'].apply(lambda x: f"{safe_float(x):.1%}")
-                
                 worst_styler = worst5_display.style.apply(lambda _: style_worst, axis=None).hide(axis="index")
                 render_styler_to_html(worst_styler, is_multi=False)
+            else: st.info("분석할 가동 데이터가 없습니다.")
+
+        # =========================================================
+        # 🚨 [신규] TAB 5: 비가동시간 BEST & WORST 분석 현황
+        # =========================================================
+        with tab5:
+            st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 비가동시간 BEST 5 & WORST 5 요인 분석</h3>", unsafe_allow_html=True)
+            st.markdown("비가동시간이 가장 적었던(BEST) 5건과 가장 많았던(WORST) 5건의 상세 내역과 이슈를 분석합니다.")
+            
+            valid_dt_df = f_df.copy()
+            if not valid_dt_df.empty:
+                # --- 최소 비가동 (BEST 5) ---
+                st.markdown("<h4 style='color: #20C997; margin-top: 20px; font-weight: 800;'>🏆 최소 비가동 (BEST 5)</h4>", unsafe_allow_html=True)
+                # 비가동이 적은 순으로 정렬 (동점 시 종합효율 높은 순)
+                best5_dt = valid_dt_df.sort_values(by=['비가동시간', '종합효율'], ascending=[True, False]).head(5)
+                best5_dt_display = best5_dt[['생산일', '설비명', '품명', '비가동시간', 'OPEN ISSUE']].reset_index(drop=True)
+                
+                style_best_dt = pd.DataFrame('', index=best5_dt_display.index, columns=best5_dt_display.columns)
+                col_idx_b_dt = style_best_dt.columns.get_loc('비가동시간')
+                if isinstance(col_idx_b_dt, np.ndarray): col_idx_b_dt = np.where(col_idx_b_dt)[0][0]
+                for i in range(len(best5_dt_display)): style_best_dt.iat[i, col_idx_b_dt] = 'color: #20C997; font-weight: bold;'
+                    
+                best5_dt_display['비가동시간'] = best5_dt_display['비가동시간'].apply(lambda x: f"{safe_float(x):.1f}분")
+                best_dt_styler = best5_dt_display.style.apply(lambda _: style_best_dt, axis=None).hide(axis="index")
+                render_styler_to_html(best_dt_styler, is_multi=False)
+                
+                # --- 최대 비가동 (WORST 5) ---
+                st.markdown("<h4 style='color: #E07A5F; margin-top: 40px; font-weight: 800;'>🚨 최대 비가동 (WORST 5)</h4>", unsafe_allow_html=True)
+                # 비가동이 많은 순으로 정렬
+                worst5_dt = valid_dt_df.sort_values(by=['비가동시간', '종합효율'], ascending=[False, True]).head(5)
+                worst5_dt_display = worst5_dt[['생산일', '설비명', '품명', '비가동시간', 'OPEN ISSUE']].reset_index(drop=True)
+                
+                style_worst_dt = pd.DataFrame('', index=worst5_dt_display.index, columns=worst5_dt_display.columns)
+                col_idx_w_dt = style_worst_dt.columns.get_loc('비가동시간')
+                if isinstance(col_idx_w_dt, np.ndarray): col_idx_w_dt = np.where(col_idx_w_dt)[0][0]
+                for i in range(len(worst5_dt_display)): style_worst_dt.iat[i, col_idx_w_dt] = 'color: #E07A5F; font-weight: bold;'
+                    
+                worst5_dt_display['비가동시간'] = worst5_dt_display['비가동시간'].apply(lambda x: f"{safe_float(x):.1f}분")
+                worst_dt_styler = worst5_dt_display.style.apply(lambda _: style_worst_dt, axis=None).hide(axis="index")
+                render_styler_to_html(worst_dt_styler, is_multi=False)
                 
             else:
                 st.info("분석할 가동 데이터가 없습니다.")
