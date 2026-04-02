@@ -8,14 +8,14 @@ import numpy as np
 from collections import Counter
 from datetime import datetime
 
-# 1. 웹 화면 및 폰트/스타일, 자동번역 차단 설정 🚨 (수정 4 적용)
+# 1. 웹 화면 및 폰트/스타일, 자동번역 차단 설정 🚨
 st.set_page_config(page_title="사출생산팀 일일 생산성 정밀 분석", layout="wide")
 
 st.markdown("""
 <meta name="google" content="notranslate">
 <meta name="robots" content="notranslate">
 <style>
-    /* 전체 폰트 및 자동 번역 방지 클래스 적용 */
+    /* 전체 폰트 및 자동 번역 방지 적용 */
     html, body, [class*="css"] {
         font-family: 'Pretendard', 'Noto Sans KR', 'Malgun Gothic', sans-serif !important;
         background-color: #F8F9FA;
@@ -29,12 +29,6 @@ st.markdown("""
     .metric-title { font-size: 14px; color: #6C757D; font-weight: bold; margin-bottom: 5px; }
     .metric-value.best { font-size: 20px; color: #1F77B4; font-weight: 900; }
     .metric-value.worst { font-size: 20px; color: #FF4B4B; font-weight: 900; }
-    
-    /* 탭 내부 필터 패널 디자인 */
-    .filter-panel {
-        background-color: white; padding: 15px; border-radius: 8px; 
-        border: 1px solid #DEE2E6; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.03);
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -47,7 +41,7 @@ with col1:
 with col2:
     st.markdown("<h1 style='margin-top: 0px; color: #212529;' class='notranslate'>사출생산팀 일일 생산성 정밀 분석</h1>", unsafe_allow_html=True)
 
-# 🚨 에러 방지 함수
+# 에러 방지 함수
 def safe_float(val):
     try:
         if isinstance(val, pd.Series): return float(val.iloc[0])
@@ -57,7 +51,7 @@ def safe_float(val):
 
 target_cols = ['생산일', '설비명', '품명', '양품수량', '불량수량', '총 생산수량', '투입시간', '가동시간', '비가동시간', '정미시간', '양품율', '성능가동율', '시간가동율', '종합효율', '목표효율', 'OPEN ISSUE']
 
-# 파일 수집 로직
+# 3. 데이터 수집 로직 (data 폴더 + 업로드 병행)
 data_to_process = []
 DATA_DIR = "data"
 if os.path.exists(DATA_DIR):
@@ -151,6 +145,7 @@ if data_to_process:
             all_records.append(record)
 
     if all_records:
+        # 시간순 정렬 유지
         df = pd.DataFrame(all_records).sort_values(by='sort_key').reset_index(drop=True)
         df = df.drop(columns=['sort_key'])
         
@@ -172,6 +167,33 @@ if data_to_process:
             return val.strip()
 
         df['OPEN ISSUE'] = df['OPEN ISSUE'].apply(format_issue)
+
+        # ---------------------------------------------------------
+        # 🚨 [수정 완벽 복원] 공통 사이드바 필터
+        # ---------------------------------------------------------
+        st.sidebar.header("🎯 정밀 필터링")
+        
+        # 1. 생산일 필터
+        all_dates = [d for d in df['생산일'].unique() if str(d).strip() != ""]
+        selected_dates = st.sidebar.multiselect("📅 생산일 선택", all_dates, default=[], placeholder="전체 생산일")
+        
+        date_fdf = df[df['생산일'].isin(selected_dates)].copy() if selected_dates else df.copy()
+        date_ddf = daily_df[daily_df['생산일'].isin(selected_dates)].copy() if selected_dates else daily_df.copy()
+
+        # 2. 설비 필터
+        df['설비명'] = df['설비명'].fillna("").astype(str)
+        all_machines = sorted([m for m in date_fdf['설비명'].unique() if m.strip() != ""])
+        selected_machines = st.sidebar.multiselect("⚙️ 설비 선택", all_machines, default=[], placeholder="전체 설비")
+        
+        pool_df = date_fdf[date_fdf['설비명'].isin(selected_machines)].copy() if selected_machines else date_fdf.copy()
+
+        # 3. 품목 필터
+        pool_df['품명_필터'] = pool_df['품명'].fillna("").astype(str).str.strip()
+        pool_df['품명_필터'] = pool_df['품명_필터'].replace(['0', '0.0', 'nan', 'NaN', 'None'], "")
+        actual_prods = sorted([p for p in pool_df['품명_필터'].unique() if p != ""])
+        selected_prod = st.sidebar.selectbox("📦 품목 선택 (해당 설비 생산품)", ["전체 품목"] + actual_prods)
+
+        f_df = pool_df[pool_df['품명_필터'] == selected_prod].copy() if selected_prod != "전체 품목" else pool_df.copy()
 
         # ---------------------------------------------------------
         # [HTML 테이블 렌더링 헬퍼 함수]
@@ -196,36 +218,6 @@ if data_to_process:
                 wrapped_html = re.sub(r'<th class="col_heading level1 col10".*?>OPEN ISSUE</th>', '', wrapped_html)
             st.markdown(wrapped_html, unsafe_allow_html=True)
 
-        # 🚨 [수정 1] 공통 필터 렌더링 함수 (각 탭에서 호출됨)
-        def render_tab_filters(tab_id):
-            st.markdown("<div class='filter-panel'>", unsafe_allow_html=True)
-            st.markdown("#### 🎯 정밀 필터링")
-            c1, c2, c3 = st.columns(3)
-            
-            with c1:
-                all_dates = [d for d in df['생산일'].unique() if str(d).strip() != ""]
-                selected_dates = st.multiselect("📅 생산일 선택", all_dates, default=[], placeholder="전체 생산일", key=f"date_{tab_id}")
-            
-            date_fdf = df[df['생산일'].isin(selected_dates)].copy() if selected_dates else df.copy()
-            date_ddf = daily_df[daily_df['생산일'].isin(selected_dates)].copy() if selected_dates else daily_df.copy()
-
-            with c2:
-                all_machines = sorted([m for m in date_fdf['설비명'].unique() if m.strip() != ""])
-                selected_machines = st.multiselect("⚙️ 설비 선택", all_machines, default=[], placeholder="전체 설비", key=f"mach_{tab_id}")
-            
-            pool_df = date_fdf[date_fdf['설비명'].isin(selected_machines)].copy() if selected_machines else date_fdf.copy()
-
-            with c3:
-                pool_df['품명_필터'] = pool_df['품명'].fillna("").astype(str).str.strip()
-                pool_df['품명_필터'] = pool_df['품명_필터'].replace(['0', '0.0', 'nan', 'NaN', 'None'], "")
-                actual_prods = sorted([p for p in pool_df['품명_필터'].unique() if p != ""])
-                selected_prod = st.selectbox("📦 품목 선택 (해당 설비 생산품)", ["전체 품목"] + actual_prods, key=f"prod_{tab_id}")
-
-            final_fdf = pool_df[pool_df['품명_필터'] == selected_prod].copy() if selected_prod != "전체 품목" else pool_df.copy()
-            
-            st.markdown("</div>", unsafe_allow_html=True)
-            return final_fdf, date_ddf, selected_machines, selected_prod
-
         # ---------------------------------------------------------
         # 탭 구성
         # ---------------------------------------------------------
@@ -235,18 +227,16 @@ if data_to_process:
         # TAB 1: 생산 추이 및 요약
         # =========================================================
         with tab1:
-            f_df_t1, daily_df_t1, sel_mach_t1, sel_prod_t1 = render_tab_filters("tab1")
-            
-            is_factory_view = (len(sel_mach_t1) == 0 and sel_prod_t1 == "전체 품목")
+            is_factory_view = (len(selected_machines) == 0 and selected_prod == "전체 품목")
             
             if is_factory_view:
                 st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 사출생산팀 일별 종합 효율(%)</h3>", unsafe_allow_html=True)
-                plot_df = daily_df_t1.copy()
+                plot_df = date_ddf.copy()
                 plot_df['목표효율'] = 0.86
                 y_val = '공장종합효율'
             else:
                 st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 선택 조건(설비/품목) 일별 평균 종합 효율(%)</h3>", unsafe_allow_html=True)
-                active_oee = f_df_t1[f_df_t1['종합효율'] > 0]
+                active_oee = f_df[f_df['종합효율'] > 0]
                 plot_df = active_oee.groupby('생산일', sort=False)[['종합효율', '목표효율']].mean().reset_index()
                 y_val = '종합효율'
 
@@ -270,7 +260,7 @@ if data_to_process:
                 worst_3 = sorted_df.tail(3).sort_values(by=y_val, ascending=True)
                 
                 def get_contributors(target_date, is_best):
-                    day_df = f_df_t1[(f_df_t1['생산일'] == target_date) & (f_df_t1['종합효율'] > 0)].sort_values(by='종합효율', ascending=not is_best).head(2)
+                    day_df = f_df[(f_df['생산일'] == target_date) & (f_df['종합효율'] > 0)].sort_values(by='종합효율', ascending=not is_best).head(2)
                     res = ""
                     for _, r in day_df.iterrows():
                         m_name = str(r['설비명']).split(' - ')[0]
@@ -291,7 +281,7 @@ if data_to_process:
             st.write("---")
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 일별 총 비가동 시간(분)</h3>", unsafe_allow_html=True)
             
-            daily_stop = f_df_t1.groupby('생산일', sort=False)['비가동시간'].sum().reset_index()
+            daily_stop = f_df.groupby('생산일', sort=False)['비가동시간'].sum().reset_index()
             fig2 = px.bar(daily_stop, x='생산일', y='비가동시간', text_auto='.1f')
             fig2.update_traces(marker=dict(color='#E07A5F', opacity=0.9), textposition="outside", textfont=dict(size=13, weight="bold", color="#E07A5F"), cliponaxis=False)
             fig2.update_xaxes(type='category', title="", showgrid=False, range=[-0.5, len(daily_stop)-0.5])
@@ -299,14 +289,13 @@ if data_to_process:
             fig2.update_layout(height=350, margin=dict(l=40, r=40, t=40, b=40), plot_bgcolor='white', paper_bgcolor='white')
             st.plotly_chart(fig2, use_container_width=True)
 
-            # 🚨 [수정 3] 비가동 시간 BEST 3 / WORST 3 분석 (시간이 '적은' 것이 BEST)
             if not daily_stop.empty and daily_stop['비가동시간'].sum() > 0:
                 dt_sorted = daily_stop.sort_values(by='비가동시간', ascending=True)
                 dt_best_3 = dt_sorted.head(3)
                 dt_worst_3 = dt_sorted.tail(3).sort_values(by='비가동시간', ascending=False)
                 
                 def get_dt_contributors(target_date):
-                    day_df = f_df_t1[(f_df_t1['생산일'] == target_date) & (f_df_t1['비가동시간'] > 0)].sort_values(by='비가동시간', ascending=False).head(2)
+                    day_df = f_df[(f_df['생산일'] == target_date) & (f_df['비가동시간'] > 0)].sort_values(by='비가동시간', ascending=False).head(2)
                     res = ""
                     for _, r in day_df.iterrows():
                         m_name = str(r['설비명']).split(' - ')[0]
@@ -317,7 +306,6 @@ if data_to_process:
                 st.markdown("#### 🏆 비가동시간 최소 BEST 3 & 🚨 최대 WORST 3")
                 db_cols = st.columns(3)
                 dw_cols = st.columns(3)
-                
                 for i, (_, r) in enumerate(dt_best_3.iterrows()):
                     with db_cols[i]: st.markdown(f"<div class='metric-card'><div class='metric-title' style='color:#20C997;'>BEST {i+1} (최소 비가동)</div><div style='font-size:16px; font-weight:900; color:#212529; margin:5px 0;'>{r['생산일']}</div><div style='font-size:20px; font-weight:900; color:#20C997; margin-bottom:8px;'>{safe_float(r['비가동시간']):.1f}분</div><div style='border-top:1px dashed #E9ECEF; padding-top:8px;'><div style='font-size:11px; color:#868E96; text-align:left; margin-bottom:4px;'>[비가동 발생 설비/품목]</div>{get_dt_contributors(r['생산일'])}</div></div>", unsafe_allow_html=True)
                 for i, (_, r) in enumerate(dt_worst_3.iterrows()):
@@ -326,7 +314,7 @@ if data_to_process:
             st.write("---")
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 사출생산팀 일일 생산성 자료</h3>", unsafe_allow_html=True)
             
-            display_df = f_df_t1.reset_index(drop=True)
+            display_df = f_df.reset_index(drop=True)
             target_order = ['생산일', '설비명', '품명', '종합효율', '양품율', '성능가동율', '시간가동율', '총 생산수량', '양품수량', '불량수량', 'OPEN ISSUE']
             style_main = pd.DataFrame('', index=display_df.index, columns=target_order)
             
@@ -370,12 +358,10 @@ if data_to_process:
         # TAB 2: OPEN ISSUE 정밀 분석
         # =========================================================
         with tab2:
-            f_df_t2, _, _, _ = render_tab_filters("tab2")
-            
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> OPEN ISSUE 키워드 분석</h3>", unsafe_allow_html=True)
             st.markdown("선택된 조건 동안 반복적으로 발생한 주요 불량 및 이슈 문구입니다.")
             
-            issue_df = f_df_t2[f_df_t2['OPEN ISSUE'] != ""].copy()
+            issue_df = f_df[f_df['OPEN ISSUE'] != ""].copy()
             if not issue_df.empty:
                 all_text = " ".join(issue_df['OPEN ISSUE'].astype(str))
                 all_text = re.sub(r'(주간|야간|주,|야,|주야간)\s*', '', all_text)
@@ -414,20 +400,17 @@ if data_to_process:
             else: st.info("선택된 조건에 해당하는 특이사항(OPEN ISSUE)이 없습니다.")
 
         # =========================================================
-        # TAB 3: 특정 생산일 상세 데이터 조회
+        # TAB 3: 상세 데이터 조회 (선택 조건)
         # =========================================================
         with tab3:
-            # 🚨 [수정 1] TAB 3에도 공통 필터 적용 (생산일 복수 선택 가능)
-            f_df_t3, _, _, _ = render_tab_filters("tab3")
+            st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 선택 조건 정밀 데이터 조회</h3>", unsafe_allow_html=True)
+            st.markdown("사이드바에서 필터링하신 날짜/설비의 세부 가동 현황을 비교합니다. (생산일을 단일 선택하시면 일일 정밀 비교가 가능합니다)")
             
-            st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 선택 조건 상세 데이터 조회</h3>", unsafe_allow_html=True)
-            st.markdown("필터링된 조건의 설비별 가동 현황과 데이터를 상세하게 비교/확인합니다.")
-            
-            if not f_df_t3.empty:
+            if not f_df.empty:
                 st.write("---")
-                st.markdown(f"#### 📊 설비별 종합효율(OEE) 평균 비교")
+                st.markdown(f"#### 📊 설비별 평균 종합효율(OEE) 비교")
                 
-                active_day = f_df_t3[f_df_t3['종합효율'] > 0].groupby('설비명')[['종합효율', '목표효율']].mean().reset_index().sort_values(by='종합효율', ascending=False)
+                active_day = f_df[f_df['종합효율'] > 0].groupby('설비명')[['종합효율', '목표효율']].mean().reset_index().sort_values(by='종합효율', ascending=False)
                 
                 if not active_day.empty:
                     bar_colors = ['#FF4B4B' if safe_float(row['종합효율']) < safe_float(row['목표효율']) else '#1F77B4' for _, row in active_day.iterrows()]
@@ -437,14 +420,11 @@ if data_to_process:
                     fig3.update_yaxes(title="평균 종합효율", tickformat='.0%', range=[0, 1.2], showgrid=True, gridcolor='rgba(230,230,230,0.5)')
                     fig3.update_layout(height=400, margin=dict(l=40, r=40, t=40, b=80), plot_bgcolor='white', paper_bgcolor='white')
                     st.plotly_chart(fig3, use_container_width=True)
-                else: st.info("가동된 설비 데이터가 없습니다.")
+                else: st.info("해당 조건에 가동된 설비 데이터가 없습니다.")
                 
                 st.write("---")
-                # 🚨 [수정 2] Tab 3에 설비별 비가동 시간 비교 그래프 추가
                 st.markdown(f"#### 🛑 설비별 총 비가동 시간(분) 비교")
-                
-                downtime_day = f_df_t3[f_df_t3['비가동시간'] > 0].groupby('설비명')['비가동시간'].sum().reset_index().sort_values(by='비가동시간', ascending=False)
-                
+                downtime_day = f_df[f_df['비가동시간'] > 0].groupby('설비명')['비가동시간'].sum().reset_index().sort_values(by='비가동시간', ascending=False)
                 if not downtime_day.empty:
                     fig4 = px.bar(downtime_day, x='설비명', y='비가동시간', text_auto='.1f')
                     fig4.update_traces(marker_color='#E07A5F', textposition="outside", textfont=dict(size=12, weight="bold"))
@@ -455,9 +435,9 @@ if data_to_process:
                 else: st.info("비가동 시간이 발생한 설비가 없습니다.")
 
                 st.write("---")
-                st.markdown(f"#### 📂 선택 조건 상세 데이터 테이블")
+                st.markdown(f"#### 📂 선택 조건 상세 데이터")
                 
-                display_day = f_df_t3.copy().reset_index(drop=True)
+                display_day = f_df.copy().reset_index(drop=True)
                 style_day = pd.DataFrame('', index=display_day.index, columns=target_order)
                 col_idx = style_day.columns.get_loc('종합효율')
                 if isinstance(col_idx, np.ndarray): col_idx = np.where(col_idx)[0][0]
