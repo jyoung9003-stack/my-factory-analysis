@@ -8,7 +8,7 @@ import numpy as np
 from collections import Counter
 from datetime import datetime
 
-# 1. 웹 화면 및 폰트/스타일, 자동번역 차단 설정
+# 1. 웹 화면 및 폰트/스타일, 자동번역 차단 설정 🚨
 st.set_page_config(page_title="사출생산팀 일일 생산성 정밀 분석", layout="wide")
 
 st.markdown("""
@@ -154,11 +154,10 @@ if data_to_process:
 
     if all_records:
         df = pd.DataFrame(all_records).sort_values(by='sort_key').reset_index(drop=True)
-        df = df.drop(columns=['sort_key'])
+        # sort_key 보존 (나중에 정밀 비교를 위해)
         
         daily_list = [{'sort_key': k, **v} for k, v in daily_totals_data.items()]
         daily_df = pd.DataFrame(daily_list).sort_values(by='sort_key').reset_index(drop=True)
-        daily_df = daily_df.drop(columns=['sort_key'])
         
         num_cols = ['양품수량', '불량수량', '총 생산수량', '투입시간', '가동시간', '비가동시간', '정미시간', '종합효율', '목표효율', '양품율', '성능가동율', '시간가동율']
         for col in num_cols:
@@ -204,7 +203,6 @@ if data_to_process:
 
         f_df = pool_df[pool_df['품명_필터'] == selected_prod].copy() if selected_prod != "전체 품목" else pool_df.copy()
 
-        # HTML 테이블 렌더링 헬퍼 함수
         def render_styler_to_html(styler, is_multi=False):
             html_str = styler.to_html(escape=True) 
             wrapped_html = f"""
@@ -238,7 +236,7 @@ if data_to_process:
         ])
 
         # =========================================================
-        # TAB 1: 종합 효율 및 비가동 추이 분석 (월별 분할 적용)
+        # TAB 1: 종합 효율 및 비가동 추이 분석
         # =========================================================
         with tab1:
             is_factory_view = (len(selected_machines) == 0 and selected_prod == "전체 품목")
@@ -426,41 +424,70 @@ if data_to_process:
                     st.plotly_chart(fig4, use_container_width=True)
                 else: st.info("비가동 시간이 발생한 설비가 없습니다.")
                 
+                # 🚨 [복구 완료] 특정일 상세 데이터 표 렌더링
                 st.write("---")
                 st.markdown(f"#### 📂 {selected_date} 상세 데이터 (전체)")
+                
+                display_day = day_df.copy()
+                
+                for c in target_order:
+                    if c not in display_day.columns: display_day[c] = ""
+                display_day = display_day[target_order]
+                
+                def finalize_day_row(row):
+                    val = str(row.get('품명', '')).strip()
+                    is_idle = (val == '') or (val in ['0', '0.0', 'nan', 'NaN', 'None'])
+                    res = row.copy()
+                    for col in res.index:
+                        if is_idle and col not in ['생산일', '설비명']: res[col] = ""
+                        else:
+                            if col in ['종합효율', '성능가동율', '시간가동율', '양품율']:
+                                try: res[col] = f"{float(res[col]):.1%}" if pd.notnull(res[col]) and res[col] != "" else ""
+                                except: pass
+                            elif col in ['양품수량', '불량수량', '총 생산수량']:
+                                try: res[col] = f"{int(float(res[col])):,.0f}" if pd.notnull(res[col]) and res[col] != "" else ""
+                                except: pass
+                    if is_idle: res['품명'] = ""
+                    for k, v in res.items():
+                        if pd.isna(v) or v == 'None': res[k] = ""
+                    return res
+
+                final_day_table = display_day.apply(finalize_day_row, axis=1)
+                final_day_table.columns = pd.MultiIndex.from_tuples(multi_cols)
+                
+                def style_day_row(row):
+                    styles = [''] * len(row)
+                    idx = row.name
+                    try:
+                        oee = safe_float(day_df.loc[idx, '종합효율'])
+                        tgt = safe_float(day_df.loc[idx, '목표효율'])
+                        if 0 < oee < tgt:
+                            pos = row.index.get_loc(('생산성', '종합효율'))
+                            if isinstance(pos, np.ndarray): pos = np.where(pos)[0][0]
+                            styles[pos] = 'color: #FF4B4B; font-weight: bold;'
+                    except: pass
+                    return styles
+
+                day_styler = final_day_table.style.apply(style_day_row, axis=1).hide(axis="index")
+                render_styler_to_html(day_styler, is_multi=True)
+
+            else: st.info("분석할 생산일 데이터가 없습니다.")
             
+            # 전체 데이터 표
             st.write("---")
-            st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 일일 생산성 자료 (전체 데이터)</h3>", unsafe_allow_html=True)
+            st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 일일 생산성 자료 (전체 기간 데이터)</h3>", unsafe_allow_html=True)
             
-            display_df = f_df.reset_index(drop=True)
-            base_df = display_df.copy()
+            display_full_df = f_df.reset_index(drop=True)
+            base_df = display_full_df.copy()
             
             for c in target_order:
-                if c not in display_df.columns: display_df[c] = ""
-            display_df = display_df[target_order]
+                if c not in display_full_df.columns: display_full_df[c] = ""
+            display_full_df = display_full_df[target_order]
 
-            def finalize_row(row):
-                val = str(row.get('품명', '')).strip()
-                is_idle = (val == '') or (val in ['0', '0.0', 'nan', 'NaN', 'None'])
-                res = row.copy()
-                for col in res.index:
-                    if is_idle and col not in ['생산일', '설비명']: res[col] = ""
-                    else:
-                        if col in ['종합효율', '성능가동율', '시간가동율', '양품율']:
-                            try: res[col] = f"{float(res[col]):.1%}" if pd.notnull(res[col]) and res[col] != "" else ""
-                            except: pass
-                        elif col in ['양품수량', '불량수량', '총 생산수량']:
-                            try: res[col] = f"{int(float(res[col])):,.0f}" if pd.notnull(res[col]) and res[col] != "" else ""
-                            except: pass
-                if is_idle: res['품명'] = ""
-                for k, v in res.items():
-                    if pd.isna(v) or v == 'None': res[k] = ""
-                return res
-
-            final_table = display_df.apply(finalize_row, axis=1)
-            final_table.columns = pd.MultiIndex.from_tuples(multi_cols)
+            final_full_table = display_full_df.apply(finalize_day_row, axis=1)
+            final_full_table.columns = pd.MultiIndex.from_tuples(multi_cols)
             
-            def style_main_row(row):
+            def style_full_row(row):
                 styles = [''] * len(row)
                 idx = row.name
                 try:
@@ -473,8 +500,8 @@ if data_to_process:
                 except: pass
                 return styles
 
-            final_styler = final_table.style.apply(style_main_row, axis=1).hide(axis="index")
-            render_styler_to_html(final_styler, is_multi=True)
+            final_full_styler = final_full_table.style.apply(style_full_row, axis=1).hide(axis="index")
+            render_styler_to_html(final_full_styler, is_multi=True)
 
         # =========================================================
         # TAB 4: 종합효율 BEST & WORST 분석 현황
@@ -563,93 +590,86 @@ if data_to_process:
             else: st.info("분석할 가동 데이터가 없습니다.")
 
         # =========================================================
-        # 🚨 [TAB 6 강화] 효율 급변(급증/급감) 구간 분석 및 핵심 주도 설비 추적
+        # 🚨 TAB 6: 효율 급변(급증/급감) 구간 분석 (개별 설비/품목 정밀 추적)
         # =========================================================
         with tab6:
-            st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 전일 대비 효율 급변(급증/급감) 구간 분석</h3>", unsafe_allow_html=True)
-            st.markdown("선택된 필터 내에서, 전일 대비 효율이 가장 크게 변동한 날짜를 찾고 **그 변동을 주도한 핵심 설비 5가지와 특이사항**을 정밀 추적합니다.")
+            st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 개별 설비 및 품목 기준 효율 급변(급증/급감) 정밀 추적</h3>", unsafe_allow_html=True)
+            st.markdown("수많은 장비 중, **이전 생산일 대비 효율이 가장 폭락했거나 폭등한 개별 설비/품목 TOP 5**를 찾아 원인을 파헤칩니다.")
             
-            if not plot_df.empty and len(plot_df) > 1:
-                trend_df = plot_df.copy().reset_index(drop=True)
-                trend_df['전일대비_변동폭'] = trend_df[y_val].diff()
+            # 개별 데이터(설비명, 품명 기준) 정렬 및 변동폭 계산
+            detail_trend = f_df[f_df['종합효율'] > 0].sort_values(by=['설비명', '품명', 'sort_key']).copy()
+            
+            if not detail_trend.empty and len(detail_trend) > 1:
+                detail_trend['전일대비_변동폭'] = detail_trend.groupby(['설비명', '품명'])['종합효율'].diff()
+                detail_trend['이전_생산일'] = detail_trend.groupby(['설비명', '품명'])['생산일'].shift(1)
+                detail_trend['이전_종합효율'] = detail_trend.groupby(['설비명', '품명'])['종합효율'].shift(1)
                 
-                drops = trend_df[trend_df['전일대비_변동폭'] < 0].sort_values(by='전일대비_변동폭', ascending=True).head(3)
-                surges = trend_df[trend_df['전일대비_변동폭'] > 0].sort_values(by='전일대비_변동폭', ascending=False).head(3)
+                diff_df = detail_trend.dropna(subset=['전일대비_변동폭']).copy()
                 
-                c1, c2 = st.columns(2)
-                with c1:
-                    st.markdown("<h4 style='color: #FF4B4B; margin-top: 10px; font-weight: 800;'>📉 전체 효율 급감 구간 (WORST 3)</h4>", unsafe_allow_html=True)
-                    if not drops.empty:
-                        for _, r in drops.iterrows():
-                            st.markdown(f"<div class='metric-card' style='text-align:left; min-height:80px; padding:10px;'><span style='font-size:16px; font-weight:bold; color:#212529;'>{r['생산일']}</span> <span style='float:right; font-size:16px; font-weight:bold; color:#FF4B4B;'>{r['전일대비_변동폭']:.1%} ▼</span></div>", unsafe_allow_html=True)
-                    else: st.info("효율이 하락한 구간이 없습니다.")
-                
-                with c2:
-                    st.markdown("<h4 style='color: #1F77B4; margin-top: 10px; font-weight: 800;'>📈 전체 효율 급증 구간 (BEST 3)</h4>", unsafe_allow_html=True)
-                    if not surges.empty:
-                        for _, r in surges.iterrows():
-                            st.markdown(f"<div class='metric-card' style='text-align:left; min-height:80px; padding:10px;'><span style='font-size:16px; font-weight:bold; color:#212529;'>{r['생산일']}</span> <span style='float:right; font-size:16px; font-weight:bold; color:#1F77B4;'>+{r['전일대비_변동폭']:.1%} ▲</span></div>", unsafe_allow_html=True)
-                    else: st.info("효율이 상승한 구간이 없습니다.")
-                
-                st.write("---")
-                
-                drop_dates = drops['생산일'].tolist()
-                surge_dates = surges['생산일'].tolist()
-                
-                # 🚨 급감 원인 (최악의 5개 설비)
-                if drop_dates:
-                    st.markdown("<h4 style='font-weight: 800; color: #FF4B4B;'>📉 급감일 기준 하락 주도 핵심 요인 (하위 TOP 5)</h4>", unsafe_allow_html=True)
-                    st.markdown("전체 효율이 곤두박질친 날, **가장 저조한 성적을 기록하며 타격을 준 5개 설비와 해당 이슈**입니다.")
+                if not diff_df.empty:
+                    machine_drops = diff_df.sort_values(by='전일대비_변동폭', ascending=True).head(5)
+                    machine_surges = diff_df.sort_values(by='전일대비_변동폭', ascending=False).head(5)
                     
-                    drop_records = f_df[(f_df['생산일'].isin(drop_dates)) & (f_df['종합효율'] > 0)].copy()
-                    drop_records['has_issue'] = drop_records['OPEN ISSUE'].apply(lambda x: 0 if str(x).strip() == "" else 1)
-                    # 이슈가 있는 것을 최우선으로, 그 다음 종합효율이 낮은 것 5개 추출
-                    worst_impactors = drop_records.sort_values(by=['has_issue', '종합효율'], ascending=[False, True]).head(5)
-                    
-                    if not worst_impactors.empty:
-                        disp_df = worst_impactors[['생산일', '설비명', '품명', '종합효율', 'OPEN ISSUE']].reset_index(drop=True)
+                    def render_diff_table(df, is_drop=True):
+                        html_rows = ""
+                        color = "#FF4B4B" if is_drop else "#1F77B4"
+                        sign = "▼" if is_drop else "▲"
                         
-                        def style_worst_imp_row(row):
-                            styles = [''] * len(row)
-                            try:
-                                pos = row.index.get_loc('종합효율')
-                                if isinstance(pos, np.ndarray): pos = np.where(pos)[0][0]
-                                styles[pos] = 'color: #FF4B4B; font-weight: bold;'
-                            except: pass
-                            return styles
-                        
-                        disp_df['종합효율'] = disp_df['종합효율'].apply(lambda x: f"{safe_float(x):.1%}")
-                        styler = disp_df.style.apply(style_worst_imp_row, axis=1).hide(axis="index")
-                        render_styler_to_html(styler, is_multi=False)
-                
-                # 🚨 급증 원인 (최고의 5개 설비)
-                if surge_dates:
-                    st.write("")
-                    st.markdown("<h4 style='font-weight: 800; color: #1F77B4;'>📈 급증일 기준 상승 주도 핵심 요인 (상위 TOP 5)</h4>", unsafe_allow_html=True)
-                    st.markdown("전체 효율이 크게 오른 날, **가장 높은 성적을 기록하며 평균을 멱살 잡고 끌어올린 5개 설비와 당시 상황**입니다.")
-                    
-                    surge_records = f_df[(f_df['생산일'].isin(surge_dates)) & (f_df['종합효율'] > 0)].copy()
-                    # 상승을 이끌었으므로 종합효율이 가장 높은 것 5개 추출
-                    best_impactors = surge_records.sort_values(by=['종합효율'], ascending=[False]).head(5)
-                    
-                    if not best_impactors.empty:
-                        disp_df = best_impactors[['생산일', '설비명', '품명', '종합효율', 'OPEN ISSUE']].reset_index(drop=True)
-                        
-                        def style_best_imp_row(row):
-                            styles = [''] * len(row)
-                            try:
-                                pos = row.index.get_loc('종합효율')
-                                if isinstance(pos, np.ndarray): pos = np.where(pos)[0][0]
-                                styles[pos] = 'color: #1F77B4; font-weight: bold;'
-                            except: pass
-                            return styles
-                        
-                        disp_df['종합효율'] = disp_df['종합효율'].apply(lambda x: f"{safe_float(x):.1%}")
-                        styler = disp_df.style.apply(style_best_imp_row, axis=1).hide(axis="index")
-                        render_styler_to_html(styler, is_multi=False)
+                        for _, r in df.iterrows():
+                            diff_val = safe_float(r['전일대비_변동폭'])
+                            prev_oee = safe_float(r['이전_종합효율'])
+                            curr_oee = safe_float(r['종합효율'])
+                            
+                            html_rows += f"""
+                            <tr style="border-bottom: 1px solid #DEE2E6;">
+                                <td style='padding: 10px; text-align:center; font-weight:bold;'>{r['설비명']}</td>
+                                <td style='padding: 10px; text-align:center;'>{r['품명']}</td>
+                                <td style='padding: 10px; text-align:center; background-color:#F8F9FA;'>
+                                    <span style='color:gray; font-size:11px;'>{r['이전_생산일']}</span><br>{prev_oee:.1%}
+                                </td>
+                                <td style='padding: 10px; text-align:center; font-weight:900;'>
+                                    <span style='color:#333; font-size:11px;'>{r['생산일']} (현재)</span><br>{curr_oee:.1%}
+                                </td>
+                                <td style='padding: 10px; text-align:center; color:{color}; font-weight:900; font-size:15px;'>
+                                    {diff_val:+.1%} {sign}
+                                </td>
+                                <td style='padding: 10px; white-space:pre-wrap; text-align:left; min-width:300px;'>{r['OPEN ISSUE']}</td>
+                            </tr>
+                            """
+                            
+                        table_html = f"""
+                        <div style="width: 100%; overflow: auto; border: 1px solid #DEE2E6; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 30px;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 13.5px; background-color: white;">
+                                <thead>
+                                    <tr style="background-color: #E9ECEF; color: #495057;">
+                                        <th style="padding: 12px; text-align: center;">설비명</th>
+                                        <th style="padding: 12px; text-align: center;">품명</th>
+                                        <th style="padding: 12px; text-align: center;">이전 효율</th>
+                                        <th style="padding: 12px; text-align: center;">현재 효율</th>
+                                        <th style="padding: 12px; text-align: center;">변동폭</th>
+                                        <th style="padding: 12px; text-align: center;">해당일자 OPEN ISSUE (원인)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {html_rows}
+                                </tbody>
+                            </table>
+                        </div>
+                        """
+                        st.markdown(table_html, unsafe_allow_html=True)
 
+                    st.markdown("<h4 style='color: #FF4B4B; margin-top: 20px; font-weight: 800;'>📉 효율 급락 (최악의 하락폭 TOP 5)</h4>", unsafe_allow_html=True)
+                    st.markdown("이전 생산 대비 효율이 가장 크게 떨어져 **공장 전체 평균을 깎아 먹은 주요 원인 제공자**들입니다.")
+                    render_diff_table(machine_drops, is_drop=True)
+                    
+                    st.markdown("<h4 style='color: #1F77B4; margin-top: 20px; font-weight: 800;'>📈 효율 급등 (최고의 상승폭 TOP 5)</h4>", unsafe_allow_html=True)
+                    st.markdown("어떤 이슈나 조치 덕분에 이전보다 효율이 극적으로 상승하여 **실적을 하드캐리한 1등 공신**들입니다.")
+                    render_diff_table(machine_surges, is_drop=False)
+                    
+                else:
+                    st.info("동일한 설비/품목이 2일 이상 연속으로 생산된 데이터가 없어 변동폭을 계산할 수 없습니다.")
             else:
-                st.info("비교할 수 있는 데이터가 부족합니다. (최소 2일 이상의 데이터가 필요합니다)")
+                st.info("변동폭을 계산하기 위한 충분한 가동 데이터가 없습니다.")
 
 else:
     st.info("데이터 파일이 없습니다. GitHub의 'data' 폴더에 엑셀 파일을 넣거나, 아래 버튼을 통해 직접 파일을 업로드해주세요.")
