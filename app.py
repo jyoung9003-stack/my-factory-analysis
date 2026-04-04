@@ -8,11 +8,14 @@ import numpy as np
 from collections import Counter
 from datetime import datetime
 
-# 1. 웹 화면 및 폰트/스타일, 자동번역 차단 설정
-st.set_page_config(page_title="사출생산팀 일일 생산성 정밀 분석", layout="wide")
+# 1. 웹 화면 및 폰트/스타일, 자동번역 차단, 🚨 보고용 링크 이름표(OG Tag) 설정
+st.set_page_config(page_title="사출생산팀 일일 생산성 분석 리포트", layout="wide")
 
 st.markdown("""
 <meta name="google" content="notranslate">
+<meta property="og:title" content="사출생산팀 일일 생산성 분석 리포트">
+<meta property="og:description" content="사출생산팀 종합효율, 비가동, 특이사항 정밀 분석 대시보드입니다.">
+<meta property="og:site_name" content="DÜRING 사출생산팀">
 <style>
     html, body, [class*="css"] {
         font-family: 'Pretendard', 'Noto Sans KR', 'Malgun Gothic', sans-serif !important;
@@ -369,7 +372,6 @@ if data_to_process:
                         with wc_cols[i]: st.markdown(f"<div style='background-color:white; padding:15px; border-radius:8px; text-align:center; border:1px solid #E9ECEF; box-shadow: 0 2px 4px rgba(0,0,0,0.05);'><div style='font-size:16px; font-weight:900; color:#1F77B4;'>{word}</div><div style='font-size:13px; color:#6C757D; margin-top:5px;'>{count}건 감지</div></div>", unsafe_allow_html=True)
                 else: st.write("반복되는 유의미한 키워드가 감지되지 않았습니다.")
                 
-                # 🚨 [신규] 특정 생산일 OPEN ISSUE 정밀 조회 기능 추가
                 st.write("---")
                 st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 특정 생산일 OPEN ISSUE 조회</h3>", unsafe_allow_html=True)
                 
@@ -629,7 +631,7 @@ if data_to_process:
             else: st.info("분석할 가동 데이터가 없습니다.")
 
         # =========================================================
-        # TAB 6: 효율 급변(급증/급감) 구간 분석
+        # TAB 6: 효율 급변(급증/급감) 구간 분석 
         # =========================================================
         with tab6:
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 개별 설비 및 품목 기준 효율 급변(급증/급감) 정밀 추적</h3>", unsafe_allow_html=True)
