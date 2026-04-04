@@ -21,12 +21,12 @@ st.markdown("""
     }
     .metric-card {
         background-color: white; border: 1px solid #E9ECEF; border-radius: 8px;
-        padding: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); text-align: center; margin-bottom: 20px;
+        padding: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); text-align: center; margin-bottom: 20px;
         min-height: 160px;
     }
-    .metric-title { font-size: 14px; color: #6C757D; font-weight: bold; margin-bottom: 5px; }
-    .metric-value.best { font-size: 20px; color: #1F77B4; font-weight: 900; }
-    .metric-value.worst { font-size: 20px; color: #FF4B4B; font-weight: 900; }
+    .metric-title { font-size: 13px; color: #6C757D; font-weight: bold; margin-bottom: 5px; }
+    .metric-value.best { font-size: 18px; color: #1F77B4; font-weight: 900; }
+    .metric-value.worst { font-size: 18px; color: #FF4B4B; font-weight: 900; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -236,7 +236,7 @@ if data_to_process:
         ])
 
         # =========================================================
-        # TAB 1: 종합 효율 및 비가동 추이 분석 
+        # 🚨 TAB 1: 종합 효율 및 비가동 추이 분석 (월별 5-Col BEST/WORST 적용)
         # =========================================================
         with tab1:
             is_factory_view = (len(selected_machines) == 0 and selected_prod == "전체 품목")
@@ -250,16 +250,38 @@ if data_to_process:
                 plot_df = active_oee.groupby(['생산월', '생산일'], sort=False)[['종합효율', '목표효율']].mean().reset_index()
                 y_val = '종합효율'
 
+            def get_contributors(target_date, is_best):
+                day_df = f_df[(f_df['생산일'] == target_date) & (f_df['종합효율'] > 0)].sort_values(by='종합효율', ascending=not is_best).head(2)
+                res = ""
+                for _, r in day_df.iterrows():
+                    m_name = str(r['설비명']).split(' - ')[0]
+                    p_name = str(r['품명'])
+                    oee_color = "#1F77B4" if is_best else "#FF4B4B"
+                    res += f"<div style='font-size:12.5px; color:#343A40; text-align:left; margin-top:6px; line-height:1.4; word-break:keep-all;'><strong style='color:{oee_color};'>[{m_name}]</strong> {p_name} <b>({safe_float(r['종합효율']):.1%})</b></div>"
+                return res if res else "<div style='font-size:12px; color:#ADB5BD;'>세부 데이터 없음</div>"
+
+            def get_dt_contributors(target_date):
+                day_df = f_df[(f_df['생산일'] == target_date) & (f_df['비가동시간'] > 0)].sort_values(by='비가동시간', ascending=False).head(2)
+                res = ""
+                for _, r in day_df.iterrows():
+                    m_name = str(r['설비명']).split(' - ')[0]
+                    p_name = str(r['품명'])
+                    res += f"<div style='font-size:12.5px; color:#343A40; text-align:left; margin-top:6px; line-height:1.4; word-break:keep-all;'><strong style='color:#E07A5F;'>[{m_name}]</strong> {p_name} <b>({safe_float(r['비가동시간']):.1f}시간)</b></div>"
+                return res if res else "<div style='font-size:12px; color:#ADB5BD;'>비가동 없음</div>"
+
             months = plot_df['생산월'].unique() if not plot_df.empty else []
+            
             if not plot_df.empty:
-                st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 월별 종합 효율 추이(%)</h3>", unsafe_allow_html=True)
+                st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 월별 종합 효율 추이 및 요인 분석</h3>", unsafe_allow_html=True)
                 
                 for m in months:
+                    st.markdown(f"<hr style='border:1px solid #DEE2E6; margin-top:40px;'>", unsafe_allow_html=True)
+                    st.markdown(f"<h4 style='color: #495057; font-weight: 900; font-size: 24px;'>📅 {m} 생산성 리포트</h4>", unsafe_allow_html=True)
+                    
                     m_plot_df = plot_df[plot_df['생산월'] == m].copy()
                     if m_plot_df.empty: continue
                     
-                    st.markdown(f"<h4 style='color: #495057; margin-top: 20px;'>📅 {m}</h4>", unsafe_allow_html=True)
-                    
+                    # --- 1. 월별 그래프 ---
                     colors = ['#FF4B4B' if safe_float(row[y_val]) < safe_float(row['목표효율']) else '#1F77B4' for _, row in m_plot_df.iterrows()]
                     m_plot_df['x_label'] = m_plot_df.apply(lambda row: f"{row['생산일']}<br><span style='font-size:11px;color:gray;'>({safe_float(row[y_val]):.1%})</span>", axis=1)
                     
@@ -273,32 +295,28 @@ if data_to_process:
                     fig1.update_yaxes(title="종합효율", tickformat='.0%', range=[0, 1.2], showgrid=True, gridcolor='rgba(230,230,230,0.5)') 
                     fig1.update_layout(height=350, margin=dict(l=40, r=40, t=40, b=40), plot_bgcolor='white', paper_bgcolor='white', legend=dict(yanchor="top", y=1.1, xanchor="right", x=1))
                     st.plotly_chart(fig1, use_container_width=True)
-                
-                sorted_df = plot_df.sort_values(by=y_val, ascending=False)
-                best_3 = sorted_df.head(3)
-                worst_3 = sorted_df.tail(3).sort_values(by=y_val, ascending=True)
-                
-                def get_contributors(target_date, is_best):
-                    day_df = f_df[(f_df['생산일'] == target_date) & (f_df['종합효율'] > 0)].sort_values(by='종합효율', ascending=not is_best).head(2)
-                    res = ""
-                    for _, r in day_df.iterrows():
-                        m_name = str(r['설비명']).split(' - ')[0]
-                        p_name = str(r['품명'])
-                        oee_color = "#1F77B4" if is_best else "#FF4B4B"
-                        res += f"<div style='font-size:13.5px; color:#343A40; text-align:left; margin-top:6px; line-height:1.4; word-break:keep-all;'><strong style='color:{oee_color};'>[{m_name}]</strong> {p_name} <b>({safe_float(r['종합효율']):.1%})</b></div>"
-                    return res if res else "<div style='font-size:12px; color:#ADB5BD;'>세부 데이터 없음</div>"
+                    
+                    # --- 2. 월별 OEE BEST 5 / WORST 5 ---
+                    m_sorted_df = m_plot_df.sort_values(by=y_val, ascending=False)
+                    best_5 = m_sorted_df.head(5)
+                    worst_5 = m_sorted_df.tail(5).sort_values(by=y_val, ascending=True)
+                    
+                    st.markdown(f"<h5 style='color: #1F77B4; margin-top: 15px;'>🏆 {m} 종합효율 BEST 5</h5>", unsafe_allow_html=True)
+                    if not best_5.empty:
+                        b_cols = st.columns(len(best_5))
+                        for i, (_, r) in enumerate(best_5.iterrows()):
+                            with b_cols[i]: st.markdown(f"<div class='metric-card'><div class='metric-title' style='color:#1F77B4;'>BEST {i+1}</div><div style='font-size:16px; font-weight:900; color:#212529; margin:5px 0;'>{r['생산일']}</div><div class='metric-value best' style='margin-bottom:8px;'>{safe_float(r[y_val]):.1%}</div><div style='border-top:1px dashed #E9ECEF; padding-top:8px;'><div style='font-size:11px; color:#868E96; text-align:left; margin-bottom:4px;'>[주요 기여 설비/품목]</div>{get_contributors(r['생산일'], True)}</div></div>", unsafe_allow_html=True)
+                    
+                    st.markdown(f"<h5 style='color: #FF4B4B; margin-top: 15px;'>🚨 {m} 종합효율 WORST 5</h5>", unsafe_allow_html=True)
+                    if not worst_5.empty:
+                        w_cols = st.columns(len(worst_5))
+                        for i, (_, r) in enumerate(worst_5.iterrows()):
+                            with w_cols[i]: st.markdown(f"<div class='metric-card'><div class='metric-title' style='color:#FF4B4B;'>WORST {i+1}</div><div style='font-size:16px; font-weight:900; color:#212529; margin:5px 0;'>{r['생산일']}</div><div class='metric-value worst' style='margin-bottom:8px;'>{safe_float(r[y_val]):.1%}</div><div style='border-top:1px dashed #E9ECEF; padding-top:8px;'><div style='font-size:11px; color:#868E96; text-align:left; margin-bottom:4px;'>[효율 저하 주요 요인]</div>{get_contributors(r['생산일'], False)}</div></div>", unsafe_allow_html=True)
 
-                st.markdown("#### 🏆 기간 내 종합효율 BEST 3 & 🚨 WORST 3")
-                b_cols = st.columns(3)
-                w_cols = st.columns(3)
-                for i, (_, r) in enumerate(best_3.iterrows()):
-                    with b_cols[i]: st.markdown(f"<div class='metric-card'><div class='metric-title' style='color:#1F77B4;'>BEST {i+1}</div><div style='font-size:16px; font-weight:900; color:#212529; margin:5px 0;'>{r['생산일']}</div><div class='metric-value best' style='margin-bottom:8px;'>{safe_float(r[y_val]):.1%}</div><div style='border-top:1px dashed #E9ECEF; padding-top:8px;'><div style='font-size:11px; color:#868E96; text-align:left; margin-bottom:4px;'>[주요 기여 설비/품목]</div>{get_contributors(r['생산일'], True)}</div></div>", unsafe_allow_html=True)
-                for i, (_, r) in enumerate(worst_3.iterrows()):
-                    with w_cols[i]: st.markdown(f"<div class='metric-card'><div class='metric-title' style='color:#FF4B4B;'>WORST {i+1}</div><div style='font-size:16px; font-weight:900; color:#212529; margin:5px 0;'>{r['생산일']}</div><div class='metric-value worst' style='margin-bottom:8px;'>{safe_float(r[y_val]):.1%}</div><div style='border-top:1px dashed #E9ECEF; padding-top:8px;'><div style='font-size:11px; color:#868E96; text-align:left; margin-bottom:4px;'>[효율 저하 주요 요인]</div>{get_contributors(r['생산일'], False)}</div></div>", unsafe_allow_html=True)
             else: st.info("종합효율 데이터가 없습니다.")
             
             st.write("---")
-            st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 월별 총 비가동 시간(시간)</h3>", unsafe_allow_html=True)
+            st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 월별 총 비가동 시간 추이 및 요인 분석</h3>", unsafe_allow_html=True)
             
             daily_stop = f_df.groupby(['생산월', '생산일'], sort=False)['비가동시간'].sum().reset_index()
             
@@ -306,7 +324,10 @@ if data_to_process:
                 m_daily_stop = daily_stop[daily_stop['생산월'] == m].copy()
                 if m_daily_stop.empty: continue
                 
-                st.markdown(f"<h4 style='color: #495057; margin-top: 20px;'>🛑 {m}</h4>", unsafe_allow_html=True)
+                st.markdown(f"<hr style='border:1px solid #DEE2E6; margin-top:40px;'>", unsafe_allow_html=True)
+                st.markdown(f"<h4 style='color: #495057; font-weight: 900; font-size: 24px;'>🛑 {m} 비가동 리포트</h4>", unsafe_allow_html=True)
+                
+                # --- 1. 월별 비가동 그래프 ---
                 fig2 = px.bar(m_daily_stop, x='생산일', y='비가동시간', text_auto='.1f')
                 fig2.update_traces(marker=dict(color='#E07A5F', opacity=0.9), textposition="outside", textfont=dict(size=13, weight="bold", color="#E07A5F"), cliponaxis=False)
                 fig2.update_xaxes(type='category', title="", showgrid=False, range=[-0.5, len(m_daily_stop)-0.5])
@@ -314,27 +335,21 @@ if data_to_process:
                 fig2.update_layout(height=300, margin=dict(l=40, r=40, t=40, b=40), plot_bgcolor='white', paper_bgcolor='white')
                 st.plotly_chart(fig2, use_container_width=True)
 
-            if not daily_stop.empty and daily_stop['비가동시간'].sum() > 0:
-                dt_sorted = daily_stop.sort_values(by='비가동시간', ascending=True)
-                dt_best_3 = dt_sorted.head(3)
-                dt_worst_3 = dt_sorted.tail(3).sort_values(by='비가동시간', ascending=False)
-                
-                def get_dt_contributors(target_date):
-                    day_df = f_df[(f_df['생산일'] == target_date) & (f_df['비가동시간'] > 0)].sort_values(by='비가동시간', ascending=False).head(2)
-                    res = ""
-                    for _, r in day_df.iterrows():
-                        m_name = str(r['설비명']).split(' - ')[0]
-                        p_name = str(r['품명'])
-                        res += f"<div style='font-size:13.5px; color:#343A40; text-align:left; margin-top:6px; line-height:1.4; word-break:keep-all;'><strong style='color:#E07A5F;'>[{m_name}]</strong> {p_name} <b>({safe_float(r['비가동시간']):.1f}시간)</b></div>"
-                    return res if res else "<div style='font-size:12px; color:#ADB5BD;'>비가동 없음</div>"
-
-                st.markdown("#### 🏆 기간 내 비가동시간 최소 BEST 3 & 🚨 최대 WORST 3")
-                db_cols = st.columns(3)
-                dw_cols = st.columns(3)
-                for i, (_, r) in enumerate(dt_best_3.iterrows()):
-                    with db_cols[i]: st.markdown(f"<div class='metric-card'><div class='metric-title' style='color:#20C997;'>BEST {i+1} (최소 비가동)</div><div style='font-size:16px; font-weight:900; color:#212529; margin:5px 0;'>{r['생산일']}</div><div style='font-size:20px; font-weight:900; color:#20C997; margin-bottom:8px;'>{safe_float(r['비가동시간']):.1f}시간</div><div style='border-top:1px dashed #E9ECEF; padding-top:8px;'><div style='font-size:11px; color:#868E96; text-align:left; margin-bottom:4px;'>[비가동 발생 설비/품목]</div>{get_dt_contributors(r['생산일'])}</div></div>", unsafe_allow_html=True)
-                for i, (_, r) in enumerate(dt_worst_3.iterrows()):
-                    with dw_cols[i]: st.markdown(f"<div class='metric-card'><div class='metric-title' style='color:#E07A5F;'>WORST {i+1} (최대 비가동)</div><div style='font-size:16px; font-weight:900; color:#212529; margin:5px 0;'>{r['생산일']}</div><div style='font-size:20px; font-weight:900; color:#E07A5F; margin-bottom:8px;'>{safe_float(r['비가동시간']):.1f}시간</div><div style='border-top:1px dashed #E9ECEF; padding-top:8px;'><div style='font-size:11px; color:#868E96; text-align:left; margin-bottom:4px;'>[최다 비가동 설비/품목]</div>{get_dt_contributors(r['생산일'])}</div></div>", unsafe_allow_html=True)
+                # --- 2. 월별 비가동 BEST 5 / WORST 5 ---
+                if m_daily_stop['비가동시간'].sum() > 0:
+                    dt_sorted = m_daily_stop.sort_values(by='비가동시간', ascending=True)
+                    dt_best_5 = dt_sorted.head(5)
+                    dt_worst_5 = dt_sorted.tail(5).sort_values(by='비가동시간', ascending=False)
+                    
+                    st.markdown(f"<h5 style='color: #20C997; margin-top: 15px;'>🏆 {m} 최소 비가동 BEST 5</h5>", unsafe_allow_html=True)
+                    db_cols = st.columns(len(dt_best_5))
+                    for i, (_, r) in enumerate(dt_best_5.iterrows()):
+                        with db_cols[i]: st.markdown(f"<div class='metric-card'><div class='metric-title' style='color:#20C997;'>BEST {i+1}</div><div style='font-size:16px; font-weight:900; color:#212529; margin:5px 0;'>{r['생산일']}</div><div style='font-size:20px; font-weight:900; color:#20C997; margin-bottom:8px;'>{safe_float(r['비가동시간']):.1f}시간</div><div style='border-top:1px dashed #E9ECEF; padding-top:8px;'><div style='font-size:11px; color:#868E96; text-align:left; margin-bottom:4px;'>[비가동 발생 설비/품목]</div>{get_dt_contributors(r['생산일'])}</div></div>", unsafe_allow_html=True)
+                    
+                    st.markdown(f"<h5 style='color: #E07A5F; margin-top: 15px;'>🚨 {m} 최대 비가동 WORST 5</h5>", unsafe_allow_html=True)
+                    dw_cols = st.columns(len(dt_worst_5))
+                    for i, (_, r) in enumerate(dt_worst_5.iterrows()):
+                        with dw_cols[i]: st.markdown(f"<div class='metric-card'><div class='metric-title' style='color:#E07A5F;'>WORST {i+1}</div><div style='font-size:16px; font-weight:900; color:#212529; margin:5px 0;'>{r['생산일']}</div><div style='font-size:20px; font-weight:900; color:#E07A5F; margin-bottom:8px;'>{safe_float(r['비가동시간']):.1f}시간</div><div style='border-top:1px dashed #E9ECEF; padding-top:8px;'><div style='font-size:11px; color:#868E96; text-align:left; margin-bottom:4px;'>[최다 비가동 설비/품목]</div>{get_dt_contributors(r['생산일'])}</div></div>", unsafe_allow_html=True)
 
         # =========================================================
         # TAB 2: OPEN ISSUE 현황
@@ -587,7 +602,7 @@ if data_to_process:
             else: st.info("분석할 가동 데이터가 없습니다.")
 
         # =========================================================
-        # 🚨 TAB 6: 효율 급변(급증/급감) 구간 분석 (안전한 Pandas Styler 방식)
+        # 🚨 TAB 6: 효율 급변(급증/급감) 구간 분석 (개별 설비/품목 정밀 추적)
         # =========================================================
         with tab6:
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 개별 설비 및 품목 기준 효율 급변(급증/급감) 정밀 추적</h3>", unsafe_allow_html=True)
