@@ -8,14 +8,11 @@ import numpy as np
 from collections import Counter
 from datetime import datetime
 
-# 1. 웹 화면 및 폰트/스타일, 자동번역 차단, 🚨 보고용 링크 이름표(OG Tag) 설정
-st.set_page_config(page_title="사출생산팀 일일 생산성 분석 리포트", layout="wide")
+# 1. 웹 화면 및 폰트/스타일, 자동번역 차단 설정 🚨
+st.set_page_config(page_title="사출생산팀 일일 생산성 정밀 분석", layout="wide")
 
 st.markdown("""
 <meta name="google" content="notranslate">
-<meta property="og:title" content="사출생산팀 일일 생산성 분석 리포트">
-<meta property="og:description" content="사출생산팀 종합효율, 비가동, 특이사항 정밀 분석 대시보드입니다.">
-<meta property="og:site_name" content="DÜRING 사출생산팀">
 <style>
     html, body, [class*="css"] {
         font-family: 'Pretendard', 'Noto Sans KR', 'Malgun Gothic', sans-serif !important;
@@ -24,12 +21,12 @@ st.markdown("""
     }
     .metric-card {
         background-color: white; border: 1px solid #E9ECEF; border-radius: 8px;
-        padding: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); text-align: center; margin-bottom: 20px;
+        padding: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); text-align: center; margin-bottom: 20px;
         min-height: 160px;
     }
-    .metric-title { font-size: 14px; color: #6C757D; font-weight: bold; margin-bottom: 5px; }
-    .metric-value.best { font-size: 20px; color: #1F77B4; font-weight: 900; }
-    .metric-value.worst { font-size: 20px; color: #FF4B4B; font-weight: 900; }
+    .metric-title { font-size: 13px; color: #6C757D; font-weight: bold; margin-bottom: 5px; }
+    .metric-value.best { font-size: 18px; color: #1F77B4; font-weight: 900; }
+    .metric-value.worst { font-size: 18px; color: #FF4B4B; font-weight: 900; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -251,6 +248,7 @@ if data_to_process:
                 plot_df = active_oee.groupby(['생산월', '생산일'], sort=False)[['종합효율', '목표효율']].mean().reset_index()
                 y_val = '종합효율'
 
+            # 🚨 [기능 추가] 종합효율 카드 내 오픈이슈 표시 함수
             def get_contributors(target_date, is_best):
                 day_df = f_df[(f_df['생산일'] == target_date) & (f_df['종합효율'] > 0)].sort_values(by='종합효율', ascending=not is_best).head(2)
                 res = ""
@@ -258,16 +256,27 @@ if data_to_process:
                     m_name = str(r['설비명']).split(' - ')[0]
                     p_name = str(r['품명'])
                     oee_color = "#1F77B4" if is_best else "#FF4B4B"
-                    res += f"<div style='font-size:12.5px; color:#343A40; text-align:left; margin-top:6px; line-height:1.4; word-break:keep-all;'><strong style='color:{oee_color};'>[{m_name}]</strong> {p_name} <b>({safe_float(r['종합효율']):.1%})</b></div>"
+                    
+                    # 오픈 이슈 텍스트 파싱 (줄바꿈 없애고 깔끔하게 연결)
+                    issue_text = str(r['OPEN ISSUE']).strip().replace('\n', ' ')
+                    issue_html = f"<div style='font-size:11px; color:#6C757D; margin-top:3px; line-height:1.3; white-space:normal;'>↳ {issue_text}</div>" if issue_text else ""
+                    
+                    res += f"<div style='font-size:12.5px; color:#343A40; text-align:left; margin-top:8px; line-height:1.4; word-break:keep-all;'><strong style='color:{oee_color};'>[{m_name}]</strong> {p_name} <b>({safe_float(r['종합효율']):.1%})</b>{issue_html}</div>"
                 return res if res else "<div style='font-size:12px; color:#ADB5BD;'>세부 데이터 없음</div>"
 
+            # 🚨 [기능 추가] 비가동시간 카드 내 오픈이슈 표시 함수
             def get_dt_contributors(target_date):
                 day_df = f_df[(f_df['생산일'] == target_date) & (f_df['비가동시간'] > 0)].sort_values(by='비가동시간', ascending=False).head(2)
                 res = ""
                 for _, r in day_df.iterrows():
                     m_name = str(r['설비명']).split(' - ')[0]
                     p_name = str(r['품명'])
-                    res += f"<div style='font-size:12.5px; color:#343A40; text-align:left; margin-top:6px; line-height:1.4; word-break:keep-all;'><strong style='color:#E07A5F;'>[{m_name}]</strong> {p_name} <b>({safe_float(r['비가동시간']):.1f}시간)</b></div>"
+                    
+                    # 오픈 이슈 텍스트 파싱
+                    issue_text = str(r['OPEN ISSUE']).strip().replace('\n', ' ')
+                    issue_html = f"<div style='font-size:11px; color:#6C757D; margin-top:3px; line-height:1.3; white-space:normal;'>↳ {issue_text}</div>" if issue_text else ""
+                    
+                    res += f"<div style='font-size:12.5px; color:#343A40; text-align:left; margin-top:8px; line-height:1.4; word-break:keep-all;'><strong style='color:#E07A5F;'>[{m_name}]</strong> {p_name} <b>({safe_float(r['비가동시간']):.1f}시간)</b>{issue_html}</div>"
                 return res if res else "<div style='font-size:12px; color:#ADB5BD;'>비가동 없음</div>"
 
             months = plot_df['생산월'].unique() if not plot_df.empty else []
@@ -631,7 +640,7 @@ if data_to_process:
             else: st.info("분석할 가동 데이터가 없습니다.")
 
         # =========================================================
-        # TAB 6: 효율 급변(급증/급감) 구간 분석 
+        # TAB 6: 효율 급변(급증/급감) 구간 분석
         # =========================================================
         with tab6:
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 개별 설비 및 품목 기준 효율 급변(급증/급감) 정밀 추적</h3>", unsafe_allow_html=True)
