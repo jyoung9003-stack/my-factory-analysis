@@ -8,11 +8,14 @@ import numpy as np
 from collections import Counter
 from datetime import datetime
 
-# 1. 웹 화면 및 폰트/스타일, 자동번역 차단 설정 🚨
-st.set_page_config(page_title="사출생산팀 일일 생산성 정밀 분석", layout="wide")
+# 1. 웹 화면 및 폰트/스타일, 자동번역 차단 설정
+st.set_page_config(page_title="사출생산팀 일일 생산성 분석 리포트", layout="wide")
 
 st.markdown("""
 <meta name="google" content="notranslate">
+<meta property="og:title" content="사출생산팀 일일 생산성 분석 리포트">
+<meta property="og:description" content="사출생산팀 종합효율, 비가동, 특이사항 정밀 분석 대시보드입니다.">
+<meta property="og:site_name" content="DÜRING 사출생산팀">
 <style>
     html, body, [class*="css"] {
         font-family: 'Pretendard', 'Noto Sans KR', 'Malgun Gothic', sans-serif !important;
@@ -21,12 +24,12 @@ st.markdown("""
     }
     .metric-card {
         background-color: white; border: 1px solid #E9ECEF; border-radius: 8px;
-        padding: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); text-align: center; margin-bottom: 20px;
+        padding: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); text-align: center; margin-bottom: 20px;
         min-height: 160px;
     }
-    .metric-title { font-size: 13px; color: #6C757D; font-weight: bold; margin-bottom: 5px; }
-    .metric-value.best { font-size: 18px; color: #1F77B4; font-weight: 900; }
-    .metric-value.worst { font-size: 18px; color: #FF4B4B; font-weight: 900; }
+    .metric-title { font-size: 14px; color: #6C757D; font-weight: bold; margin-bottom: 5px; }
+    .metric-value.best { font-size: 20px; color: #1F77B4; font-weight: 900; }
+    .metric-value.worst { font-size: 20px; color: #FF4B4B; font-weight: 900; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -202,7 +205,6 @@ if data_to_process:
 
         f_df = pool_df[pool_df['품명_필터'] == selected_prod].copy() if selected_prod != "전체 품목" else pool_df.copy()
 
-        # HTML 테이블 렌더링 헬퍼 함수
         def render_styler_to_html(styler, is_multi=False):
             html_str = styler.to_html(escape=True) 
             wrapped_html = f"""<div style="width: 100%; max-height: 500px; overflow: auto; border: 1px solid #DEE2E6; border-radius: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 30px;">
@@ -234,7 +236,7 @@ if data_to_process:
         ])
 
         # =========================================================
-        # TAB 1: 종합 효율 및 비가동 추이 분석
+        # TAB 1: 종합 효율 및 비가동 추이 분석 (월별 필터 적용)
         # =========================================================
         with tab1:
             is_factory_view = (len(selected_machines) == 0 and selected_prod == "전체 품목")
@@ -248,7 +250,6 @@ if data_to_process:
                 plot_df = active_oee.groupby(['생산월', '생산일'], sort=False)[['종합효율', '목표효율']].mean().reset_index()
                 y_val = '종합효율'
 
-            # 🚨 [기능 추가] 종합효율 카드 내 오픈이슈 표시 함수
             def get_contributors(target_date, is_best):
                 day_df = f_df[(f_df['생산일'] == target_date) & (f_df['종합효율'] > 0)].sort_values(by='종합효율', ascending=not is_best).head(2)
                 res = ""
@@ -257,14 +258,12 @@ if data_to_process:
                     p_name = str(r['품명'])
                     oee_color = "#1F77B4" if is_best else "#FF4B4B"
                     
-                    # 오픈 이슈 텍스트 파싱 (줄바꿈 없애고 깔끔하게 연결)
                     issue_text = str(r['OPEN ISSUE']).strip().replace('\n', ' ')
                     issue_html = f"<div style='font-size:11px; color:#6C757D; margin-top:3px; line-height:1.3; white-space:normal;'>↳ {issue_text}</div>" if issue_text else ""
                     
                     res += f"<div style='font-size:12.5px; color:#343A40; text-align:left; margin-top:8px; line-height:1.4; word-break:keep-all;'><strong style='color:{oee_color};'>[{m_name}]</strong> {p_name} <b>({safe_float(r['종합효율']):.1%})</b>{issue_html}</div>"
                 return res if res else "<div style='font-size:12px; color:#ADB5BD;'>세부 데이터 없음</div>"
 
-            # 🚨 [기능 추가] 비가동시간 카드 내 오픈이슈 표시 함수
             def get_dt_contributors(target_date):
                 day_df = f_df[(f_df['생산일'] == target_date) & (f_df['비가동시간'] > 0)].sort_values(by='비가동시간', ascending=False).head(2)
                 res = ""
@@ -272,19 +271,24 @@ if data_to_process:
                     m_name = str(r['설비명']).split(' - ')[0]
                     p_name = str(r['품명'])
                     
-                    # 오픈 이슈 텍스트 파싱
                     issue_text = str(r['OPEN ISSUE']).strip().replace('\n', ' ')
                     issue_html = f"<div style='font-size:11px; color:#6C757D; margin-top:3px; line-height:1.3; white-space:normal;'>↳ {issue_text}</div>" if issue_text else ""
                     
                     res += f"<div style='font-size:12.5px; color:#343A40; text-align:left; margin-top:8px; line-height:1.4; word-break:keep-all;'><strong style='color:#E07A5F;'>[{m_name}]</strong> {p_name} <b>({safe_float(r['비가동시간']):.1f}시간)</b>{issue_html}</div>"
                 return res if res else "<div style='font-size:12px; color:#ADB5BD;'>비가동 없음</div>"
 
-            months = plot_df['생산월'].unique() if not plot_df.empty else []
+            months = list(plot_df['생산월'].unique()) if not plot_df.empty else []
             
             if not plot_df.empty:
                 st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 월별 종합 효율 추이 및 요인 분석</h3>", unsafe_allow_html=True)
                 
-                for m in months:
+                # 🚨 [신규 기능] 월 선택 전용 멀티 셀렉트 박스 추가
+                selected_months_tab1 = st.multiselect("📅 조회할 월(Month)을 선택하세요", options=months, default=months)
+                
+                if not selected_months_tab1:
+                    st.warning("선택된 월이 없습니다. 위 박스에서 조회할 월을 선택해 주세요.")
+                
+                for m in selected_months_tab1:
                     st.markdown(f"<hr style='border:1px solid #DEE2E6; margin-top:40px;'>", unsafe_allow_html=True)
                     st.markdown(f"<h4 style='color: #495057; font-weight: 900; font-size: 24px;'>📅 {m} 생산성 리포트</h4>", unsafe_allow_html=True)
                     
@@ -328,34 +332,35 @@ if data_to_process:
             
             daily_stop = f_df.groupby(['생산월', '생산일'], sort=False)['비가동시간'].sum().reset_index()
             
-            for m in months:
-                m_daily_stop = daily_stop[daily_stop['생산월'] == m].copy()
-                if m_daily_stop.empty: continue
-                
-                st.markdown(f"<hr style='border:1px solid #DEE2E6; margin-top:40px;'>", unsafe_allow_html=True)
-                st.markdown(f"<h4 style='color: #495057; font-weight: 900; font-size: 24px;'>🛑 {m} 비가동 리포트</h4>", unsafe_allow_html=True)
-                
-                fig2 = px.bar(m_daily_stop, x='생산일', y='비가동시간', text_auto='.1f')
-                fig2.update_traces(marker=dict(color='#E07A5F', opacity=0.9), textposition="outside", textfont=dict(size=13, weight="bold", color="#E07A5F"), cliponaxis=False)
-                fig2.update_xaxes(type='category', title="", showgrid=False, range=[-0.5, len(m_daily_stop)-0.5])
-                fig2.update_yaxes(title="비가동시간 (시간)", showgrid=True, gridcolor='rgba(230,230,230,0.5)')
-                fig2.update_layout(height=300, margin=dict(l=40, r=40, t=40, b=40), plot_bgcolor='white', paper_bgcolor='white')
-                st.plotly_chart(fig2, use_container_width=True)
+            if not plot_df.empty and selected_months_tab1:
+                for m in selected_months_tab1:
+                    m_daily_stop = daily_stop[daily_stop['생산월'] == m].copy()
+                    if m_daily_stop.empty: continue
+                    
+                    st.markdown(f"<hr style='border:1px solid #DEE2E6; margin-top:40px;'>", unsafe_allow_html=True)
+                    st.markdown(f"<h4 style='color: #495057; font-weight: 900; font-size: 24px;'>🛑 {m} 비가동 리포트</h4>", unsafe_allow_html=True)
+                    
+                    fig2 = px.bar(m_daily_stop, x='생산일', y='비가동시간', text_auto='.1f')
+                    fig2.update_traces(marker=dict(color='#E07A5F', opacity=0.9), textposition="outside", textfont=dict(size=13, weight="bold", color="#E07A5F"), cliponaxis=False)
+                    fig2.update_xaxes(type='category', title="", showgrid=False, range=[-0.5, len(m_daily_stop)-0.5])
+                    fig2.update_yaxes(title="비가동시간 (시간)", showgrid=True, gridcolor='rgba(230,230,230,0.5)')
+                    fig2.update_layout(height=300, margin=dict(l=40, r=40, t=40, b=40), plot_bgcolor='white', paper_bgcolor='white')
+                    st.plotly_chart(fig2, use_container_width=True)
 
-                if m_daily_stop['비가동시간'].sum() > 0:
-                    dt_sorted = m_daily_stop.sort_values(by='비가동시간', ascending=True)
-                    dt_best_5 = dt_sorted.head(5)
-                    dt_worst_5 = dt_sorted.tail(5).sort_values(by='비가동시간', ascending=False)
-                    
-                    st.markdown(f"<h5 style='color: #20C997; margin-top: 15px;'>🏆 {m} 최소 비가동 BEST 5</h5>", unsafe_allow_html=True)
-                    db_cols = st.columns(len(dt_best_5))
-                    for i, (_, r) in enumerate(dt_best_5.iterrows()):
-                        with db_cols[i]: st.markdown(f"<div class='metric-card'><div class='metric-title' style='color:#20C997;'>BEST {i+1} (최소 비가동)</div><div style='font-size:16px; font-weight:900; color:#212529; margin:5px 0;'>{r['생산일']}</div><div style='font-size:20px; font-weight:900; color:#20C997; margin-bottom:8px;'>{safe_float(r['비가동시간']):.1f}시간</div><div style='border-top:1px dashed #E9ECEF; padding-top:8px;'><div style='font-size:11px; color:#868E96; text-align:left; margin-bottom:4px;'>[비가동 발생 설비/품목]</div>{get_dt_contributors(r['생산일'])}</div></div>", unsafe_allow_html=True)
-                    
-                    st.markdown(f"<h5 style='color: #E07A5F; margin-top: 15px;'>🚨 {m} 최대 비가동 WORST 5</h5>", unsafe_allow_html=True)
-                    dw_cols = st.columns(len(dt_worst_5))
-                    for i, (_, r) in enumerate(dt_worst_5.iterrows()):
-                        with dw_cols[i]: st.markdown(f"<div class='metric-card'><div class='metric-title' style='color:#E07A5F;'>WORST {i+1} (최대 비가동)</div><div style='font-size:16px; font-weight:900; color:#212529; margin:5px 0;'>{r['생산일']}</div><div style='font-size:20px; font-weight:900; color:#E07A5F; margin-bottom:8px;'>{safe_float(r['비가동시간']):.1f}시간</div><div style='border-top:1px dashed #E9ECEF; padding-top:8px;'><div style='font-size:11px; color:#868E96; text-align:left; margin-bottom:4px;'>[최다 비가동 설비/품목]</div>{get_dt_contributors(r['생산일'])}</div></div>", unsafe_allow_html=True)
+                    if m_daily_stop['비가동시간'].sum() > 0:
+                        dt_sorted = m_daily_stop.sort_values(by='비가동시간', ascending=True)
+                        dt_best_5 = dt_sorted.head(5)
+                        dt_worst_5 = dt_sorted.tail(5).sort_values(by='비가동시간', ascending=False)
+                        
+                        st.markdown(f"<h5 style='color: #20C997; margin-top: 15px;'>🏆 {m} 최소 비가동 BEST 5</h5>", unsafe_allow_html=True)
+                        db_cols = st.columns(len(dt_best_5))
+                        for i, (_, r) in enumerate(dt_best_5.iterrows()):
+                            with db_cols[i]: st.markdown(f"<div class='metric-card'><div class='metric-title' style='color:#20C997;'>BEST {i+1} (최소 비가동)</div><div style='font-size:16px; font-weight:900; color:#212529; margin:5px 0;'>{r['생산일']}</div><div style='font-size:20px; font-weight:900; color:#20C997; margin-bottom:8px;'>{safe_float(r['비가동시간']):.1f}시간</div><div style='border-top:1px dashed #E9ECEF; padding-top:8px;'><div style='font-size:11px; color:#868E96; text-align:left; margin-bottom:4px;'>[비가동 발생 설비/품목]</div>{get_dt_contributors(r['생산일'])}</div></div>", unsafe_allow_html=True)
+                        
+                        st.markdown(f"<h5 style='color: #E07A5F; margin-top: 15px;'>🚨 {m} 최대 비가동 WORST 5</h5>", unsafe_allow_html=True)
+                        dw_cols = st.columns(len(dt_worst_5))
+                        for i, (_, r) in enumerate(dt_worst_5.iterrows()):
+                            with dw_cols[i]: st.markdown(f"<div class='metric-card'><div class='metric-title' style='color:#E07A5F;'>WORST {i+1} (최대 비가동)</div><div style='font-size:16px; font-weight:900; color:#212529; margin:5px 0;'>{r['생산일']}</div><div style='font-size:20px; font-weight:900; color:#E07A5F; margin-bottom:8px;'>{safe_float(r['비가동시간']):.1f}시간</div><div style='border-top:1px dashed #E9ECEF; padding-top:8px;'><div style='font-size:11px; color:#868E96; text-align:left; margin-bottom:4px;'>[최다 비가동 설비/품목]</div>{get_dt_contributors(r['생산일'])}</div></div>", unsafe_allow_html=True)
 
         # =========================================================
         # TAB 2: OPEN ISSUE 현황
