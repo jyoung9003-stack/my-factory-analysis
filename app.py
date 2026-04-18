@@ -238,7 +238,7 @@ if data_to_process:
         ])
 
         # =========================================================
-        # TAB 1: 종합 효율 및 비가동 추이 분석 (월별 필터 + 가동 설비 대수)
+        # TAB 1: 종합 효율 및 비가동 추이 분석
         # =========================================================
         with tab1:
             is_factory_view = (len(selected_machines) == 0 and selected_prod == "전체 품목")
@@ -249,7 +249,8 @@ if data_to_process:
                 y_val = '공장종합효율'
             else:
                 active_oee = f_df[f_df['종합효율'] > 0]
-                plot_df = active_oee.groupby(['생산월', '생산일'], sort=False)[['종합효율', '목표효율']].mean().reset_index()
+                # 🚨 날짜 정렬 꼬임 완벽 방지: sort_key를 기준으로 그룹핑 후 정렬
+                plot_df = active_oee.groupby(['sort_key', '생산월', '생산일'])[['종합효율', '목표효율']].mean().reset_index().sort_values('sort_key')
                 y_val = '종합효율'
 
             def get_issue_html(target_date, is_best):
@@ -300,16 +301,19 @@ if data_to_process:
                     target_val = 0.86 if is_factory_view else m_plot_df['목표효율'].mean()
                     fig1.add_trace(go.Scatter(x=m_plot_df['x_label'], y=[target_val] * len(m_plot_df), mode='lines', name=f'목표 효율 ({target_val:.1%})', line=dict(color='#ADB5BD', dash='dash', width=2)))
                     
-                    fig1.update_xaxes(type='category', title="", showgrid=False, range=[-0.5, len(m_plot_df)-0.5]) 
+                    # 🚨 X축 순서 꼬임 방지: DataFrame에 기록된 시간순서 배열을 강제로 주입
+                    fig1.update_xaxes(type='category', categoryorder='array', categoryarray=m_plot_df['x_label'], title="", showgrid=False) 
                     fig1.update_yaxes(title="종합효율", tickformat='.0%', range=[0, 1.2], showgrid=True, gridcolor='rgba(230,230,230,0.5)') 
                     fig1.update_layout(height=350, margin=dict(l=40, r=40, t=40, b=40), plot_bgcolor='white', paper_bgcolor='white', legend=dict(yanchor="top", y=1.1, xanchor="right", x=1))
                     st.plotly_chart(fig1, use_container_width=True)
 
-                    # 🚨 가동 설비 대수 분석 추가
+                    # 가동 설비 대수 분석 
                     st.markdown(f"<h5 style='color: #495057; margin-top: 20px;'>⚙️ {m} 일자별 가동 설비 대수 분석</h5>", unsafe_allow_html=True)
                     m_f_df = f_df[f_df['생산월'] == m].copy()
-                    machine_counts = m_f_df[m_f_df['종합효율'] > 0].groupby('생산일')['설비명'].nunique().reset_index()
-                    machine_counts.columns = ['생산일', '가동설비수']
+                    
+                    # 🚨 날짜 정렬 꼬임 완벽 차단: sort_key 멱살 잡고 정렬!
+                    machine_counts = m_f_df[m_f_df['종합효율'] > 0].groupby(['sort_key', '생산일'])['설비명'].nunique().reset_index().sort_values('sort_key')
+                    machine_counts.rename(columns={'설비명': '가동설비수'}, inplace=True)
                     
                     if not machine_counts.empty:
                         avg_m = machine_counts['가동설비수'].mean()
@@ -318,6 +322,8 @@ if data_to_process:
                         
                         fig_m = px.bar(machine_counts, x='생산일', y='가동설비수', text_auto=True)
                         fig_m.update_traces(marker_color='#6C757D', textposition="outside", textfont=dict(weight="bold"))
+                        # 🚨 X축 순서 꼬임 방지: DataFrame에 기록된 시간순서 배열 강제 주입
+                        fig_m.update_xaxes(type='category', categoryorder='array', categoryarray=machine_counts['생산일'], title="", showgrid=False)
                         fig_m.update_layout(height=250, margin=dict(l=20,r=20,t=20,b=20), plot_bgcolor='white', yaxis_title="가동 대수 (대)")
                         st.plotly_chart(fig_m, use_container_width=True)
                     else:
@@ -344,7 +350,8 @@ if data_to_process:
             st.write("---")
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 월별 총 비가동 시간 추이 및 요인 분석</h3>", unsafe_allow_html=True)
             
-            daily_stop = f_df.groupby(['생산월', '생산일'], sort=False)['비가동시간'].sum().reset_index()
+            # 🚨 날짜 정렬 꼬임 완벽 차단
+            daily_stop = f_df.groupby(['sort_key', '생산월', '생산일'])['비가동시간'].sum().reset_index().sort_values('sort_key')
             
             if not plot_df.empty and selected_months_tab1:
                 for m in selected_months_tab1:
@@ -356,7 +363,8 @@ if data_to_process:
                     
                     fig2 = px.bar(m_daily_stop, x='생산일', y='비가동시간', text_auto='.1f')
                     fig2.update_traces(marker=dict(color='#E07A5F', opacity=0.9), textposition="outside", textfont=dict(size=13, weight="bold", color="#E07A5F"), cliponaxis=False)
-                    fig2.update_xaxes(type='category', title="", showgrid=False, range=[-0.5, len(m_daily_stop)-0.5])
+                    # 🚨 X축 순서 꼬임 방지: DataFrame에 기록된 시간순서 배열 강제 주입
+                    fig2.update_xaxes(type='category', categoryorder='array', categoryarray=m_daily_stop['생산일'], title="", showgrid=False)
                     fig2.update_yaxes(title="비가동시간 (시간)", showgrid=True, gridcolor='rgba(230,230,230,0.5)')
                     fig2.update_layout(height=300, margin=dict(l=40, r=40, t=40, b=40), plot_bgcolor='white', paper_bgcolor='white')
                     st.plotly_chart(fig2, use_container_width=True)
