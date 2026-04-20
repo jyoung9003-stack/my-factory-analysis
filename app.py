@@ -35,11 +35,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # 2. 로고 및 타이틀
-col1, col2 = st.columns([1, 10])
+col1, col2 = st.columns([1.5, 10]) # 왼쪽 공간을 1에서 1.5로 살짝 넓혀줍니다.
 with col1:
     logo_path = "듀링로고_가로형_빨강_JPG.jpg"
     if os.path.exists(logo_path): st.image(logo_path, width=100)
-    else: st.markdown("<h2 style='color: #FF2A2A; font-weight: 900; margin-top: 10px;' class='notranslate'>DÜRING</h2>", unsafe_allow_html=True)
+    # white-space: nowrap; 을 추가하여 어떤 경우에도 절대 줄바꿈이 일어나지 않도록 강제 고정합니다.
+    else: st.markdown("<h2 style='color: #FF2A2A; font-weight: 900; margin-top: 10px; white-space: nowrap;' class='notranslate'>DÜRING</h2>", unsafe_allow_html=True)
 with col2:
     st.markdown("<h1 style='margin-top: 0px; color: #212529;' class='notranslate'>사출생산팀 일일 생산성 정밀 분석</h1>", unsafe_allow_html=True)
 
