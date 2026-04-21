@@ -166,7 +166,6 @@ if data_to_process:
         for col in num_cols:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-        # 🚨 여기서 \n (줄바꿈)을 명확하게 추가해줍니다.
         def format_issue(text):
             val = str(text).strip()
             if val in ['', '0', '0.0', 'nan', 'NaN', 'None']: return ""
@@ -253,7 +252,50 @@ if data_to_process:
                 plot_df = active_oee.groupby(['sort_key', '생산월', '생산일'])[['종합효율', '목표효율']].mean().reset_index().sort_values('sort_key')
                 y_val = '종합효율'
 
-            # 🌟 [핵심 변경 1] 종합효율 가로형 카드 렌더링 함수
+            # 🌟 [핵심 신규 기능] 주간/야간 텍스트 자동 분리 및 2단 컬럼 렌더링 함수
+            def split_issue_to_columns(issue_text):
+                lines = [line.strip() for line in str(issue_text).split('\n') if line.strip()]
+                if not lines:
+                    return ""
+                    
+                day_lines, night_lines, general_lines = [], [], []
+                current = general_lines
+                has_shift = False
+                
+                # 텍스트를 줄 단위로 읽으며 '주간', '야간' 키워드에 따라 분배
+                for line in lines:
+                    clean_line = line.replace(' ', '')
+                    if '*주간' in clean_line or line.startswith('주간'):
+                        current = day_lines
+                        has_shift = True
+                    elif '*야간' in clean_line or line.startswith('야간'):
+                        current = night_lines
+                        has_shift = True
+                    current.append(line)
+                    
+                # 만약 주야간 구분이 없는 텍스트라면 기존처럼 1단으로 출력
+                if not has_shift:
+                    return f"<div style='font-size:13px; color:#495057; margin-top:6px; line-height:1.6;'>{'<br>'.join(lines)}</div>"
+                    
+                # 공통 내용(맨 위에 적힌 내용)이 있으면 주간 리스트 쪽에 합침
+                if general_lines:
+                    day_lines = general_lines + day_lines
+                    
+                day_html = '<br>'.join(day_lines) if day_lines else "<span style='color:#ADB5BD; font-size:12px;'>주간 특이사항 없음</span>"
+                night_html = '<br>'.join(night_lines) if night_lines else "<span style='color:#ADB5BD; font-size:12px;'>야간 특이사항 없음</span>"
+                
+                # 좌우 2단 배치 HTML (노란색 띠=주간, 다크그레이 띠=야간)
+                return f"""
+                <div style='display: flex; gap: 10px; margin-top: 8px; width: 100%;'>
+                    <div style='flex: 1; background-color: #F8F9FA; border: 1px solid #E9ECEF; border-radius: 4px; padding: 10px; border-top: 3px solid #FFC107;'>
+                        <div style='font-size:13px; color:#495057; line-height:1.6;'>{day_html}</div>
+                    </div>
+                    <div style='flex: 1; background-color: #F8F9FA; border: 1px solid #E9ECEF; border-radius: 4px; padding: 10px; border-top: 3px solid #343A40;'>
+                        <div style='font-size:13px; color:#495057; line-height:1.6;'>{night_html}</div>
+                    </div>
+                </div>
+                """
+
             def render_horizontal_card(row, rank, is_best, y_col='종합효율'):
                 rank_color = "#1F77B4" if is_best else "#FF4B4B"
                 bg_color = "#F8FBFF" if is_best else "#FFF5F5"
@@ -265,11 +307,9 @@ if data_to_process:
                 for _, r in day_data.iterrows():
                     m_name = str(r['설비명']).split(' - ')[0]
                     oee_c = "#1F77B4" if is_best else "#FF4B4B"
-                    issue_t = str(r['OPEN ISSUE']).strip()
-                    # \n을 <br>로 치환하여 줄바꿈을 완벽하게 적용합니다.
-                    issue_t = issue_t.replace('\n', '<br>') 
                     
-                    issue_h = f"<div style='font-size:13px; color:#495057; margin-top:6px; line-height:1.6;'>{issue_t}</div>" if issue_t else ""
+                    # 새롭게 분리된 주/야간 2단 컬럼 HTML을 불러옵니다.
+                    issue_h = split_issue_to_columns(r['OPEN ISSUE'])
                     issue_html += f"<div style='margin-bottom: 12px;'><strong style='color:{oee_c}; font-size:14px;'>[{m_name}]</strong> <span style='font-size:14px; font-weight:bold; color:#212529;'>{r['품명']} ({safe_float(r['종합효율']):.1%})</span>{issue_h}</div>"
 
                 if not issue_html:
@@ -289,7 +329,6 @@ if data_to_process:
                 """
                 return card_html
 
-            # 🌟 [핵심 변경 2] 비가동시간 가로형 카드 렌더링 함수
             def render_dt_horizontal_card(row, rank, is_best):
                 rank_color = "#20C997" if is_best else "#E07A5F"
                 bg_color = "#E6FCF5" if is_best else "#FFF3F0"
@@ -300,10 +339,9 @@ if data_to_process:
                 issue_html = ""
                 for _, r in day_df.iterrows():
                     m_name = str(r['설비명']).split(' - ')[0]
-                    issue_t = str(r['OPEN ISSUE']).strip()
-                    issue_t = issue_t.replace('\n', '<br>')
                     
-                    issue_h = f"<div style='font-size:13px; color:#495057; margin-top:6px; line-height:1.6;'>{issue_t}</div>" if issue_t else ""
+                    # 새롭게 분리된 주/야간 2단 컬럼 HTML을 불러옵니다.
+                    issue_h = split_issue_to_columns(r['OPEN ISSUE'])
                     issue_html += f"<div style='margin-bottom: 12px;'><strong style='color:{rank_color}; font-size:14px;'>[{m_name}]</strong> <span style='font-size:14px; font-weight:bold; color:#212529;'>{r['품명']} ({safe_float(r['비가동시간']):.1f}시간)</span>{issue_h}</div>"
 
                 if not issue_html:
@@ -375,13 +413,11 @@ if data_to_process:
                     best_5 = m_sorted_df.head(5)
                     worst_5 = m_sorted_df.tail(5).sort_values(by=y_val, ascending=True)
                     
-                    # 🚨 [가로형 리스트 출력] BEST 5
                     st.markdown(f"<h5 style='color: #1F77B4; margin-top: 30px; margin-bottom: 15px;'>🏆 {m} 종합효율 BEST 5</h5>", unsafe_allow_html=True)
                     if not best_5.empty:
                         for i, (_, r) in enumerate(best_5.iterrows()):
                             st.markdown(render_horizontal_card(r, i+1, True, y_val), unsafe_allow_html=True)
                     
-                    # 🚨 [가로형 리스트 출력] WORST 5
                     st.markdown(f"<h5 style='color: #FF4B4B; margin-top: 30px; margin-bottom: 15px;'>🚨 {m} 종합효율 WORST 5</h5>", unsafe_allow_html=True)
                     if not worst_5.empty:
                         for i, (_, r) in enumerate(worst_5.iterrows()):
@@ -412,12 +448,10 @@ if data_to_process:
                         dt_best_5 = dt_sorted.head(5)
                         dt_worst_5 = dt_sorted.tail(5).sort_values(by='비가동시간', ascending=False)
                         
-                        # 🚨 [가로형 리스트 출력] 비가동 최소 BEST 5
                         st.markdown(f"<h5 style='color: #20C997; margin-top: 30px; margin-bottom: 15px;'>🏆 {m} 최소 비가동 BEST 5</h5>", unsafe_allow_html=True)
                         for i, (_, r) in enumerate(dt_best_5.iterrows()):
                             st.markdown(render_dt_horizontal_card(r, i+1, True), unsafe_allow_html=True)
                         
-                        # 🚨 [가로형 리스트 출력] 비가동 최대 WORST 5
                         st.markdown(f"<h5 style='color: #E07A5F; margin-top: 30px; margin-bottom: 15px;'>🚨 {m} 최대 비가동 WORST 5</h5>", unsafe_allow_html=True)
                         for i, (_, r) in enumerate(dt_worst_5.iterrows()):
                             st.markdown(render_dt_horizontal_card(r, i+1, False), unsafe_allow_html=True)
