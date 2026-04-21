@@ -34,12 +34,11 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 2. 로고 및 타이틀
-col1, col2 = st.columns([1.5, 10]) # 왼쪽 공간을 1에서 1.5로 살짝 넓혀줍니다.
+# 2. 로고 및 타이틀 (로고 줄바꿈 방지 적용)
+col1, col2 = st.columns([1.5, 10])
 with col1:
     logo_path = "듀링로고_가로형_빨강_JPG.jpg"
     if os.path.exists(logo_path): st.image(logo_path, width=100)
-    # white-space: nowrap; 을 추가하여 어떤 경우에도 절대 줄바꿈이 일어나지 않도록 강제 고정합니다.
     else: st.markdown("<h2 style='color: #FF2A2A; font-weight: 900; margin-top: 10px; white-space: nowrap;' class='notranslate'>DÜRING</h2>", unsafe_allow_html=True)
 with col2:
     st.markdown("<h1 style='margin-top: 0px; color: #212529;' class='notranslate'>사출생산팀 일일 생산성 정밀 분석</h1>", unsafe_allow_html=True)
@@ -167,13 +166,14 @@ if data_to_process:
         for col in num_cols:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
+        # 🚨 여기서 \n (줄바꿈)을 명확하게 추가해줍니다.
         def format_issue(text):
             val = str(text).strip()
             if val in ['', '0', '0.0', 'nan', 'NaN', 'None']: return ""
             val = val.replace('\r\n', '\n')
             val = re.sub(r'(?<!\n)\*', '\n*', val)
             val = re.sub(r'(?<!\n)-\.', '\n-.', val)
-            val = re.sub(r'(?<!\n)→', '\n→', val)
+            val = re.sub(r'(?<!\n)→', '\n→ ', val)
             return val.strip()
 
         df['OPEN ISSUE'] = df['OPEN ISSUE'].apply(format_issue)
@@ -239,7 +239,7 @@ if data_to_process:
         ])
 
         # =========================================================
-        # TAB 1: 종합 효율 및 비가동 추이 분석 (최근 월 기본 표시 + 가동 대수)
+        # TAB 1: 종합 효율 및 비가동 추이 분석
         # =========================================================
         with tab1:
             is_factory_view = (len(selected_machines) == 0 and selected_prod == "전체 품목")
@@ -253,43 +253,87 @@ if data_to_process:
                 plot_df = active_oee.groupby(['sort_key', '생산월', '생산일'])[['종합효율', '목표효율']].mean().reset_index().sort_values('sort_key')
                 y_val = '종합효율'
 
-            def get_issue_html(target_date, is_best):
-                day_data = f_df[(f_df['생산일'] == target_date) & (f_df['종합효율'] > 0)].sort_values(by='종합효율', ascending=not is_best).head(2)
-                res = ""
+            # 🌟 [핵심 변경 1] 종합효율 가로형 카드 렌더링 함수
+            def render_horizontal_card(row, rank, is_best, y_col='종합효율'):
+                rank_color = "#1F77B4" if is_best else "#FF4B4B"
+                bg_color = "#F8FBFF" if is_best else "#FFF5F5"
+                title_text = "BEST" if is_best else "WORST"
+                val = safe_float(row[y_col])
+
+                day_data = f_df[(f_df['생산일'] == row['생산일']) & (f_df['종합효율'] > 0)].sort_values(by='종합효율', ascending=not is_best).head(3)
+                issue_html = ""
                 for _, r in day_data.iterrows():
                     m_name = str(r['설비명']).split(' - ')[0]
                     oee_c = "#1F77B4" if is_best else "#FF4B4B"
-                    issue_t = str(r['OPEN ISSUE']).strip().replace('\n', ' ')
-                    issue_h = f"<div style='font-size:11px; color:#6C757D; margin-top:3px;'>↳ {issue_t}</div>" if issue_t else ""
-                    res += f"<div style='font-size:12.5px; text-align:left; margin-top:8px;'><strong style='color:{oee_c};'>[{m_name}]</strong> {r['품명']} <b>({safe_float(r['종합효율']):.1%})</b>{issue_h}</div>"
-                return res if res else "<div style='font-size:12px; color:#ADB5BD;'>세부 데이터 없음</div>"
+                    issue_t = str(r['OPEN ISSUE']).strip()
+                    # \n을 <br>로 치환하여 줄바꿈을 완벽하게 적용합니다.
+                    issue_t = issue_t.replace('\n', '<br>') 
+                    
+                    issue_h = f"<div style='font-size:13px; color:#495057; margin-top:6px; line-height:1.6;'>{issue_t}</div>" if issue_t else ""
+                    issue_html += f"<div style='margin-bottom: 12px;'><strong style='color:{oee_c}; font-size:14px;'>[{m_name}]</strong> <span style='font-size:14px; font-weight:bold; color:#212529;'>{r['품명']} ({safe_float(r['종합효율']):.1%})</span>{issue_h}</div>"
 
-            def get_dt_contributors(target_date):
-                day_df = f_df[(f_df['생산일'] == target_date) & (f_df['비가동시간'] > 0)].sort_values(by='비가동시간', ascending=False).head(2)
-                res = ""
+                if not issue_html:
+                    issue_html = "<div style='font-size:13px; color:#ADB5BD; margin-top: 10px;'>세부 데이터 없음</div>"
+
+                card_html = f"""
+                <div style='background-color: white; border: 1px solid {rank_color}40; border-radius: 8px; margin-bottom: 15px; display: flex; flex-direction: row; box-shadow: 0 2px 4px rgba(0,0,0,0.02); overflow: hidden;'>
+                    <div style='flex: 0 0 180px; display: flex; flex-direction: column; justify-content: center; align-items: center; border-right: 1px dashed #DEE2E6; padding: 15px; background-color: {bg_color};'>
+                        <div style='font-size: 14px; color: {rank_color}; font-weight: bold; margin-bottom: 5px;'>{title_text} {rank}</div>
+                        <div style='font-size: 15px; font-weight: 900; color: #212529; text-align: center; word-break: keep-all;'>{row['생산일']}</div>
+                        <div style='font-size: 22px; font-weight: 900; color: {rank_color}; margin-top: 8px;'>{val:.1%}</div>
+                    </div>
+                    <div style='flex: 1; padding: 15px 20px; text-align: left; display: flex; flex-direction: column; justify-content: center;'>
+                        {issue_html}
+                    </div>
+                </div>
+                """
+                return card_html
+
+            # 🌟 [핵심 변경 2] 비가동시간 가로형 카드 렌더링 함수
+            def render_dt_horizontal_card(row, rank, is_best):
+                rank_color = "#20C997" if is_best else "#E07A5F"
+                bg_color = "#E6FCF5" if is_best else "#FFF3F0"
+                title_text = "BEST (최소)" if is_best else "WORST (최대)"
+                val = safe_float(row['비가동시간'])
+
+                day_df = f_df[(f_df['생산일'] == row['생산일']) & (f_df['비가동시간'] > 0)].sort_values(by='비가동시간', ascending=is_best).head(3)
+                issue_html = ""
                 for _, r in day_df.iterrows():
                     m_name = str(r['설비명']).split(' - ')[0]
-                    p_name = str(r['품명'])
-                    issue_t = str(r['OPEN ISSUE']).strip().replace('\n', ' ')
-                    issue_h = f"<div style='font-size:11px; color:#6C757D; margin-top:3px;'>↳ {issue_t}</div>" if issue_t else ""
-                    res += f"<div style='font-size:12.5px; color:#343A40; text-align:left; margin-top:8px; line-height:1.4; word-break:keep-all;'><strong style='color:#E07A5F;'>[{m_name}]</strong> {p_name} <b>({safe_float(r['비가동시간']):.1f}시간)</b>{issue_h}</div>"
-                return res if res else "<div style='font-size:12px; color:#ADB5BD;'>비가동 없음</div>"
+                    issue_t = str(r['OPEN ISSUE']).strip()
+                    issue_t = issue_t.replace('\n', '<br>')
+                    
+                    issue_h = f"<div style='font-size:13px; color:#495057; margin-top:6px; line-height:1.6;'>{issue_t}</div>" if issue_t else ""
+                    issue_html += f"<div style='margin-bottom: 12px;'><strong style='color:{rank_color}; font-size:14px;'>[{m_name}]</strong> <span style='font-size:14px; font-weight:bold; color:#212529;'>{r['품명']} ({safe_float(r['비가동시간']):.1f}시간)</span>{issue_h}</div>"
 
-            # 등록된 월 목록 추출 (시간순으로 정렬된 상태 유지)
-            # Python 3.7 이상에서는 dict.fromkeys()를 사용하면 순서가 유지됩니다.
+                if not issue_html:
+                    issue_html = "<div style='font-size:13px; color:#ADB5BD; margin-top: 10px;'>비가동 없음</div>"
+
+                card_html = f"""
+                <div style='background-color: white; border: 1px solid {rank_color}40; border-radius: 8px; margin-bottom: 15px; display: flex; flex-direction: row; box-shadow: 0 2px 4px rgba(0,0,0,0.02); overflow: hidden;'>
+                    <div style='flex: 0 0 180px; display: flex; flex-direction: column; justify-content: center; align-items: center; border-right: 1px dashed #DEE2E6; padding: 15px; background-color: {bg_color};'>
+                        <div style='font-size: 14px; color: {rank_color}; font-weight: bold; margin-bottom: 5px; text-align: center;'>{title_text} {rank}</div>
+                        <div style='font-size: 15px; font-weight: 900; color: #212529; text-align: center; word-break: keep-all;'>{row['생산일']}</div>
+                        <div style='font-size: 22px; font-weight: 900; color: {rank_color}; margin-top: 8px;'>{val:.1f}시간</div>
+                    </div>
+                    <div style='flex: 1; padding: 15px 20px; text-align: left; display: flex; flex-direction: column; justify-content: center;'>
+                        {issue_html}
+                    </div>
+                </div>
+                """
+                return card_html
+
             months = list(dict.fromkeys(plot_df['생산월'].tolist())) if not plot_df.empty else []
             
             if not plot_df.empty:
                 st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 월별 종합 효율 및 가동 설비 분석</h3>", unsafe_allow_html=True)
                 
-                # 🚨 [핵심 업데이트] 가장 최근 월 1개만 기본 선택값으로 지정 (스크롤 압박 해소)
                 default_month = [months[-1]] if months else []
                 selected_months_tab1 = st.multiselect("📅 조회할 월(Month)을 선택하세요 (기본값: 최근 월)", options=months, default=default_month, key='t1_m')
                 
                 if not selected_months_tab1:
                     st.warning("선택된 월이 없습니다. 위 박스에서 조회할 월을 선택해 주세요.")
                 
-                # 필터링된 월 데이터만 출력
                 for m in selected_months_tab1:
                     st.markdown(f"<hr style='border:1px solid #DEE2E6; margin-top:40px;'>", unsafe_allow_html=True)
                     st.markdown(f"<h4 style='color: #495057; font-weight: 900; font-size: 24px;'>📅 {m} 생산성 리포트</h4>", unsafe_allow_html=True)
@@ -306,13 +350,11 @@ if data_to_process:
                     target_val = 0.86 if is_factory_view else m_plot_df['목표효율'].mean()
                     fig1.add_trace(go.Scatter(x=m_plot_df['x_label'], y=[target_val] * len(m_plot_df), mode='lines', name=f'목표 효율 ({target_val:.1%})', line=dict(color='#ADB5BD', dash='dash', width=2)))
                     
-                    # 카테고리 순서 강제 고정
                     fig1.update_xaxes(type='category', categoryorder='array', categoryarray=m_plot_df['x_label'], title="", showgrid=False) 
                     fig1.update_yaxes(title="종합효율", tickformat='.0%', range=[0, 1.2], showgrid=True, gridcolor='rgba(230,230,230,0.5)') 
                     fig1.update_layout(height=350, margin=dict(l=40, r=40, t=40, b=40), plot_bgcolor='white', paper_bgcolor='white', legend=dict(yanchor="top", y=1.1, xanchor="right", x=1))
                     st.plotly_chart(fig1, use_container_width=True)
 
-                    # 가동 설비 대수 분석 (시간순 강제 고정)
                     st.markdown(f"<h5 style='color: #495057; margin-top: 20px;'>⚙️ {m} 일자별 가동 설비 대수 분석</h5>", unsafe_allow_html=True)
                     m_f_df = f_df[f_df['생산월'] == m].copy()
                     machine_counts = m_f_df[m_f_df['종합효율'] > 0].groupby(['sort_key', '생산일'])['설비명'].nunique().reset_index().sort_values('sort_key')
@@ -328,27 +370,23 @@ if data_to_process:
                         fig_m.update_xaxes(type='category', categoryorder='array', categoryarray=machine_counts['생산일'], title="", showgrid=False)
                         fig_m.update_layout(height=250, margin=dict(l=20,r=20,t=20,b=20), plot_bgcolor='white', yaxis_title="가동 대수 (대)")
                         st.plotly_chart(fig_m, use_container_width=True)
-                    else:
-                        st.info("가동 설비 데이터가 없습니다.")
                     
                     m_sorted_df = m_plot_df.sort_values(by=y_val, ascending=False)
                     best_5 = m_sorted_df.head(5)
                     worst_5 = m_sorted_df.tail(5).sort_values(by=y_val, ascending=True)
                     
-                    st.markdown(f"<h5 style='color: #1F77B4; margin-top: 15px;'>🏆 {m} 종합효율 BEST 5</h5>", unsafe_allow_html=True)
+                    # 🚨 [가로형 리스트 출력] BEST 5
+                    st.markdown(f"<h5 style='color: #1F77B4; margin-top: 30px; margin-bottom: 15px;'>🏆 {m} 종합효율 BEST 5</h5>", unsafe_allow_html=True)
                     if not best_5.empty:
-                        b_cols = st.columns(len(best_5))
                         for i, (_, r) in enumerate(best_5.iterrows()):
-                            with b_cols[i]: st.markdown(f"<div class='metric-card'><div class='metric-title' style='color:#1F77B4;'>BEST {i+1}</div><div style='font-size:16px; font-weight:900; color:#212529; margin:5px 0;'>{r['생산일']}</div><div class='metric-value best' style='margin-bottom:8px;'>{safe_float(r[y_val]):.1%}</div><div style='border-top:1px dashed #E9ECEF; padding-top:8px;'>{get_issue_html(r['생산일'], True)}</div></div>", unsafe_allow_html=True)
+                            st.markdown(render_horizontal_card(r, i+1, True, y_val), unsafe_allow_html=True)
                     
-                    st.markdown(f"<h5 style='color: #FF4B4B; margin-top: 15px;'>🚨 {m} 종합효율 WORST 5</h5>", unsafe_allow_html=True)
+                    # 🚨 [가로형 리스트 출력] WORST 5
+                    st.markdown(f"<h5 style='color: #FF4B4B; margin-top: 30px; margin-bottom: 15px;'>🚨 {m} 종합효율 WORST 5</h5>", unsafe_allow_html=True)
                     if not worst_5.empty:
-                        w_cols = st.columns(len(worst_5))
                         for i, (_, r) in enumerate(worst_5.iterrows()):
-                            with w_cols[i]: st.markdown(f"<div class='metric-card'><div class='metric-title' style='color:#FF4B4B;'>WORST {i+1}</div><div style='font-size:16px; font-weight:900; color:#212529; margin:5px 0;'>{r['생산일']}</div><div class='metric-value worst' style='margin-bottom:8px;'>{safe_float(r[y_val]):.1%}</div><div style='border-top:1px dashed #E9ECEF; padding-top:8px;'>{get_issue_html(r['생산일'], False)}</div></div>", unsafe_allow_html=True)
+                            st.markdown(render_horizontal_card(r, i+1, False, y_val), unsafe_allow_html=True)
 
-            else: st.info("종합효율 데이터가 없습니다.")
-            
             st.write("---")
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 월별 총 비가동 시간 추이 및 요인 분석</h3>", unsafe_allow_html=True)
             
@@ -374,15 +412,15 @@ if data_to_process:
                         dt_best_5 = dt_sorted.head(5)
                         dt_worst_5 = dt_sorted.tail(5).sort_values(by='비가동시간', ascending=False)
                         
-                        st.markdown(f"<h5 style='color: #20C997; margin-top: 15px;'>🏆 {m} 최소 비가동 BEST 5</h5>", unsafe_allow_html=True)
-                        db_cols = st.columns(len(dt_best_5))
+                        # 🚨 [가로형 리스트 출력] 비가동 최소 BEST 5
+                        st.markdown(f"<h5 style='color: #20C997; margin-top: 30px; margin-bottom: 15px;'>🏆 {m} 최소 비가동 BEST 5</h5>", unsafe_allow_html=True)
                         for i, (_, r) in enumerate(dt_best_5.iterrows()):
-                            with db_cols[i]: st.markdown(f"<div class='metric-card'><div class='metric-title' style='color:#20C997;'>BEST {i+1} (최소 비가동)</div><div style='font-size:16px; font-weight:900; color:#212529; margin:5px 0;'>{r['생산일']}</div><div style='font-size:20px; font-weight:900; color:#20C997; margin-bottom:8px;'>{safe_float(r['비가동시간']):.1f}시간</div><div style='border-top:1px dashed #E9ECEF; padding-top:8px;'>{get_dt_contributors(r['생산일'])}</div></div>", unsafe_allow_html=True)
+                            st.markdown(render_dt_horizontal_card(r, i+1, True), unsafe_allow_html=True)
                         
-                        st.markdown(f"<h5 style='color: #E07A5F; margin-top: 15px;'>🚨 {m} 최대 비가동 WORST 5</h5>", unsafe_allow_html=True)
-                        dw_cols = st.columns(len(dt_worst_5))
+                        # 🚨 [가로형 리스트 출력] 비가동 최대 WORST 5
+                        st.markdown(f"<h5 style='color: #E07A5F; margin-top: 30px; margin-bottom: 15px;'>🚨 {m} 최대 비가동 WORST 5</h5>", unsafe_allow_html=True)
                         for i, (_, r) in enumerate(dt_worst_5.iterrows()):
-                            with dw_cols[i]: st.markdown(f"<div class='metric-card'><div class='metric-title' style='color:#E07A5F;'>WORST {i+1} (최대 비가동)</div><div style='font-size:16px; font-weight:900; color:#212529; margin:5px 0;'>{r['생산일']}</div><div style='font-size:20px; font-weight:900; color:#E07A5F; margin-bottom:8px;'>{safe_float(r['비가동시간']):.1f}시간</div><div style='border-top:1px dashed #E9ECEF; padding-top:8px;'>{get_dt_contributors(r['생산일'])}</div></div>", unsafe_allow_html=True)
+                            st.markdown(render_dt_horizontal_card(r, i+1, False), unsafe_allow_html=True)
 
         # =========================================================
         # TAB 2: OPEN ISSUE 현황
