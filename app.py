@@ -34,7 +34,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 2. 로고 및 타이틀 (로고 줄바꿈 방지 적용)
+# 2. 로고 및 타이틀
 col1, col2 = st.columns([1.5, 10])
 with col1:
     logo_path = "듀링로고_가로형_빨강_JPG.jpg"
@@ -178,6 +178,48 @@ if data_to_process:
         df['OPEN ISSUE'] = df['OPEN ISSUE'].apply(format_issue)
 
         # ---------------------------------------------------------
+        # 🌟 [핵심] 주/야간 텍스트 2단 분리 HTML 생성 함수 (모든 탭 공통 사용)
+        # ---------------------------------------------------------
+        def split_issue_to_columns(issue_text):
+            lines = [line.strip() for line in str(issue_text).split('\n') if line.strip()]
+            if not lines:
+                return ""
+                
+            day_lines, night_lines, general_lines = [], [], []
+            current = general_lines
+            has_shift = False
+            
+            for line in lines:
+                clean_line = line.replace(' ', '')
+                if '*주간' in clean_line or line.startswith('주간'):
+                    current = day_lines
+                    has_shift = True
+                elif '*야간' in clean_line or line.startswith('야간'):
+                    current = night_lines
+                    has_shift = True
+                current.append(line)
+                
+            if not has_shift:
+                return f"<div style='font-size:13px; color:#495057; line-height:1.6;'>{'<br>'.join(lines)}</div>"
+                
+            if general_lines:
+                day_lines = general_lines + day_lines
+                
+            day_html = '<br>'.join(day_lines) if day_lines else "<span style='color:#ADB5BD; font-size:12px;'>주간 특이사항 없음</span>"
+            night_html = '<br>'.join(night_lines) if night_lines else "<span style='color:#ADB5BD; font-size:12px;'>야간 특이사항 없음</span>"
+            
+            return f"""
+            <div style='display: flex; gap: 10px; margin-top: 5px; width: 100%; min-width: 400px;'>
+                <div style='flex: 1; background-color: #F8F9FA; border: 1px solid #E9ECEF; border-radius: 4px; padding: 10px; border-top: 3px solid #FFC107;'>
+                    <div style='font-size:13px; color:#495057; line-height:1.6;'>{day_html}</div>
+                </div>
+                <div style='flex: 1; background-color: #F8F9FA; border: 1px solid #E9ECEF; border-radius: 4px; padding: 10px; border-top: 3px solid #343A40;'>
+                    <div style='font-size:13px; color:#495057; line-height:1.6;'>{night_html}</div>
+                </div>
+            </div>
+            """
+
+        # ---------------------------------------------------------
         # [사이드바 필터]
         # ---------------------------------------------------------
         st.sidebar.header("🎯 정밀 필터링")
@@ -208,7 +250,12 @@ if data_to_process:
 
         # HTML 테이블 렌더링 헬퍼 함수
         def render_styler_to_html(styler, is_multi=False):
-            html_str = styler.to_html(escape=True) 
+            # 🚨 escape=False를 통해 표 안에서도 2단 HTML 레이아웃이 적용되게 허용합니다.
+            try:
+                html_str = styler.to_html(escape=False) 
+            except:
+                html_str = styler.to_html()
+                
             wrapped_html = f"""<div style="width: 100%; max-height: 500px; overflow: auto; border: 1px solid #DEE2E6; border-radius: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 30px;">
 <style>
 .custom-table {{ width: 100%; border-collapse: collapse; font-size: 13px; color: #333; background-color: white; }}
@@ -216,7 +263,7 @@ if data_to_process:
 .custom-table thead tr:nth-child(2) th {{ top: 38px; }}
 .custom-table td {{ border: 1px solid #DEE2E6; padding: 8px 10px; text-align: center !important; vertical-align: middle !important; }}
 .custom-table tbody tr:hover {{ background-color: #F1F3F5; }}
-.custom-table td:last-child {{ text-align: left !important; white-space: pre-wrap !important; min-width: 300px; line-height: 1.5; }}
+.custom-table td:last-child {{ text-align: left !important; white-space: pre-wrap !important; min-width: 450px; line-height: 1.5; }}
 </style>
 {html_str.replace('<table', '<table class="custom-table notranslate"')}
 </div>"""
@@ -252,50 +299,6 @@ if data_to_process:
                 plot_df = active_oee.groupby(['sort_key', '생산월', '생산일'])[['종합효율', '목표효율']].mean().reset_index().sort_values('sort_key')
                 y_val = '종합효율'
 
-            # 🌟 [핵심 신규 기능] 주간/야간 텍스트 자동 분리 및 2단 컬럼 렌더링 함수
-            def split_issue_to_columns(issue_text):
-                lines = [line.strip() for line in str(issue_text).split('\n') if line.strip()]
-                if not lines:
-                    return ""
-                    
-                day_lines, night_lines, general_lines = [], [], []
-                current = general_lines
-                has_shift = False
-                
-                # 텍스트를 줄 단위로 읽으며 '주간', '야간' 키워드에 따라 분배
-                for line in lines:
-                    clean_line = line.replace(' ', '')
-                    if '*주간' in clean_line or line.startswith('주간'):
-                        current = day_lines
-                        has_shift = True
-                    elif '*야간' in clean_line or line.startswith('야간'):
-                        current = night_lines
-                        has_shift = True
-                    current.append(line)
-                    
-                # 만약 주야간 구분이 없는 텍스트라면 기존처럼 1단으로 출력
-                if not has_shift:
-                    return f"<div style='font-size:13px; color:#495057; margin-top:6px; line-height:1.6;'>{'<br>'.join(lines)}</div>"
-                    
-                # 공통 내용(맨 위에 적힌 내용)이 있으면 주간 리스트 쪽에 합침
-                if general_lines:
-                    day_lines = general_lines + day_lines
-                    
-                day_html = '<br>'.join(day_lines) if day_lines else "<span style='color:#ADB5BD; font-size:12px;'>주간 특이사항 없음</span>"
-                night_html = '<br>'.join(night_lines) if night_lines else "<span style='color:#ADB5BD; font-size:12px;'>야간 특이사항 없음</span>"
-                
-                # 좌우 2단 배치 HTML (노란색 띠=주간, 다크그레이 띠=야간)
-                return f"""
-                <div style='display: flex; gap: 10px; margin-top: 8px; width: 100%;'>
-                    <div style='flex: 1; background-color: #F8F9FA; border: 1px solid #E9ECEF; border-radius: 4px; padding: 10px; border-top: 3px solid #FFC107;'>
-                        <div style='font-size:13px; color:#495057; line-height:1.6;'>{day_html}</div>
-                    </div>
-                    <div style='flex: 1; background-color: #F8F9FA; border: 1px solid #E9ECEF; border-radius: 4px; padding: 10px; border-top: 3px solid #343A40;'>
-                        <div style='font-size:13px; color:#495057; line-height:1.6;'>{night_html}</div>
-                    </div>
-                </div>
-                """
-
             def render_horizontal_card(row, rank, is_best, y_col='종합효율'):
                 rank_color = "#1F77B4" if is_best else "#FF4B4B"
                 bg_color = "#F8FBFF" if is_best else "#FFF5F5"
@@ -308,7 +311,6 @@ if data_to_process:
                     m_name = str(r['설비명']).split(' - ')[0]
                     oee_c = "#1F77B4" if is_best else "#FF4B4B"
                     
-                    # 새롭게 분리된 주/야간 2단 컬럼 HTML을 불러옵니다.
                     issue_h = split_issue_to_columns(r['OPEN ISSUE'])
                     issue_html += f"<div style='margin-bottom: 12px;'><strong style='color:{oee_c}; font-size:14px;'>[{m_name}]</strong> <span style='font-size:14px; font-weight:bold; color:#212529;'>{r['품명']} ({safe_float(r['종합효율']):.1%})</span>{issue_h}</div>"
 
@@ -340,7 +342,6 @@ if data_to_process:
                 for _, r in day_df.iterrows():
                     m_name = str(r['설비명']).split(' - ')[0]
                     
-                    # 새롭게 분리된 주/야간 2단 컬럼 HTML을 불러옵니다.
                     issue_h = split_issue_to_columns(r['OPEN ISSUE'])
                     issue_html += f"<div style='margin-bottom: 12px;'><strong style='color:{rank_color}; font-size:14px;'>[{m_name}]</strong> <span style='font-size:14px; font-weight:bold; color:#212529;'>{r['품명']} ({safe_float(r['비가동시간']):.1f}시간)</span>{issue_h}</div>"
 
@@ -457,7 +458,7 @@ if data_to_process:
                             st.markdown(render_dt_horizontal_card(r, i+1, False), unsafe_allow_html=True)
 
         # =========================================================
-        # TAB 2: OPEN ISSUE 현황
+        # TAB 2: OPEN ISSUE 현황 (표에도 2단 분리 적용)
         # =========================================================
         with tab2:
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> OPEN ISSUE 키워드 분석</h3>", unsafe_allow_html=True)
@@ -506,6 +507,8 @@ if data_to_process:
                         
                         day_issue_display = day_issue_df[['생산일', '설비명', '품명', '종합효율', 'OPEN ISSUE']].copy()
                         day_issue_display['종합효율'] = day_issue_display['종합효율'].apply(lambda x: f"{safe_float(x):.1%}")
+                        # 🚨 OPEN ISSUE 칼럼에 주야간 분리 HTML 적용
+                        day_issue_display['OPEN ISSUE'] = day_issue_display['OPEN ISSUE'].apply(split_issue_to_columns)
                         
                         day_issue_styler = day_issue_display.style.apply(style_day_issue_row, axis=1).hide(axis="index")
                         render_styler_to_html(day_issue_styler, is_multi=False)
@@ -533,13 +536,15 @@ if data_to_process:
                 
                 issue_display = issue_display.drop(columns=['목표효율'])
                 issue_display['종합효율'] = issue_display['종합효율'].apply(lambda x: f"{safe_float(x):.1%}")
+                # 🚨 OPEN ISSUE 칼럼에 주야간 분리 HTML 적용
+                issue_display['OPEN ISSUE'] = issue_display['OPEN ISSUE'].apply(split_issue_to_columns)
                 
                 issue_styler = issue_display.style.apply(style_issue_row, axis=1).hide(axis="index")
                 render_styler_to_html(issue_styler, is_multi=False)
             else: st.info("선택된 조건에 해당하는 특이사항(OPEN ISSUE)이 없습니다.")
 
         # =========================================================
-        # TAB 3: 일별 생산성 및 비가동 현황
+        # TAB 3: 일별 생산성 및 비가동 현황 (표에도 2단 분리 적용)
         # =========================================================
         with tab3:
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 특정 생산일 정밀 데이터 조회</h3>", unsafe_allow_html=True)
@@ -584,6 +589,9 @@ if data_to_process:
                 for c in target_order:
                     if c not in display_day.columns: display_day[c] = ""
                 display_day = display_day[target_order]
+                
+                # 🚨 OPEN ISSUE 칼럼에 주야간 분리 HTML 적용
+                display_day['OPEN ISSUE'] = display_day['OPEN ISSUE'].apply(split_issue_to_columns)
                 
                 def finalize_day_row(row):
                     val = str(row.get('품명', '')).strip()
@@ -633,6 +641,9 @@ if data_to_process:
                 if c not in display_full_df.columns: display_full_df[c] = ""
             display_full_df = display_full_df[target_order]
 
+            # 🚨 OPEN ISSUE 칼럼에 주야간 분리 HTML 적용
+            display_full_df['OPEN ISSUE'] = display_full_df['OPEN ISSUE'].apply(split_issue_to_columns)
+
             final_full_table = display_full_df.apply(finalize_day_row, axis=1)
             final_full_table.columns = pd.MultiIndex.from_tuples(multi_cols)
             
@@ -653,7 +664,7 @@ if data_to_process:
             render_styler_to_html(final_full_styler, is_multi=True)
 
         # =========================================================
-        # TAB 4: 종합효율 BEST & WORST 분석 현황
+        # TAB 4: 종합효율 BEST & WORST 분석 현황 (표에도 2단 분리 적용)
         # =========================================================
         with tab4:
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 종합효율 BEST 5 & WORST 5 요인 분석</h3>", unsafe_allow_html=True)
@@ -664,6 +675,9 @@ if data_to_process:
                 best5_df = valid_df.sort_values(by=['종합효율', '생산일'], ascending=[False, False]).head(5)
                 best5_display = best5_df[['생산일', '설비명', '품명', '종합효율', 'OPEN ISSUE']].reset_index(drop=True)
                 best5_display['종합효율'] = best5_display['종합효율'].apply(lambda x: f"{safe_float(x):.1%}")
+                
+                # 🚨 OPEN ISSUE 칼럼에 주야간 분리 HTML 적용
+                best5_display['OPEN ISSUE'] = best5_display['OPEN ISSUE'].apply(split_issue_to_columns)
                 
                 def style_best_row(row):
                     styles = [''] * len(row)
@@ -682,6 +696,9 @@ if data_to_process:
                 worst5_display = worst5_df[['생산일', '설비명', '품명', '종합효율', 'OPEN ISSUE']].reset_index(drop=True)
                 worst5_display['종합효율'] = worst5_display['종합효율'].apply(lambda x: f"{safe_float(x):.1%}")
                 
+                # 🚨 OPEN ISSUE 칼럼에 주야간 분리 HTML 적용
+                worst5_display['OPEN ISSUE'] = worst5_display['OPEN ISSUE'].apply(split_issue_to_columns)
+                
                 def style_worst_row(row):
                     styles = [''] * len(row)
                     try:
@@ -696,7 +713,7 @@ if data_to_process:
             else: st.info("분석할 가동 데이터가 없습니다.")
 
         # =========================================================
-        # TAB 5: 비가동시간 BEST & WORST 분석 현황
+        # TAB 5: 비가동시간 BEST & WORST 분석 현황 (표에도 2단 분리 적용)
         # =========================================================
         with tab5:
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 비가동시간 BEST 5 & WORST 5 요인 분석</h3>", unsafe_allow_html=True)
@@ -707,6 +724,9 @@ if data_to_process:
                 best5_dt = valid_dt_df.sort_values(by=['비가동시간', '종합효율'], ascending=[True, False]).head(5)
                 best5_dt_display = best5_dt[['생산일', '설비명', '품명', '비가동시간', 'OPEN ISSUE']].reset_index(drop=True)
                 best5_dt_display['비가동시간'] = best5_dt_display['비가동시간'].apply(lambda x: f"{safe_float(x):.1f}시간")
+                
+                # 🚨 OPEN ISSUE 칼럼에 주야간 분리 HTML 적용
+                best5_dt_display['OPEN ISSUE'] = best5_dt_display['OPEN ISSUE'].apply(split_issue_to_columns)
                 
                 def style_best_dt_row(row):
                     styles = [''] * len(row)
@@ -725,6 +745,9 @@ if data_to_process:
                 worst5_dt_display = worst5_dt[['생산일', '설비명', '품명', '비가동시간', 'OPEN ISSUE']].reset_index(drop=True)
                 worst5_dt_display['비가동시간'] = worst5_dt_display['비가동시간'].apply(lambda x: f"{safe_float(x):.1f}시간")
                 
+                # 🚨 OPEN ISSUE 칼럼에 주야간 분리 HTML 적용
+                worst5_dt_display['OPEN ISSUE'] = worst5_dt_display['OPEN ISSUE'].apply(split_issue_to_columns)
+                
                 def style_worst_dt_row(row):
                     styles = [''] * len(row)
                     try:
@@ -739,7 +762,7 @@ if data_to_process:
             else: st.info("분석할 가동 데이터가 없습니다.")
 
         # =========================================================
-        # TAB 6: 효율 급변(급증/급감) 구간 분석
+        # TAB 6: 효율 급변(급증/급감) 구간 분석 (표에도 2단 분리 적용)
         # =========================================================
         with tab6:
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 개별 설비 및 품목 기준 효율 급변(급증/급감) 정밀 추적</h3>", unsafe_allow_html=True)
@@ -760,6 +783,10 @@ if data_to_process:
                     
                     def get_diff_styler(df_input, is_drop=True):
                         disp = df_input[['설비명', '품명', '이전_생산일', '이전_종합효율', '생산일', '종합효율', '전일대비_변동폭', 'OPEN ISSUE']].copy()
+                        
+                        # 🚨 OPEN ISSUE 칼럼에 주야간 분리 HTML 적용
+                        disp['OPEN ISSUE'] = disp['OPEN ISSUE'].apply(split_issue_to_columns)
+                        
                         disp['이전_종합효율'] = disp['이전_종합효율'].apply(lambda x: f"{safe_float(x):.1%}")
                         disp['종합효율'] = disp['종합효율'].apply(lambda x: f"{safe_float(x):.1%}")
 
