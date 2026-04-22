@@ -178,12 +178,14 @@ if data_to_process:
         df['OPEN ISSUE'] = df['OPEN ISSUE'].apply(format_issue)
 
         # ---------------------------------------------------------
-        # 🌟 [핵심 개선] 주/야간 텍스트 분리 및 중복 단어 제거 HTML 생성 함수
+        # 🌟 [핵심 보완] 데이터가 비어있을 때 명확한 안내 문구 출력 추가
         # ---------------------------------------------------------
         def split_issue_to_columns(issue_text):
             lines = [line.strip() for line in str(issue_text).split('\n') if line.strip()]
+            
+            # 🚨 엑셀 데이터가 진짜 비어있을 경우 (오해 방지용 디자인 박스)
             if not lines:
-                return ""
+                return "<div style='font-size:12px; color:#ADB5BD; margin-top:6px; background-color:#F8F9FA; padding:8px; border-radius:4px; border:1px dashed #E9ECEF;'>📝 기록된 특이사항(OPEN ISSUE) 없음</div>"
                 
             day_lines, night_lines, general_lines = [], [], []
             current = general_lines
@@ -194,15 +196,12 @@ if data_to_process:
                 if '*주간' in clean_line or line.startswith('주간'):
                     current = day_lines
                     has_shift = True
-                    # 🚨 여기서 '*주간' 텍스트를 제거합니다
                     line = re.sub(r'^\*?\s*주간\s*', '', line).strip()
                 elif '*야간' in clean_line or line.startswith('야간'):
                     current = night_lines
                     has_shift = True
-                    # 🚨 여기서 '*야간' 텍스트를 제거합니다
                     line = re.sub(r'^\*?\s*야간\s*', '', line).strip()
                 
-                # 단어를 지운 후 빈 줄이 아니면 추가
                 if line:
                     current.append(line)
                 
@@ -215,7 +214,6 @@ if data_to_process:
             day_html = '<br>'.join(day_lines) if day_lines else "<span style='color:#ADB5BD; font-size:12px;'>특이사항 없음</span>"
             night_html = '<br>'.join(night_lines) if night_lines else "<span style='color:#ADB5BD; font-size:12px;'>특이사항 없음</span>"
             
-            # 🚨 박스 상단에 미니 타이틀(☀️ 주간 / 🌙 야간)을 추가했습니다.
             return f"""
             <div style='display: flex; gap: 10px; margin-top: 5px; width: 100%; min-width: 400px;'>
                 <div style='flex: 1; background-color: #F8F9FA; border: 1px solid #E9ECEF; border-radius: 4px; padding: 10px; border-top: 3px solid #FFC107;'>
@@ -230,13 +228,12 @@ if data_to_process:
             """
 
         # ---------------------------------------------------------
-        # 🌟 [핵심 개선] 사이드바 '생산월' 필터 및 연동 기능 추가
+        # [사이드바 필터]
         # ---------------------------------------------------------
         st.sidebar.header("🎯 정밀 필터링")
         
         df['설비명'] = df['설비명'].fillna("").astype(str)
         
-        # 1. 생산월 필터 (전체 데이터 기준)
         all_months_sidebar = sorted([m for m in df['생산월'].unique() if str(m).strip() != ""])
         selected_months_sidebar = st.sidebar.multiselect("📅 생산월 선택", all_months_sidebar, default=[], placeholder="전체 월")
         
@@ -247,7 +244,6 @@ if data_to_process:
             month_filtered_df = df[df['생산월'].isin(selected_months_sidebar)].copy()
             daily_month_filtered = daily_df[daily_df['생산월'].isin(selected_months_sidebar)].copy()
 
-        # 2. 생산일 필터 (월 필터가 적용된 데이터 기준)
         all_dates = sorted([d for d in month_filtered_df['생산일'].unique() if str(d).strip() != ""])
         selected_dates = st.sidebar.multiselect("📆 생산일 선택", all_dates, default=[], placeholder="전체 생산일")
         
@@ -336,9 +332,6 @@ if data_to_process:
                     issue_h = split_issue_to_columns(r['OPEN ISSUE'])
                     issue_html += f"<div style='margin-bottom: 12px;'><strong style='color:{oee_c}; font-size:14px;'>[{m_name}]</strong> <span style='font-size:14px; font-weight:bold; color:#212529;'>{r['품명']} ({safe_float(r['종합효율']):.1%})</span>{issue_h}</div>"
 
-                if not issue_html:
-                    issue_html = "<div style='font-size:13px; color:#ADB5BD; margin-top: 10px;'>세부 데이터 없음</div>"
-
                 card_html = f"""
                 <div style='background-color: white; border: 1px solid {rank_color}40; border-radius: 8px; margin-bottom: 15px; display: flex; flex-direction: row; box-shadow: 0 2px 4px rgba(0,0,0,0.02); overflow: hidden;'>
                     <div style='flex: 0 0 180px; display: flex; flex-direction: column; justify-content: center; align-items: center; border-right: 1px dashed #DEE2E6; padding: 15px; background-color: {bg_color};'>
@@ -366,9 +359,6 @@ if data_to_process:
                     
                     issue_h = split_issue_to_columns(r['OPEN ISSUE'])
                     issue_html += f"<div style='margin-bottom: 12px;'><strong style='color:{rank_color}; font-size:14px;'>[{m_name}]</strong> <span style='font-size:14px; font-weight:bold; color:#212529;'>{r['품명']} ({safe_float(r['비가동시간']):.1f}시간)</span>{issue_h}</div>"
-
-                if not issue_html:
-                    issue_html = "<div style='font-size:13px; color:#ADB5BD; margin-top: 10px;'>비가동 없음</div>"
 
                 card_html = f"""
                 <div style='background-color: white; border: 1px solid {rank_color}40; border-radius: 8px; margin-bottom: 15px; display: flex; flex-direction: row; box-shadow: 0 2px 4px rgba(0,0,0,0.02); overflow: hidden;'>
