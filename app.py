@@ -177,13 +177,9 @@ if data_to_process:
 
         df['OPEN ISSUE'] = df['OPEN ISSUE'].apply(format_issue)
 
-        # ---------------------------------------------------------
-        # 🌟 [핵심 보완] 데이터가 비어있을 때 명확한 안내 문구 출력 추가
-        # ---------------------------------------------------------
         def split_issue_to_columns(issue_text):
             lines = [line.strip() for line in str(issue_text).split('\n') if line.strip()]
             
-            # 🚨 엑셀 데이터가 진짜 비어있을 경우 (오해 방지용 디자인 박스)
             if not lines:
                 return "<div style='font-size:12px; color:#ADB5BD; margin-top:6px; background-color:#F8F9FA; padding:8px; border-radius:4px; border:1px dashed #E9ECEF;'>📝 기록된 특이사항(OPEN ISSUE) 없음</div>"
                 
@@ -234,7 +230,8 @@ if data_to_process:
         
         df['설비명'] = df['설비명'].fillna("").astype(str)
         
-        all_months_sidebar = sorted([m for m in df['생산월'].unique() if str(m).strip() != ""])
+        # 🚨 [핵심 수정] sorted() 제거! df가 이미 시간순이므로 순서를 그대로 추출합니다.
+        all_months_sidebar = [m for m in df['생산월'].unique() if str(m).strip() != ""]
         selected_months_sidebar = st.sidebar.multiselect("📅 생산월 선택", all_months_sidebar, default=[], placeholder="전체 월")
         
         if len(selected_months_sidebar) == 0: 
@@ -244,7 +241,8 @@ if data_to_process:
             month_filtered_df = df[df['생산월'].isin(selected_months_sidebar)].copy()
             daily_month_filtered = daily_df[daily_df['생산월'].isin(selected_months_sidebar)].copy()
 
-        all_dates = sorted([d for d in month_filtered_df['생산일'].unique() if str(d).strip() != ""])
+        # 🚨 [핵심 수정] 여기도 sorted() 제거! 원본 데이터의 시간 흐름을 그대로 유지합니다.
+        all_dates = [d for d in month_filtered_df['생산일'].unique() if str(d).strip() != ""]
         selected_dates = st.sidebar.multiselect("📆 생산일 선택", all_dates, default=[], placeholder="전체 생산일")
         
         if len(selected_dates) == 0: 
@@ -254,6 +252,7 @@ if data_to_process:
             date_filtered_df = month_filtered_df[month_filtered_df['생산일'].isin(selected_dates)].copy()
             daily_df_filtered = daily_month_filtered[daily_month_filtered['생산일'].isin(selected_dates)].copy()
 
+        # 설비명, 품명은 이름순으로 보는 것이 편하므로 sorted 유지
         all_machines = sorted([m for m in date_filtered_df['설비명'].unique() if m.strip() != ""])
         selected_machines = st.sidebar.multiselect("⚙️ 설비 선택", all_machines, default=[], placeholder="전체 설비")
         
