@@ -43,13 +43,25 @@ with col1:
 with col2:
     st.markdown("<h1 style='margin-top: 0px; color: #212529;' class='notranslate'>사출생산팀 일일 생산성 정밀 분석</h1>", unsafe_allow_html=True)
 
-# 에러 방지 함수
+# 🌟 [핵심 수정] CSV 포맷 클렌징 기능을 탑재한 안전한 숫자 변환 함수
 def safe_float(val):
     try:
-        if isinstance(val, pd.Series): return float(val.iloc[0])
-        if pd.isna(val) or val == '' or val is None: return 0.0
-        return float(val)
-    except: return 0.0
+        if isinstance(val, pd.Series): val = val.iloc[0]
+        if pd.isna(val) or val is None: return 0.0
+        
+        # 공백, 쉼표 등 불순물 제거
+        v_str = str(val).strip().replace(',', '').replace(' ', '')
+        
+        # 엑셀의 빈칸 처리 방식이나 에러 텍스트는 0으로 치환
+        if v_str in ['', '-', '#DIV/0!', '#N/A', 'nan', 'None']: return 0.0
+        
+        # 퍼센트(%) 기호가 있으면 지우고 100으로 나눠서 실수로 변환
+        if '%' in v_str:
+            return float(v_str.replace('%', '')) / 100.0
+            
+        return float(v_str)
+    except:
+        return 0.0
 
 target_cols = ['생산일', '설비명', '품명', '양품수량', '불량수량', '총 생산수량', '투입시간', '가동시간', '비가동시간', '정미시간', '양품율', '성능가동율', '시간가동율', '종합효율', '목표효율', 'OPEN ISSUE']
 target_order = ['생산일', '설비명', '품명', '종합효율', '양품율', '성능가동율', '시간가동율', '총 생산수량', '양품수량', '불량수량', 'OPEN ISSUE']
@@ -60,7 +72,7 @@ multi_cols = [
     ('OPEN ISSUE', 'OPEN ISSUE')
 ]
 
-# 3. 데이터 수집 로직 (🚨 CSV 한글 깨짐/에러 방지 엔진 장착)
+# 3. 데이터 수집 로직
 data_to_process = []
 DATA_DIR = "data"
 if os.path.exists(DATA_DIR):
@@ -70,12 +82,9 @@ if os.path.exists(DATA_DIR):
             file_path = os.path.join(DATA_DIR, file_name)
             try:
                 if file_name.endswith('.csv'): 
-                    try:
-                        df = pd.read_csv(file_path, encoding='utf-8')
-                    except UnicodeDecodeError:
-                        df = pd.read_csv(file_path, encoding='cp949') # 엑셀 기본 저장방식 대응
-                else: 
-                    df = pd.read_excel(file_path)
+                    try: df = pd.read_csv(file_path, encoding='utf-8')
+                    except UnicodeDecodeError: df = pd.read_csv(file_path, encoding='cp949')
+                else: df = pd.read_excel(file_path)
                 data_to_process.append((file_name, df))
             except Exception as e:
                 st.error(f"고정 데이터 읽기 오류 ({file_name}): {e}")
@@ -85,13 +94,11 @@ if uploaded_files:
     for file in uploaded_files:
         try:
             if file.name.endswith('.csv'): 
-                try:
-                    df = pd.read_csv(file, encoding='utf-8')
+                try: df = pd.read_csv(file, encoding='utf-8')
                 except UnicodeDecodeError:
-                    file.seek(0) # 파일을 처음부터 다시 읽도록 초기화
-                    df = pd.read_csv(file, encoding='cp949') # 엑셀 기본 저장방식 대응
-            else: 
-                df = pd.read_excel(file)
+                    file.seek(0)
+                    df = pd.read_csv(file, encoding='cp949')
+            else: df = pd.read_excel(file)
             data_to_process.append((file.name, df))
         except Exception as e:
             st.error(f"업로드 파일 읽기 오류 ({file.name}): {e}")
@@ -191,9 +198,11 @@ if data_to_process:
         daily_list = [{'sort_key': k, **v} for k, v in daily_totals_data.items()]
         daily_df = pd.DataFrame(daily_list).sort_values(by='sort_key').reset_index(drop=True)
         
+        # 🌟 [핵심 수정] CSV에서 넘어온 문자열(%, 콤마 등)을 모두 깔끔한 숫자로 변환합니다.
         num_cols = ['양품수량', '불량수량', '총 생산수량', '투입시간', '가동시간', '비가동시간', '정미시간', '종합효율', '목표효율', '양품율', '성능가동율', '시간가동율']
         for col in num_cols:
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            if col in df.columns:
+                df[col] = df[col].apply(safe_float)
 
         def format_issue(text):
             val = str(text).strip()
