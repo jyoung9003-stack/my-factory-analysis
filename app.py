@@ -230,7 +230,6 @@ if data_to_process:
         
         df['설비명'] = df['설비명'].fillna("").astype(str)
         
-        # 🚨 [핵심 수정] sorted() 제거! df가 이미 시간순이므로 순서를 그대로 추출합니다.
         all_months_sidebar = [m for m in df['생산월'].unique() if str(m).strip() != ""]
         selected_months_sidebar = st.sidebar.multiselect("📅 생산월 선택", all_months_sidebar, default=[], placeholder="전체 월")
         
@@ -241,7 +240,6 @@ if data_to_process:
             month_filtered_df = df[df['생산월'].isin(selected_months_sidebar)].copy()
             daily_month_filtered = daily_df[daily_df['생산월'].isin(selected_months_sidebar)].copy()
 
-        # 🚨 [핵심 수정] 여기도 sorted() 제거! 원본 데이터의 시간 흐름을 그대로 유지합니다.
         all_dates = [d for d in month_filtered_df['생산일'].unique() if str(d).strip() != ""]
         selected_dates = st.sidebar.multiselect("📆 생산일 선택", all_dates, default=[], placeholder="전체 생산일")
         
@@ -252,7 +250,6 @@ if data_to_process:
             date_filtered_df = month_filtered_df[month_filtered_df['생산일'].isin(selected_dates)].copy()
             daily_df_filtered = daily_month_filtered[daily_month_filtered['생산일'].isin(selected_dates)].copy()
 
-        # 설비명, 품명은 이름순으로 보는 것이 편하므로 sorted 유지
         all_machines = sorted([m for m in date_filtered_df['설비명'].unique() if m.strip() != ""])
         selected_machines = st.sidebar.multiselect("⚙️ 설비 선택", all_machines, default=[], placeholder="전체 설비")
         
@@ -316,6 +313,37 @@ if data_to_process:
                 plot_df = active_oee.groupby(['sort_key', '생산월', '생산일'])[['종합효율', '목표효율']].mean().reset_index().sort_values('sort_key')
                 y_val = '종합효율'
 
+            # 🌟 [핵심 신규 기능] 최근 5일 생산성 요약 대시보드
+            st.markdown("<h3 style='font-weight: 800; color: #212529; margin-top: 10px;'><span style='color: #FF4B4B;'>■</span> 최근 5일 생산성(종합효율) 요약</h3>", unsafe_allow_html=True)
+            if not plot_df.empty:
+                # 가장 최근의 5일치 데이터를 추출
+                recent_5_df = plot_df.sort_values('sort_key').tail(5)
+                r_cols = st.columns(5) # 5개의 빈 박스를 만듦
+                
+                for i, (_, r) in enumerate(recent_5_df.iterrows()):
+                    if i < 5:
+                        oee_val = safe_float(r[y_val])
+                        tgt_val = safe_float(r['목표효율'])
+                        
+                        # 목표 달성 여부에 따라 카드 색상 자동 변경
+                        color = "#1F77B4" if oee_val >= tgt_val else "#FF4B4B"
+                        bg_color = "#F8FBFF" if oee_val >= tgt_val else "#FFF5F5"
+                        
+                        with r_cols[i]:
+                            st.markdown(f"""
+                            <div style='background-color: {bg_color}; border: 1px solid {color}40; border-top: 4px solid {color}; border-radius: 8px; padding: 15px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 10px;'>
+                                <div style='font-size: 13px; color: #495057; font-weight: bold; margin-bottom: 8px;'>{r['생산일']}</div>
+                                <div style='font-size: 24px; font-weight: 900; color: {color};'>{oee_val:.1%}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+            else:
+                st.info("데이터가 없습니다.")
+            
+            # 요약 섹션과 본문 섹션 사이에 구분선 추가
+            st.markdown("<hr style='border:1px solid #DEE2E6; margin-top:15px; margin-bottom:35px;'>", unsafe_allow_html=True)
+
+
+            # 기존 렌더링 함수들
             def render_horizontal_card(row, rank, is_best, y_col='종합효율'):
                 rank_color = "#1F77B4" if is_best else "#FF4B4B"
                 bg_color = "#F8FBFF" if is_best else "#FFF5F5"
