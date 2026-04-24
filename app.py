@@ -60,7 +60,7 @@ multi_cols = [
     ('OPEN ISSUE', 'OPEN ISSUE')
 ]
 
-# 3. 데이터 수집 로직
+# 3. 데이터 수집 로직 (🚨 CSV 한글 깨짐/에러 방지 엔진 장착)
 data_to_process = []
 DATA_DIR = "data"
 if os.path.exists(DATA_DIR):
@@ -69,8 +69,13 @@ if os.path.exists(DATA_DIR):
         if file_name.endswith('.xlsx') or file_name.endswith('.csv'):
             file_path = os.path.join(DATA_DIR, file_name)
             try:
-                if file_name.endswith('.csv'): df = pd.read_csv(file_path)
-                else: df = pd.read_excel(file_path)
+                if file_name.endswith('.csv'): 
+                    try:
+                        df = pd.read_csv(file_path, encoding='utf-8')
+                    except UnicodeDecodeError:
+                        df = pd.read_csv(file_path, encoding='cp949') # 엑셀 기본 저장방식 대응
+                else: 
+                    df = pd.read_excel(file_path)
                 data_to_process.append((file_name, df))
             except Exception as e:
                 st.error(f"고정 데이터 읽기 오류 ({file_name}): {e}")
@@ -79,8 +84,14 @@ uploaded_files = st.file_uploader("📂 새로운 일일 생산성 파일이 있
 if uploaded_files:
     for file in uploaded_files:
         try:
-            if file.name.endswith('.csv'): df = pd.read_csv(file)
-            else: df = pd.read_excel(file)
+            if file.name.endswith('.csv'): 
+                try:
+                    df = pd.read_csv(file, encoding='utf-8')
+                except UnicodeDecodeError:
+                    file.seek(0) # 파일을 처음부터 다시 읽도록 초기화
+                    df = pd.read_csv(file, encoding='cp949') # 엑셀 기본 저장방식 대응
+            else: 
+                df = pd.read_excel(file)
             data_to_process.append((file.name, df))
         except Exception as e:
             st.error(f"업로드 파일 읽기 오류 ({file.name}): {e}")
@@ -292,9 +303,6 @@ if data_to_process:
                 wrapped_html = re.sub(r'<th class="col_heading level1 col10".*?>OPEN ISSUE</th>', '', wrapped_html)
             st.markdown(wrapped_html, unsafe_allow_html=True)
 
-        # ---------------------------------------------------------
-        # 🚨 7개 탭 구성 (AI 챗봇 탭 추가)
-        # ---------------------------------------------------------
         tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
             "📈 종합 효율 추이 분석", 
             "📝 OPEN ISSUE 현황", 
@@ -302,7 +310,7 @@ if data_to_process:
             "🏆 종합효율 BEST & WORST",
             "🛑 비가동시간 BEST & WORST",
             "📉 효율 급변 구간 정밀 추적",
-            "🤖 AI 데이터 챗봇 (Beta)"  # 신규 추가된 챗봇 탭
+            "🤖 AI 데이터 챗봇 (Beta)" 
         ])
 
         # =========================================================
@@ -735,55 +743,41 @@ if data_to_process:
             else: st.info("해당 월에 비교할 가동 데이터가 부족합니다.")
 
         # =========================================================
-        # 🚨 [신규 추가] TAB 7: AI 데이터 챗봇 (Beta)
+        # TAB 7: AI 데이터 챗봇 (Beta)
         # =========================================================
         with tab7:
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #1F77B4;'>■</span> 🤖 AI 생산 데이터 챗봇 (Beta)</h3>", unsafe_allow_html=True)
             st.markdown("사이드바에서 **선택한 조건(생산월, 생산일, 설비 등)의 데이터**를 바탕으로 챗봇이 답변합니다. 무엇이든 물어보세요!")
             
-            # API 키 입력창 (보안을 위해 password 타입으로 설정)
             api_key = st.text_input("🔑 OpenAI API Key를 입력하세요 (현재는 테스트 모드입니다)", type="password")
             
-            # 채팅 기록을 세션에 저장 (초기 인사말 설정)
             if "messages" not in st.session_state:
                 st.session_state.messages = [{"role": "assistant", "content": "안녕하세요! 사출생산팀 AI 어시스턴트입니다. 왼쪽 필터가 적용된 현재 데이터를 바탕으로 분석해 드립니다. 무엇이 궁금하신가요?"}]
                 
-            # 기존 채팅 기록 출력
             for msg in st.session_state.messages:
                 st.chat_message(msg["role"]).write(msg["content"])
                 
-            # 사용자 입력창
             if prompt := st.chat_input("질문을 입력하세요... (예: 종합효율이 80% 이하인 설비 알려줘)"):
-                # 사용자가 입력한 메시지 저장 및 출력
                 st.session_state.messages.append({"role": "user", "content": prompt})
                 st.chat_message("user").write(prompt)
                 
-                # API 키가 없을 경우 안내 메시지 출력 (테스트 모드)
                 if not api_key:
-                    dummy_response = f"💡 **[체험 모드]** API 키가 연결되지 않았습니다.\n\n나중에 API 키를 연결하시면, 시스템이 스스로 엑셀 데이터를 분석하여 **'{prompt}'**에 대한 정확한 답변을 아래와 같이 찾아줄 것입니다.\n\n> *예시 답변: 질문하신 기간 내 종합효율 80% 이하 설비는 총 2대(50호기, 21호기)이며, 주요 비가동 사유는 로보트 알람 및 히터 단선입니다.*"
+                    dummy_response = f"💡 **[체험 모드]** API 키가 연결되지 않았습니다.\n\n나중에 API 키를 연결하시면, 시스템이 스스로 데이터를 분석하여 **'{prompt}'**에 대한 정확한 답변을 찾아줄 것입니다.\n\n> *예시 답변: 질문하신 기간 내 종합효율 80% 이하 설비는 총 2대(50호기, 21호기)이며, 주요 비가동 사유는 로보트 알람 및 히터 단선입니다.*"
                     st.session_state.messages.append({"role": "assistant", "content": dummy_response})
                     st.chat_message("assistant").write(dummy_response)
-                
-                # API 키가 있을 경우 실제 데이터 분석 (추후 라이브러리 설치 필요)
                 else:
                     try:
-                        # ⚠️ 주의: 실제 작동을 위해서는 requirements.txt에 pandasai, openai 추가 필요
                         from pandasai import SmartDataframe
                         from pandasai.llm.openai import OpenAI
-                        
                         llm = OpenAI(api_token=api_key)
-                        # 현재 필터링된 데이터(f_df)를 챗봇에 전달
                         sdf = SmartDataframe(f_df, config={"llm": llm})
-                        
-                        # 챗봇이 데이터 기반으로 답변 생성
                         response = sdf.chat(prompt)
                         st.session_state.messages.append({"role": "assistant", "content": str(response)})
                         st.chat_message("assistant").write(str(response))
-                        
                     except Exception as e:
                         err_msg = f"❌ 분석 중 오류가 발생했습니다. (API 키 오류 또는 'pandasai' 라이브러리 설치가 필요합니다)\n\n상세 오류: {e}"
                         st.session_state.messages.append({"role": "assistant", "content": err_msg})
                         st.chat_message("assistant").write(err_msg)
 
 else:
-    st.info("데이터 파일이 없습니다. GitHub의 'data' 폴더에 엑셀 파일을 넣거나, 아래 버튼을 통해 직접 파일을 업로드해주세요.")
+    st.info("데이터 파일이 없습니다. GitHub의 'data' 폴더에 엑셀/CSV 파일을 넣거나 직접 파일을 업로드해주세요.")
