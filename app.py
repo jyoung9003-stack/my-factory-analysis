@@ -191,13 +191,28 @@ if data_to_process:
         sel_prod = st.sidebar.selectbox("📦 품목 선택", ["전체 품목"] + actual_prods)
         f_df = pool_df[pool_df['품명'].str.strip() == sel_prod].copy() if sel_prod != "전체 품목" else pool_df.copy()
 
+        # 🚨 [에러 완벽 수정] f-string 문법 에러가 발생하지 않도록 치환 로직을 분리했습니다.
         def render_styler_to_html(styler, is_multi=False):
             try: html_str = styler.to_html(escape=False)
             except: html_str = styler.to_html()
-            wrapped_html = f"<div style='width: 100%; max-height: 500px; overflow: auto; border: 1px solid #DEE2E6; border-radius: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 30px;'><style>.custom-table {{ width: 100%; border-collapse: collapse; font-size: 13px; color: #333; background-color: white; }}.custom-table th {{ background-color: #F8F9FA; border: 1px solid #DEE2E6; padding: 10px; text-align: center !important; font-weight: bold; position: sticky; top: 0; z-index: 2; }}.custom-table thead tr:nth-child(2) th {{ top: 38px; }}.custom-table td {{ border: 1px solid #DEE2E6; padding: 8px 10px; text-align: center !important; }}.custom-table td:last-child {{ text-align: left !important; min-width: 450px; line-height: 1.5; }}</style>{html_str.replace('<table', '<table class=\"custom-table notranslate\"')}</div>"
+            
+            # 파이썬 구버전 호환을 위해 f-string 밖에서 replace 실행
+            html_str = html_str.replace('<table', '<table class="custom-table notranslate"')
+            
+            wrapped_html = f"""<div style="width: 100%; max-height: 500px; overflow: auto; border: 1px solid #DEE2E6; border-radius: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 30px;">
+<style>
+.custom-table {{ width: 100%; border-collapse: collapse; font-size: 13px; color: #333; background-color: white; }}
+.custom-table th {{ background-color: #F8F9FA; border: 1px solid #DEE2E6; padding: 10px; text-align: center !important; vertical-align: middle !important; font-weight: bold; position: sticky; top: 0; z-index: 2; }}
+.custom-table thead tr:nth-child(2) th {{ top: 38px; }}
+.custom-table td {{ border: 1px solid #DEE2E6; padding: 8px 10px; text-align: center !important; vertical-align: middle !important; }}
+.custom-table tbody tr:hover {{ background-color: #F1F3F5; }}
+.custom-table td:last-child {{ text-align: left !important; white-space: pre-wrap !important; min-width: 450px; line-height: 1.5; }}
+</style>
+{html_str}
+</div>"""
             if is_multi:
-                wrapped_html = re.sub(r'<th class=\"col_heading level0 col10\".*?>OPEN ISSUE</th>', r'<th class=\"col_heading level0 col10\" rowspan=\"2\" style=\"vertical-align: middle;\">OPEN ISSUE</th>', wrapped_html)
-                wrapped_html = re.sub(r'<th class=\"col_heading level1 col10\".*?>OPEN ISSUE</th>', '', wrapped_html)
+                wrapped_html = re.sub(r'<th class="col_heading level0 col10".*?>OPEN ISSUE</th>', r'<th class="col_heading level0 col10" rowspan="2" style="vertical-align: middle;">OPEN ISSUE</th>', wrapped_html)
+                wrapped_html = re.sub(r'<th class="col_heading level1 col10".*?>OPEN ISSUE</th>', '', wrapped_html)
             st.markdown(wrapped_html, unsafe_allow_html=True)
 
         tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["📈 종합 효율 추이", "📝 OPEN ISSUE", "📅 일별 상세 현황", "🏆 효율 BEST&WORST", "🛑 비가동 BEST&WORST", "📉 효율 급변 추적", "🤖 AI 챗봇"])
@@ -235,7 +250,6 @@ if data_to_process:
             mons2 = list(dict.fromkeys(f_df['생산월'].tolist()))
             sel_m2 = st.multiselect("📅 월 선택", mons2, default=[mons2[-1]] if mons2 else [], key='t2_m')
             t2_df = f_df[f_df['생산월'].isin(sel_m2)].copy()
-            # 🚨 [수정 1] 이슈 문구 키워드 분석 섹션 삭제됨
             all_d2 = list(reversed([d for d in t2_df['생산일'].unique() if str(d).strip() != ""]))
             if all_d2:
                 sd2 = st.selectbox("조회할 생산일 선택", all_d2, key='tab2_date')
@@ -256,10 +270,8 @@ if data_to_process:
             all_d3 = list(reversed([d for d in t3_df['생산일'].unique() if str(d).strip() != ""]))
             if all_d3:
                 sd3 = st.selectbox("📅 생산일 선택", all_d3, key='tab3_date')
-                # 🚨 [수정 4] 설비별로 정렬(04호기, 06호기...)
                 day_df = t3_df[t3_df['생산일'] == sd3].copy().sort_values(by='설비명').reset_index(drop=True)
                 
-                # 🚨 [수정 2] 차트 축 이름 중복 제거 "총 비가동시간(시간)" -> "총 비가동시간"
                 fig4 = px.bar(day_df[day_df['비가동시간']>0], x='설비명', y='비가동시간', text_auto='.1f', title=f"🛑 {sd3} 설비별 비가동 현황")
                 fig4.update_yaxes(title="총 비가동시간") 
                 st.plotly_chart(fig4, use_container_width=True)
@@ -291,7 +303,6 @@ if data_to_process:
             sel_m5 = st.multiselect("📅 월 선택", mons5, default=[mons5[-1]] if mons5 else [], key='t5_m')
             t5_df = f_df[f_df['생산월'].isin(sel_m5)].copy()
             if not t5_df.empty:
-                # 🚨 [수정 3] "최소 비가동 BEST 5" -> "BEST 5" 문구 수정
                 for label, asc in [("🏆 BEST 5 (비가동 최소)", True), ("🚨 WORST 5 (비가동 최대)", False)]:
                     st.markdown(f"<h4>{label}</h4>", unsafe_allow_html=True)
                     res = t5_df.sort_values(by='비가동시간', ascending=asc).head(5)
@@ -300,7 +311,7 @@ if data_to_process:
                     res_disp['OPEN ISSUE'] = res_disp['OPEN ISSUE'].apply(split_issue_to_columns)
                     render_styler_to_html(res_disp.style.hide(axis="index"))
 
-        # TAB 6 & 7 (기존과 동일)
+        # TAB 6 & 7
         with tab6: st.write("공사 중...")
         with tab7:
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #1F77B4;'>■</span> 🤖 AI 생산 데이터 챗봇</h3>", unsafe_allow_html=True)
