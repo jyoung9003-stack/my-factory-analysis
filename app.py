@@ -292,13 +292,17 @@ if data_to_process:
                 wrapped_html = re.sub(r'<th class="col_heading level1 col10".*?>OPEN ISSUE</th>', '', wrapped_html)
             st.markdown(wrapped_html, unsafe_allow_html=True)
 
-        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        # ---------------------------------------------------------
+        # 🚨 7개 탭 구성 (AI 챗봇 탭 추가)
+        # ---------------------------------------------------------
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
             "📈 종합 효율 추이 분석", 
             "📝 OPEN ISSUE 현황", 
             "📅 일별 생산성 상세 현황", 
             "🏆 종합효율 BEST & WORST",
             "🛑 비가동시간 BEST & WORST",
-            "📉 효율 급변 구간 정밀 추적"
+            "📉 효율 급변 구간 정밀 추적",
+            "🤖 AI 데이터 챗봇 (Beta)"  # 신규 추가된 챗봇 탭
         ])
 
         # =========================================================
@@ -316,7 +320,6 @@ if data_to_process:
                 plot_df = active_oee.groupby(['sort_key', '생산월', '생산일'])[['종합효율', '목표효율', '성능가동율', '시간가동율', '양품율']].mean().reset_index().sort_values('sort_key')
                 y_val = '종합효율'; p_val = '성능가동율'; a_val = '시간가동율'; q_val = '양품율'
 
-            # 🌟 [최근 5일 요약 대시보드]
             st.markdown("<h3 style='font-weight: 900; color: #212529; margin-top: 10px;'><span style='color: #FF4B4B;'>■</span> 최근 5일 생산성 요약</h3>", unsafe_allow_html=True)
             if not plot_df.empty:
                 recent_5_df = plot_df.sort_values('sort_key').tail(5)
@@ -435,8 +438,6 @@ if data_to_process:
         # =========================================================
         with tab2:
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> OPEN ISSUE 현황 및 정밀 분석</h3>", unsafe_allow_html=True)
-            
-            # 🌟 [탭 2] 월별 필터 장착
             months_t2 = list(dict.fromkeys(f_df['생산월'].tolist())) if not f_df.empty else []
             sel_m_t2 = st.multiselect("📅 조회할 월(Month)을 선택하세요 (기본값: 최근 월)", options=months_t2, default=[months_t2[-1]] if months_t2 else [], key='t2_m')
             tab2_df = f_df[f_df['생산월'].isin(sel_m_t2)].copy() if sel_m_t2 else f_df.copy()
@@ -510,8 +511,6 @@ if data_to_process:
         # =========================================================
         with tab3:
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 일일 생산성 상세 현황</h3>", unsafe_allow_html=True)
-            
-            # 🌟 [탭 3] 월별 필터 장착
             months_t3 = list(dict.fromkeys(f_df['생산월'].tolist())) if not f_df.empty else []
             sel_m_t3 = st.multiselect("📅 조회할 월(Month)을 선택하세요 (기본값: 최근 월)", options=months_t3, default=[months_t3[-1]] if months_t3 else [], key='t3_m')
             tab3_df = f_df[f_df['생산월'].isin(sel_m_t3)].copy() if sel_m_t3 else f_df.copy()
@@ -599,8 +598,6 @@ if data_to_process:
         # =========================================================
         with tab4:
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 종합효율 BEST 5 & WORST 5 요인 분석</h3>", unsafe_allow_html=True)
-            
-            # 🌟 [탭 4] 월별 필터 장착
             months_t4 = list(dict.fromkeys(f_df['생산월'].tolist())) if not f_df.empty else []
             sel_m_t4 = st.multiselect("📅 조회할 월(Month)을 선택하세요 (기본값: 최근 월)", options=months_t4, default=[months_t4[-1]] if months_t4 else [], key='t4_m')
             tab4_df = f_df[f_df['생산월'].isin(sel_m_t4)].copy() if sel_m_t4 else f_df.copy()
@@ -647,15 +644,12 @@ if data_to_process:
         # =========================================================
         with tab5:
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 비가동시간 요인 정밀 분석</h3>", unsafe_allow_html=True)
-            
-            # 🌟 [탭 5] 월별 필터 장착
             months_t5 = list(dict.fromkeys(f_df['생산월'].tolist())) if not f_df.empty else []
             sel_m_t5 = st.multiselect("📅 조회할 월(Month)을 선택하세요 (기본값: 최근 월)", options=months_t5, default=[months_t5[-1]] if months_t5 else [], key='t5_m')
             tab5_df = f_df[f_df['생산월'].isin(sel_m_t5)].copy() if sel_m_t5 else f_df.copy()
             
             valid_dt_df = tab5_df.copy()
             if not valid_dt_df.empty:
-                
                 st.markdown("<h4 style='color: #20C997; margin-top: 20px; font-weight: 800;'>🏆 최소 비가동 BEST 5</h4>", unsafe_allow_html=True)
                 best5_dt = valid_dt_df.sort_values(by=['비가동시간', '종합효율'], ascending=[True, False]).head(5)
                 best5_dt_display = best5_dt[['생산일', '설비명', '품명', '비가동시간', 'OPEN ISSUE']].reset_index(drop=True)
@@ -696,9 +690,6 @@ if data_to_process:
         # =========================================================
         with tab6:
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 개별 설비 및 품목 기준 효율 급변(급증/급감) 정밀 추적</h3>", unsafe_allow_html=True)
-            st.markdown("수많은 장비 중, **이전 생산일 대비 효율이 가장 폭락했거나 폭등한 개별 설비/품목 TOP 5**를 찾아 원인을 파헤칩니다.")
-            
-            # 🌟 [탭 6] 월별 필터 장착
             months_t6 = list(dict.fromkeys(f_df['생산월'].tolist())) if not f_df.empty else []
             sel_m_t6 = st.multiselect("📅 조회할 월(Month)을 선택하세요 (기본값: 최근 월)", options=months_t6, default=[months_t6[-1]] if months_t6 else [], key='t6_m')
             tab6_df = f_df[f_df['생산월'].isin(sel_m_t6)].copy() if sel_m_t6 else f_df.copy()
@@ -735,15 +726,64 @@ if data_to_process:
                         return disp.style.apply(lambda _: style_df, axis=None).hide(axis="index")
 
                     st.markdown("<h4 style='color: #FF4B4B; margin-top: 20px; font-weight: 800;'>📉 효율 급락 (최악의 하락폭 TOP 5)</h4>", unsafe_allow_html=True)
-                    st.markdown("이전 생산 대비 효율이 가장 크게 떨어져 **공장 전체 평균을 깎아 먹은 주요 원인 제공자**들입니다.")
                     render_styler_to_html(get_diff_styler(machine_drops, is_drop=True), is_multi=False)
                     
                     st.markdown("<h4 style='color: #1F77B4; margin-top: 20px; font-weight: 800;'>📈 효율 급등 (최고의 상승폭 TOP 5)</h4>", unsafe_allow_html=True)
-                    st.markdown("어떤 이슈나 조치 덕분에 이전보다 효율이 극적으로 상승하여 **실적을 하드캐리한 1등 공신**들입니다.")
                     render_styler_to_html(get_diff_styler(machine_surges, is_drop=False), is_multi=False)
                     
                 else: st.info("동일한 설비/품목이 2일 이상 연속으로 생산된 데이터가 없어 변동폭을 계산할 수 없습니다.")
             else: st.info("해당 월에 비교할 가동 데이터가 부족합니다.")
+
+        # =========================================================
+        # 🚨 [신규 추가] TAB 7: AI 데이터 챗봇 (Beta)
+        # =========================================================
+        with tab7:
+            st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #1F77B4;'>■</span> 🤖 AI 생산 데이터 챗봇 (Beta)</h3>", unsafe_allow_html=True)
+            st.markdown("사이드바에서 **선택한 조건(생산월, 생산일, 설비 등)의 데이터**를 바탕으로 챗봇이 답변합니다. 무엇이든 물어보세요!")
+            
+            # API 키 입력창 (보안을 위해 password 타입으로 설정)
+            api_key = st.text_input("🔑 OpenAI API Key를 입력하세요 (현재는 테스트 모드입니다)", type="password")
+            
+            # 채팅 기록을 세션에 저장 (초기 인사말 설정)
+            if "messages" not in st.session_state:
+                st.session_state.messages = [{"role": "assistant", "content": "안녕하세요! 사출생산팀 AI 어시스턴트입니다. 왼쪽 필터가 적용된 현재 데이터를 바탕으로 분석해 드립니다. 무엇이 궁금하신가요?"}]
+                
+            # 기존 채팅 기록 출력
+            for msg in st.session_state.messages:
+                st.chat_message(msg["role"]).write(msg["content"])
+                
+            # 사용자 입력창
+            if prompt := st.chat_input("질문을 입력하세요... (예: 종합효율이 80% 이하인 설비 알려줘)"):
+                # 사용자가 입력한 메시지 저장 및 출력
+                st.session_state.messages.append({"role": "user", "content": prompt})
+                st.chat_message("user").write(prompt)
+                
+                # API 키가 없을 경우 안내 메시지 출력 (테스트 모드)
+                if not api_key:
+                    dummy_response = f"💡 **[체험 모드]** API 키가 연결되지 않았습니다.\n\n나중에 API 키를 연결하시면, 시스템이 스스로 엑셀 데이터를 분석하여 **'{prompt}'**에 대한 정확한 답변을 아래와 같이 찾아줄 것입니다.\n\n> *예시 답변: 질문하신 기간 내 종합효율 80% 이하 설비는 총 2대(50호기, 21호기)이며, 주요 비가동 사유는 로보트 알람 및 히터 단선입니다.*"
+                    st.session_state.messages.append({"role": "assistant", "content": dummy_response})
+                    st.chat_message("assistant").write(dummy_response)
+                
+                # API 키가 있을 경우 실제 데이터 분석 (추후 라이브러리 설치 필요)
+                else:
+                    try:
+                        # ⚠️ 주의: 실제 작동을 위해서는 requirements.txt에 pandasai, openai 추가 필요
+                        from pandasai import SmartDataframe
+                        from pandasai.llm.openai import OpenAI
+                        
+                        llm = OpenAI(api_token=api_key)
+                        # 현재 필터링된 데이터(f_df)를 챗봇에 전달
+                        sdf = SmartDataframe(f_df, config={"llm": llm})
+                        
+                        # 챗봇이 데이터 기반으로 답변 생성
+                        response = sdf.chat(prompt)
+                        st.session_state.messages.append({"role": "assistant", "content": str(response)})
+                        st.chat_message("assistant").write(str(response))
+                        
+                    except Exception as e:
+                        err_msg = f"❌ 분석 중 오류가 발생했습니다. (API 키 오류 또는 'pandasai' 라이브러리 설치가 필요합니다)\n\n상세 오류: {e}"
+                        st.session_state.messages.append({"role": "assistant", "content": err_msg})
+                        st.chat_message("assistant").write(err_msg)
 
 else:
     st.info("데이터 파일이 없습니다. GitHub의 'data' 폴더에 엑셀 파일을 넣거나, 아래 버튼을 통해 직접 파일을 업로드해주세요.")
