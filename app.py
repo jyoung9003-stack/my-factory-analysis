@@ -203,7 +203,7 @@ if data_to_process:
                 wrapped_html = re.sub(r'<th class=\"col_heading level1 col10\".*?>OPEN ISSUE</th>', '', wrapped_html)
             st.markdown(wrapped_html, unsafe_allow_html=True)
 
-        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📈 종합 효율 추이", "📝 OPEN ISSUE", "📅 일별 상세 현황", "🏆 효율 BEST&WORST", "🛑 비가동 BEST&WORST", "🤖 AI 챗봇"])
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📈 종합 효율 추이", "📝 OPEN ISSUE", "📅 일별 상세 현황", "🏆 효율 BEST&WORST", "🛑 비가동 정밀 분석", "🤖 AI 챗봇"])
 
         # TAB 1
         with tab1:
@@ -273,8 +273,6 @@ if data_to_process:
             all_d2 = list(reversed([d for d in t2_df['생산일'].unique() if str(d).strip() != ""]))
             if all_d2:
                 sd2 = st.selectbox("조회할 생산일 선택", all_d2, key='tab2_date')
-                
-                # 🚨 [수정 3] 이슈가 없어도 모든 설비를 가져오도록 조건 변경
                 issue_df = t2_df[t2_df['생산일'] == sd2].copy()
                 
                 if not issue_df.empty:
@@ -291,6 +289,15 @@ if data_to_process:
                     render_styler_to_html(issue_disp.style.hide(axis="index"))
                 else: st.info("데이터가 없습니다.")
 
+        # 🌟 [수정 1] 탭 3의 차트 X축 가독성 개선을 위한 함수 (설비명 단축 + 품명 추가)
+        def make_x_label(r):
+            s_name = str(r['설비명']).split(' - ')[0].strip()
+            p_name = str(r['품명']).strip()
+            if p_name in ['', 'nan', 'NaN', 'None', '#N/A', '0', '0.0']: return s_name
+            # 품명이 너무 길면 차트가 엉키므로 13글자 정도로 제한
+            if len(p_name) > 13: p_name = p_name[:13] + ".."
+            return f"{s_name}<br><span style='font-size:11px; color:#6C757D;'>{p_name}</span>"
+
         # TAB 3
         with tab3:
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 일일 생산성 상세 현황</h3>", unsafe_allow_html=True)
@@ -302,12 +309,14 @@ if data_to_process:
                 sd3 = st.selectbox("📅 생산일 선택", all_d3, key='tab3_date')
                 day_df = t3_df[t3_df['생산일'] == sd3].copy().sort_values(by='설비명').reset_index(drop=True)
                 
+                # 차트용 X축 라벨(설비_품명) 생성 적용
+                day_df['설비_품명'] = day_df.apply(make_x_label, axis=1)
+                
                 active_day = day_df[day_df['종합효율'] > 0].sort_values(by='종합효율', ascending=False)
                 
                 active_count = active_day['설비명'].nunique()
                 total_count = day_df['설비명'].nunique()
                 
-                # 🌟 [수정 1] 전광판 안에 BEST 5 / WORST 5 텍스트 추가
                 best_str = ", ".join([f"<b>{str(r['설비명']).split(' - ')[0]}</b>({safe_float(r['종합효율']):.1%})" for _, r in active_day.head(5).iterrows()])
                 worst_str = ", ".join([f"<b>{str(r['설비명']).split(' - ')[0]}</b>({safe_float(r['종합효율']):.1%})" for _, r in active_day.tail(5).sort_values(by='종합효율', ascending=True).iterrows()])
                 
@@ -324,20 +333,27 @@ if data_to_process:
                 
                 st.markdown(f"#### 📊 {sd3} 설비별 종합효율 비교")
                 
-                # 🌟 [수정 2] 86% 목표선 제거 & 개별 목표효율 기준 컬러링 복구
                 if not active_day.empty:
                     bar_colors = ['#1F77B4' if safe_float(row['종합효율']) >= safe_float(row['목표효율']) else '#FF4B4B' for _, row in active_day.iterrows()]
-                    fig3 = px.bar(active_day, x='설비명', y='종합효율', text_auto='.1%')
+                    
+                    # 🌟 [수정 1] X축을 짧아진 '설비_품명'으로 변경
+                    fig3 = px.bar(active_day, x='설비_품명', y='종합효율', text_auto='.1%')
                     fig3.update_traces(marker_color=bar_colors, textposition="outside", textfont=dict(size=12, weight="bold"))
-                    fig3.update_xaxes(title="", tickangle=45)
+                    fig3.add_hline(y=0.86, line_dash="dash", line_color="#FF4B4B", annotation_text="목표 86%")
+                    fig3.update_xaxes(title="") # 각도 조절 생략하여 브라우저가 알아서 띄어쓰기 최적화 하도록 함
                     fig3.update_yaxes(title="종합효율", tickformat='.0%', range=[0, 1.2], showgrid=True, gridcolor='rgba(230,230,230,0.5)')
-                    fig3.update_layout(height=400, margin=dict(l=40, r=40, t=40, b=80), plot_bgcolor='white', paper_bgcolor='white')
+                    fig3.update_layout(height=450, margin=dict(l=40, r=40, t=40, b=80), plot_bgcolor='white', paper_bgcolor='white')
                     st.plotly_chart(fig3, use_container_width=True)
                 else: st.info("해당 일자에 가동된 설비가 없습니다.")
                 
                 st.write("---")
-                fig4 = px.bar(day_df[day_df['비가동시간']>0], x='설비명', y='비가동시간', text_auto='.1f', title=f"🛑 {sd3} 설비별 비가동 현황")
+                downtime_day = day_df[day_df['비가동시간']>0].sort_values(by='비가동시간', ascending=False)
+                
+                # 🌟 [수정 1] 비가동 차트의 X축도 짧아진 '설비_품명'으로 변경
+                fig4 = px.bar(downtime_day, x='설비_품명', y='비가동시간', text_auto='.1f', title=f"🛑 {sd3} 설비별 비가동 현황")
+                fig4.update_xaxes(title="") 
                 fig4.update_yaxes(title="총 비가동시간") 
+                fig4.update_layout(height=450, margin=dict(l=40, r=40, t=40, b=80))
                 st.plotly_chart(fig4, use_container_width=True)
 
                 disp_day = day_df[target_order].copy()
@@ -392,24 +408,26 @@ if data_to_process:
 
         # TAB 5
         with tab5:
-            st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 비가동시간 BEST & WORST</h3>", unsafe_allow_html=True)
+            st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 비가동시간 요인 정밀 분석</h3>", unsafe_allow_html=True)
             mons5 = list(dict.fromkeys(f_df['생산월'].tolist()))
             sel_m5 = st.multiselect("📅 월 선택", mons5, default=[mons5[-1]] if mons5 else [], key='t5_m')
             t5_df = f_df[f_df['생산월'].isin(sel_m5)].copy()
+            
             if not t5_df.empty:
-                for label, asc in [("🏆 BEST 5", True), ("🚨 WORST 5", False)]:
-                    st.markdown(f"<h4>{label}</h4>", unsafe_allow_html=True)
-                    res = t5_df.sort_values(by='비가동시간', ascending=asc).head(5)
-                    res_disp = res[['생산일', '설비명', '품명', '비가동시간', 'OPEN ISSUE']].copy()
-                    
-                    for idx, row in res_disp.iterrows():
-                        prod = str(row['품명']).strip()
-                        if prod in ['', 'nan', 'NaN', 'None', '#N/A', '0', '0.0']:
-                            res_disp.at[idx, '품명'] = ""
-                    
-                    res_disp['비가동시간'] = res_disp['비가동시간'].apply(lambda x: f"{safe_float(x):.1f}h")
-                    res_disp['OPEN ISSUE'] = res_disp['OPEN ISSUE'].apply(split_issue_to_columns)
-                    render_styler_to_html(res_disp.style.hide(axis="index"))
+                # 🌟 [수정 2] BEST 루프 지우고 WORST 10만 직관적으로 표출
+                st.markdown("<h4>🚨 WORST 10 (비가동 최대)</h4>", unsafe_allow_html=True)
+                res = t5_df.sort_values(by='비가동시간', ascending=False).head(10)
+                res_disp = res[['생산일', '설비명', '품명', '비가동시간', 'OPEN ISSUE']].copy()
+                
+                for idx, row in res_disp.iterrows():
+                    prod = str(row['품명']).strip()
+                    if prod in ['', 'nan', 'NaN', 'None', '#N/A', '0', '0.0']:
+                        res_disp.at[idx, '품명'] = ""
+                
+                res_disp['비가동시간'] = res_disp['비가동시간'].apply(lambda x: f"{safe_float(x):.1f}h")
+                res_disp['OPEN ISSUE'] = res_disp['OPEN ISSUE'].apply(split_issue_to_columns)
+                render_styler_to_html(res_disp.style.hide(axis="index"))
+            else: st.info("해당 월에 분석할 비가동 데이터가 없습니다.")
 
         # TAB 6
         with tab6:
