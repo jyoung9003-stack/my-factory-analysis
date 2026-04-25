@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots  # 🚨 콤보 차트를 위한 모듈 추가
 import re
 import os
 import numpy as np
@@ -136,8 +137,6 @@ if data_to_process:
 
         for _, row in temp_df.iterrows():
             m_val = str(row.get('설비명', '')).strip()
-            
-            # 🚨 [수정 4] 엑셀/CSV에서 넘어온 쓸데없는 헤더 찌꺼기 행(Unnamed, 빈칸 등) 완벽 제거
             if m_val in ['', 'nan', 'NaN', 'None', '#N/A'] or 'Unnamed' in m_val or m_val == '설비명': continue
             if 'TOTAL' in m_val.upper() or '합계' in m_val or 'GRAND' in m_val.upper(): continue
             
@@ -197,49 +196,78 @@ if data_to_process:
         def render_styler_to_html(styler, is_multi=False):
             try: html_str = styler.to_html(escape=False)
             except: html_str = styler.to_html()
-            
             html_str = html_str.replace('<table', '<table class="custom-table notranslate"')
-            
             wrapped_html = f"<div style='width: 100%; max-height: 500px; overflow: auto; border: 1px solid #DEE2E6; border-radius: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 30px;'><style>.custom-table {{ width: 100%; border-collapse: collapse; font-size: 13px; color: #333; background-color: white; }}.custom-table th {{ background-color: #F8F9FA; border: 1px solid #DEE2E6; padding: 10px; text-align: center !important; font-weight: bold; position: sticky; top: 0; z-index: 2; }}.custom-table thead tr:nth-child(2) th {{ top: 38px; }}.custom-table td {{ border: 1px solid #DEE2E6; padding: 8px 10px; text-align: center !important; }}.custom-table td:last-child {{ text-align: left !important; min-width: 450px; line-height: 1.5; }}</style>{html_str}</div>"
             if is_multi:
                 wrapped_html = re.sub(r'<th class=\"col_heading level0 col10\".*?>OPEN ISSUE</th>', r'<th class=\"col_heading level0 col10\" rowspan=\"2\" style=\"vertical-align: middle;\">OPEN ISSUE</th>', wrapped_html)
                 wrapped_html = re.sub(r'<th class=\"col_heading level1 col10\".*?>OPEN ISSUE</th>', '', wrapped_html)
             st.markdown(wrapped_html, unsafe_allow_html=True)
 
-        # 🚨 [수정 5] "효율 급변 구간 정밀 추적" 탭 완전히 삭제 (총 6개 탭으로 구성)
         tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📈 종합 효율 추이", "📝 OPEN ISSUE", "📅 일별 상세 현황", "🏆 효율 BEST&WORST", "🛑 비가동 BEST&WORST", "🤖 AI 챗봇"])
 
         # TAB 1
         with tab1:
             is_fac = (not sel_mach_side and sel_prod == "전체 품목")
-            if is_fac: p_df = daily_df.copy(); p_df['목표효율'] = 0.86; y_v, pv, av, qv = '공장종합효율', '공장성능가동율', '공장시간가동율', '공장양품율'
-            else: act_oee = f_df[f_df['종합효율'] > 0]; p_df = act_oee.groupby(['sort_key', '생산월', '생산일'])[['종합효율', '목표효율', '성능가동율', '시간가동율', '양품율']].mean().reset_index().sort_values('sort_key'); y_v, pv, av, qv = '종합효율', '성능가동율', '시간가동율', '양품율'
+            if is_fac: p_df = daily_df.copy(); p_df['목표효율'] = 0.86; y_v = '공장종합효율'
+            else: act_oee = f_df[f_df['종합효율'] > 0]; p_df = act_oee.groupby(['sort_key', '생산월', '생산일'])[['종합효율', '목표효율']].mean().reset_index().sort_values('sort_key'); y_v = '종합효율'
             
-            st.markdown("<h3 style='font-weight: 900; color: #212529; margin-top: 10px;'><span style='color: #FF4B4B;'>■</span> 최근 5일 생산성 요약</h3>", unsafe_allow_html=True)
+            st.markdown("<h3 style='font-weight: 900; color: #212529; margin-top: 10px;'><span style='color: #FF4B4B;'>■</span> 최근 5일 종합효율 요약</h3>", unsafe_allow_html=True)
             if not p_df.empty:
-                r5 = p_df.tail(5); r_cols = st.columns(5)
+                r5 = p_df.sort_values('sort_key').tail(5); r_cols = st.columns(5)
                 for i, (_, r) in enumerate(r5.iterrows()):
                     oee = safe_float(r[y_v])
-                    tgt = 0.86 # 🚨 [수정 2] 사출생산팀 26년 고정 목표효율 86% 적용
-                    
-                    # 86% 미만이면 빨간색, 이상이면 파란색
+                    tgt = 0.86 # 🚨 26년 고정 목표 86%
                     color, bg = ("#1F77B4", "#F8FBFF") if oee >= tgt else ("#FF4B4B", "#FFF5F5")
-                    
                     with r_cols[i]: 
-                        # 🚨 [수정 1] 시간, 성능, 양품율 표시 부분 깔끔하게 삭제
                         st.markdown(f"<div style='background-color: {bg}; border: 1px solid {color}40; border-top: 4px solid {color}; border-radius: 8px; padding: 12px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 10px;'><div style='font-size: 14px; color: #495057; font-weight: bold; margin-bottom: 8px;'>{r['생산일']}</div><div style='font-size: 26px; font-weight: 900; color: {color}; margin-bottom: 8px;'>{oee:.1%}</div></div>", unsafe_allow_html=True)
             
             st.markdown("<hr style='border:1px solid #DEE2E6; margin-top:15px; margin-bottom:30px;'>", unsafe_allow_html=True)
-            st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 월별 종합 효율 추이 및 요인 분석</h3>", unsafe_allow_html=True)
+            st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 월별 설비 가동 현황 및 종합효율 추이</h3>", unsafe_allow_html=True)
+            
             mons = list(dict.fromkeys(p_df['생산월'].tolist()))
             sel_mons = st.multiselect("📅 조회할 월을 선택하세요", mons, default=[mons[-1]] if mons else [], key='t1_m')
+            
+            # 🌟 [수정 2] 탭 1 콤보 차트 (가동대수 막대 + 종합효율 선)
             for m in sel_mons:
                 m_p = p_df[p_df['생산월'] == m].copy()
                 if m_p.empty: continue
-                m_p['x_label'] = m_p.apply(lambda r: f"{r['생산일']}<br><span style='font-size:11px;color:gray;'>({safe_float(r[y_v]):.1%})</span>", axis=1)
-                fig1 = go.Figure()
-                fig1.add_trace(go.Scatter(x=m_p['x_label'], y=m_p[y_v], mode='lines+markers+text', text=m_p[y_v].apply(lambda x: f'{safe_float(x):.1%}'), textposition="top center", line=dict(width=3, color='#1F77B4'), marker=dict(size=8, color='white', line=dict(width=2, color='#1F77B4'))))
-                fig1.update_layout(height=350, margin=dict(l=40, r=40, t=40, b=40), plot_bgcolor='white', yaxis_tickformat='.0%', yaxis_range=[0, 1.1])
+                
+                m_f_df = f_df[f_df['생산월'] == m].copy()
+                mc = m_f_df[m_f_df['종합효율'] > 0].groupby(['sort_key', '생산일'])['설비명'].nunique().reset_index()
+                mc.rename(columns={'설비명': '가동대수'}, inplace=True)
+                
+                combo = pd.merge(m_p, mc, on=['sort_key', '생산일'], how='left').fillna(0)
+                combo['x_label'] = combo['생산일']
+                
+                fig1 = make_subplots(specs=[[{"secondary_y": True}]])
+                
+                # 1. 가동대수 바 차트 (회색)
+                fig1.add_trace(go.Bar(
+                    x=combo['x_label'], y=combo['가동대수'], name='가동 대수',
+                    marker_color='#E9ECEF', text=combo['가동대수'], textposition='inside'
+                ), secondary_y=False)
+                
+                # 2. 종합효율 라인 차트 (파란색/빨간색 텍스트)
+                text_colors = ['#1F77B4' if safe_float(row[y_v]) >= 0.86 else '#FF4B4B' for _, row in combo.iterrows()]
+                fig1.add_trace(go.Scatter(
+                    x=combo['x_label'], y=combo[y_v], name='종합효율', mode='lines+markers+text',
+                    text=combo[y_v].apply(lambda x: f"{x:.1%}"), textposition='top center',
+                    line=dict(width=3, color='#1F77B4'), 
+                    marker=dict(size=8, color='white', line=dict(width=2, color='#1F77B4')),
+                    textfont=dict(color=text_colors, weight='bold')
+                ), secondary_y=True)
+                
+                # 3. 86% 목표 점선 추가
+                fig1.add_hline(y=0.86, line_dash='dash', line_color='#FF4B4B', annotation_text='목표 86%', secondary_y=True)
+                
+                fig1.update_layout(
+                    title=f"📈 {m} 생산성 통합 추이", plot_bgcolor='white', paper_bgcolor='white',
+                    legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="right", x=1),
+                    margin=dict(l=40, r=40, t=60, b=40)
+                )
+                fig1.update_yaxes(title_text="가동 대수 (대)", showgrid=False, secondary_y=False, range=[0, combo['가동대수'].max() * 1.5])
+                fig1.update_yaxes(title_text="종합효율", tickformat='.0%', showgrid=True, gridcolor='rgba(230,230,230,0.5)', secondary_y=True, range=[0, 1.15])
+                
                 st.plotly_chart(fig1, use_container_width=True)
 
         # TAB 2
@@ -255,14 +283,14 @@ if data_to_process:
                 if not issue_df.empty:
                     issue_disp = issue_df[['생산일', '설비명', '품명', '종합효율', 'OPEN ISSUE']].copy()
                     
-                    # 🚨 [수정 3] 비가동 설비의 폼목/종합효율을 완전 공란으로 지움
+                    # 🚨 [수정 4] 탭 2 설비명 순서대로 나열
+                    issue_disp = issue_disp.sort_values(by='설비명').reset_index(drop=True)
+                    
                     for idx, row in issue_disp.iterrows():
                         prod = str(row['품명']).strip()
                         if prod in ['', 'nan', 'NaN', 'None', '#N/A', '0', '0.0']:
-                            issue_disp.at[idx, '품명'] = ""
-                            issue_disp.at[idx, '종합효율'] = ""
-                        else:
-                            issue_disp.at[idx, '종합효율'] = f"{safe_float(row['종합효율']):.1%}"
+                            issue_disp.at[idx, '품명'] = ""; issue_disp.at[idx, '종합효율'] = ""
+                        else: issue_disp.at[idx, '종합효율'] = f"{safe_float(row['종합효율']):.1%}"
                             
                     issue_disp['OPEN ISSUE'] = issue_disp['OPEN ISSUE'].apply(split_issue_to_columns)
                     render_styler_to_html(issue_disp.style.hide(axis="index"))
@@ -279,17 +307,37 @@ if data_to_process:
                 sd3 = st.selectbox("📅 생산일 선택", all_d3, key='tab3_date')
                 day_df = t3_df[t3_df['생산일'] == sd3].copy().sort_values(by='설비명').reset_index(drop=True)
                 
-                # 🚨 [수정 6] 당일 가동 설비 수 요약 바 부활
+                # 🌟 [수정 1] 전광판 느낌의 가동 현황 요약 박스
                 active_count = day_df[day_df['종합효율'] > 0]['설비명'].nunique()
-                st.markdown(f"<div class='machine-summary'>💡 <b>{sd3}</b> 가동 설비 현황: 총 <b>{active_count}대</b> 가동</div>", unsafe_allow_html=True)
+                total_count = day_df['설비명'].nunique()
+                st.markdown(f"""
+                <div style='background: linear-gradient(135deg, #2B3A55, #1F77B4); color: white; padding: 20px; border-radius: 12px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 25px;'>
+                    <div style='font-size: 16px; opacity: 0.9; margin-bottom: 5px;'>💡 {sd3} 설비 가동 현황</div>
+                    <div style='font-size: 24px; font-weight: 900;'>총 <span style='font-size: 32px; color: #E9ECEF;'>{total_count}</span>대 중 <span style='font-size: 36px; color: #FFD700;'>{active_count}</span>대 가동</div>
+                </div>
+                """, unsafe_allow_html=True)
                 
+                st.markdown(f"#### 📊 {sd3} 설비별 종합효율 비교")
+                active_day = day_df[day_df['종합효율'] > 0].sort_values(by='종합효율', ascending=False)
+                
+                # 🌟 [수정 3] 종합효율 바 차트 86% 목표 점선 추가
+                if not active_day.empty:
+                    bar_colors = ['#1F77B4' if safe_float(row['종합효율']) >= 0.86 else '#FF4B4B' for _, row in active_day.iterrows()]
+                    fig3 = px.bar(active_day, x='설비명', y='종합효율', text_auto='.1%')
+                    fig3.update_traces(marker_color=bar_colors, textposition="outside", textfont=dict(size=12, weight="bold"))
+                    fig3.add_hline(y=0.86, line_dash="dash", line_color="#FF4B4B", annotation_text="목표 86%")
+                    fig3.update_xaxes(title="", tickangle=45)
+                    fig3.update_yaxes(title="종합효율", tickformat='.0%', range=[0, 1.2], showgrid=True, gridcolor='rgba(230,230,230,0.5)')
+                    fig3.update_layout(height=400, margin=dict(l=40, r=40, t=40, b=80), plot_bgcolor='white', paper_bgcolor='white')
+                    st.plotly_chart(fig3, use_container_width=True)
+                else: st.info("해당 일자에 가동된 설비가 없습니다.")
+                
+                st.write("---")
                 fig4 = px.bar(day_df[day_df['비가동시간']>0], x='설비명', y='비가동시간', text_auto='.1f', title=f"🛑 {sd3} 설비별 비가동 현황")
                 fig4.update_yaxes(title="총 비가동시간") 
                 st.plotly_chart(fig4, use_container_width=True)
 
                 disp_day = day_df[target_order].copy()
-                
-                # 🚨 [수정 3 & 수정 4] 비가동 설비 공란 처리 및 수량 소수점 제거 (정수 포맷)
                 for idx, row in disp_day.iterrows():
                     prod = str(row['품명']).strip()
                     if prod in ['', 'nan', 'NaN', 'None', '#N/A', '0', '0.0']:
@@ -300,7 +348,7 @@ if data_to_process:
                         for c in ['종합효율', '양품율', '성능가동율', '시간가동율']:
                             if c in disp_day.columns: disp_day.at[idx, c] = f"{safe_float(row[c]):.1%}"
                         for c in ['양품수량', '불량수량', '총 생산수량']:
-                            if c in disp_day.columns: disp_day.at[idx, c] = f"{int(safe_float(row[c])):,}" # 정수 및 콤마 처리
+                            if c in disp_day.columns: disp_day.at[idx, c] = f"{int(safe_float(row[c])):,}"
                             
                 disp_day['OPEN ISSUE'] = disp_day['OPEN ISSUE'].apply(split_issue_to_columns)
                 disp_day.columns = pd.MultiIndex.from_tuples(multi_cols)
@@ -309,7 +357,7 @@ if data_to_process:
                     styles = [''] * len(row)
                     idx = row.name
                     try:
-                        if 0 < safe_float(day_df.loc[idx, '종합효율']) < safe_float(day_df.loc[idx, '목표효율']):
+                        if 0 < safe_float(day_df.loc[idx, '종합효율']) < 0.86: # 86% 기준
                             pos = row.index.get_loc(('생산성', '종합효율'))
                             if isinstance(pos, np.ndarray): pos = np.where(pos)[0][0]
                             styles[pos] = 'color: #FF4B4B; font-weight: bold;'
@@ -330,14 +378,11 @@ if data_to_process:
                     res = t4_df.sort_values(by='종합효율', ascending=asc).head(5)
                     res_disp = res[['생산일', '설비명', '품명', '종합효율', 'OPEN ISSUE']].copy()
                     
-                    # 🚨 비가동 설비 공란 처리
                     for idx, row in res_disp.iterrows():
                         prod = str(row['품명']).strip()
                         if prod in ['', 'nan', 'NaN', 'None', '#N/A', '0', '0.0']:
-                            res_disp.at[idx, '품명'] = ""
-                            res_disp.at[idx, '종합효율'] = ""
-                        else:
-                            res_disp.at[idx, '종합효율'] = f"{safe_float(row['종합효율']):.1%}"
+                            res_disp.at[idx, '품명'] = ""; res_disp.at[idx, '종합효율'] = ""
+                        else: res_disp.at[idx, '종합효율'] = f"{safe_float(row['종합효율']):.1%}"
                             
                     res_disp['OPEN ISSUE'] = res_disp['OPEN ISSUE'].apply(split_issue_to_columns)
                     render_styler_to_html(res_disp.style.hide(axis="index"))
@@ -354,7 +399,6 @@ if data_to_process:
                     res = t5_df.sort_values(by='비가동시간', ascending=asc).head(5)
                     res_disp = res[['생산일', '설비명', '품명', '비가동시간', 'OPEN ISSUE']].copy()
                     
-                    # 🚨 비가동 설비 품명 공란 처리
                     for idx, row in res_disp.iterrows():
                         prod = str(row['품명']).strip()
                         if prod in ['', 'nan', 'NaN', 'None', '#N/A', '0', '0.0']:
@@ -364,7 +408,7 @@ if data_to_process:
                     res_disp['OPEN ISSUE'] = res_disp['OPEN ISSUE'].apply(split_issue_to_columns)
                     render_styler_to_html(res_disp.style.hide(axis="index"))
 
-        # TAB 6 (AI 챗봇 탭으로 땡겨옴)
+        # TAB 6
         with tab6:
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #1F77B4;'>■</span> 🤖 AI 생산 데이터 챗봇</h3>", unsafe_allow_html=True)
             ak = st.text_input("🔑 OpenAI API Key 입력", type="password")
