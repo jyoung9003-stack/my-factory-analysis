@@ -30,7 +30,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 🌟 [수정 3] 전체 탭의 제목을 눈에 띄게 통일해주는 함수 생성
 def render_section_title(title_text):
     st.markdown(f"""
     <div style="background-color: #ffffff; border: 1px solid #E9ECEF; border-left: 6px solid #FF4B4B; padding: 15px 20px; border-radius: 6px; margin-top: 35px; margin-bottom: 25px; box-shadow: 0 2px 6px rgba(0,0,0,0.03); display: flex; align-items: center;">
@@ -50,6 +49,17 @@ def safe_float(val):
         if '%' in v_str: return float(v_str.replace('%', '')) / 100.0
         return float(v_str)
     except: return 0.0
+
+# 🌟 [에러 해결] 전광판 리스트를 안전하게 그려주는 함수
+def get_vert_summary_label(r, rank):
+    try:
+        m_short = str(r.get('설비명', '')).split(' - ')[0].strip()
+        p_name = str(r.get('품명', '')).strip()
+        p_str = f"<div style='font-size: 13px; color: rgba(255,255,255,0.7); margin-left: 18px; margin-top: 2px;'>{p_name}</div>" if p_name and p_name not in ['nan', 'NaN', 'None', '#N/A', '0', '0.0'] else ""
+        oee = safe_float(r.get('종합효율', 0))
+        return f"<div style='margin-bottom: 12px;'><span style='font-size: 14px;'><b>{rank}. {m_short}</b></span> <span style='float: right; font-weight: 900;'>{oee:.1%}</span>{p_str}</div>"
+    except Exception:
+        return ""
 
 target_cols = ['생산일', '설비명', '품명', '양품수량', '불량수량', '총 생산수량', '투입시간', '가동시간', '비가동시간', '정미시간', '양품율', '성능가동율', '시간가동율', '종합효율', '목표효율', 'OPEN ISSUE']
 target_order = ['생산일', '설비명', '품명', '종합효율', '양품율', '성능가동율', '시간가동율', '총 생산수량', '양품수량', '불량수량', 'OPEN ISSUE']
@@ -180,7 +190,6 @@ if data_to_process:
             night_html = '<br>'.join(night_lines) if night_lines else "<span style='color:#ADB5BD; font-size:12px;'>특이사항 없음</span>"
             return f"<div style='display: flex; gap: 10px; margin-top: 5px; width: 100%; min-width: 400px;'><div style='flex: 1; background-color: #F8F9FA; border: 1px solid #E9ECEF; border-radius: 4px; padding: 10px; border-top: 3px solid #FFC107;'><div style='font-size:11px; font-weight:bold; color:#E0A800; margin-bottom:4px;'>☀️ 주간</div><div style='font-size:13px; color:#495057; line-height:1.6;'>{day_html}</div></div><div style='flex: 1; background-color: #F8F9FA; border: 1px solid #E9ECEF; border-radius: 4px; padding: 10px; border-top: 3px solid #343A40;'><div style='font-size:11px; font-weight:bold; color:#495057; margin-bottom:4px;'>🌙 야간</div><div style='font-size:13px; color:#495057; line-height:1.6;'>{night_html}</div></div></div>"
 
-        # 사이드바 필터
         st.sidebar.header("🎯 정밀 필터링")
         df['설비명'] = df['설비명'].fillna("").astype(str)
         all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
@@ -240,7 +249,6 @@ if data_to_process:
                 combo = pd.merge(m_p, mc, on=['sort_key', '생산일'], how='left').fillna(0)
                 combo['x_label'] = combo['생산일']
                 
-                # 🌟 [수정 2] 탭 1 종합효율 차트를 바(Bar) 차트로 통일 & Y축 100% 제한
                 text_colors = ['#1F77B4' if safe_float(row[y_v]) >= 0.86 else '#FF4B4B' for _, row in combo.iterrows()]
                 
                 fig_oee = go.Figure()
@@ -255,11 +263,9 @@ if data_to_process:
                     title=f"📈 {m} 종합효율 추이", plot_bgcolor='white', paper_bgcolor='white',
                     margin=dict(l=40, r=40, t=60, b=40)
                 )
-                # Y축 최대치 1.0 (100%) 고정
                 fig_oee.update_yaxes(title_text="종합효율", tickformat='.0%', showgrid=True, gridcolor='rgba(230,230,230,0.5)', range=[0, 1.0])
                 st.plotly_chart(fig_oee, use_container_width=True)
                 
-                # 설비 가동 대수 개별 차트
                 fig_mac = go.Figure()
                 fig_mac.add_trace(go.Bar(
                     x=combo['x_label'], y=combo['가동대수'], name='가동 대수',
@@ -297,13 +303,6 @@ if data_to_process:
                     render_styler_to_html(issue_disp.style.hide(axis="index"))
                 else: st.info("데이터가 없습니다.")
 
-        # 🌟 [수정 1] 전광판 세로 정렬을 위한 HTML 템플릿 함수
-        def get_vert_summary_label(r, rank):
-            m_short = str(r['설비명']).split(' - ')[0].strip()
-            p_name = str(r['품명']).strip()
-            p_str = f"<div style='font-size: 13px; color: rgba(255,255,255,0.7); margin-left: 18px; margin-top: 2px;'>{p_name}</div>" if p_name and p_name not in ['nan', 'NaN', 'None', '#N/A', '0', '0.0'] else ""
-            return f"<div style='margin-bottom: 12px;'><span style='font-size: 14px;'><b>{rank}. {m_short}</b></span> <span style='float: right; font-weight: 900;'>{safe_float(r['종합효율']):.1%}</span>{p_str}</div>"
-
         # TAB 3
         with tab3:
             render_section_title("일일 생산성 상세 현황")
@@ -322,9 +321,16 @@ if data_to_process:
                 active_count = active_day['설비명'].nunique()
                 total_count = day_df['설비명'].nunique()
                 
-                # 🌟 [수정 1] BEST / WORST 세로 나열 HTML 블록 생성
-                best_html = "".join([get_vert_summary_label(r, i+1) for i, (_, r) in enumerate(active_day.head(5).iterrows())])
-                worst_html = "".join([get_vert_summary_label(r, i+1) for i, (_, r) in enumerate(active_day.tail(5).sort_values(by='종합효율', ascending=True).iterrows())])
+                # 🌟 [에러 완벽 차단] BEST와 WORST가 겹치지 않도록 안전하게 분리
+                best_df = active_day.head(5)
+                worst_df = active_day[~active_day.index.isin(best_df.index)].tail(5).sort_values(by='종합효율', ascending=True)
+                
+                best_html = "".join([get_vert_summary_label(r, i+1) for i, (_, r) in enumerate(best_df.iterrows())])
+                
+                if worst_df.empty:
+                    worst_html = "<div style='font-size: 13px; color: rgba(255,255,255,0.6); margin-top: 10px;'>해당 없음 (가동 설비 부족)</div>"
+                else:
+                    worst_html = "".join([get_vert_summary_label(r, i+1) for i, (_, r) in enumerate(worst_df.iterrows())])
                 
                 st.markdown(f"""
                 <div style='background: linear-gradient(135deg, #2B3A55, #1F77B4); color: white; padding: 25px; border-radius: 12px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 25px;'>
@@ -353,7 +359,6 @@ if data_to_process:
                     fig3 = px.bar(active_day, x='설비_짧은명', y='종합효율', text_auto='.1%')
                     fig3.update_traces(marker_color=bar_colors, textposition="auto", textfont=dict(size=12, weight="bold"))
                     
-                    # 🌟 [수정 2] Y축 1.0 (100%) 고정
                     fig3.update_xaxes(title="", tickangle=0)
                     fig3.update_yaxes(title="종합효율", tickformat='.0%', range=[0, 1.0], showgrid=True, gridcolor='rgba(230,230,230,0.5)')
                     fig3.update_layout(height=450, margin=dict(l=40, r=40, t=40, b=40), plot_bgcolor='white', paper_bgcolor='white')
