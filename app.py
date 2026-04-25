@@ -50,17 +50,6 @@ def safe_float(val):
         return float(v_str)
     except: return 0.0
 
-# 🌟 [에러 해결] 전광판 리스트를 안전하게 그려주는 함수
-def get_vert_summary_label(r, rank):
-    try:
-        m_short = str(r.get('설비명', '')).split(' - ')[0].strip()
-        p_name = str(r.get('품명', '')).strip()
-        p_str = f"<div style='font-size: 13px; color: rgba(255,255,255,0.7); margin-left: 18px; margin-top: 2px;'>{p_name}</div>" if p_name and p_name not in ['nan', 'NaN', 'None', '#N/A', '0', '0.0'] else ""
-        oee = safe_float(r.get('종합효율', 0))
-        return f"<div style='margin-bottom: 12px;'><span style='font-size: 14px;'><b>{rank}. {m_short}</b></span> <span style='float: right; font-weight: 900;'>{oee:.1%}</span>{p_str}</div>"
-    except Exception:
-        return ""
-
 target_cols = ['생산일', '설비명', '품명', '양품수량', '불량수량', '총 생산수량', '투입시간', '가동시간', '비가동시간', '정미시간', '양품율', '성능가동율', '시간가동율', '종합효율', '목표효율', 'OPEN ISSUE']
 target_order = ['생산일', '설비명', '품명', '종합효율', '양품율', '성능가동율', '시간가동율', '총 생산수량', '양품수량', '불량수량', 'OPEN ISSUE']
 multi_cols = [
@@ -303,6 +292,16 @@ if data_to_process:
                     render_styler_to_html(issue_disp.style.hide(axis="index"))
                 else: st.info("데이터가 없습니다.")
 
+        def get_vert_summary_label(r, rank):
+            try:
+                m_short = str(r.get('설비명', '')).split(' - ')[0].strip()
+                p_name = str(r.get('품명', '')).strip()
+                p_str = f"<div style='font-size: 13px; color: rgba(255,255,255,0.7); margin-left: 18px; margin-top: 2px;'>{p_name}</div>" if p_name and p_name not in ['nan', 'NaN', 'None', '#N/A', '0', '0.0'] else ""
+                oee = safe_float(r.get('종합효율', 0))
+                return f"<div style='margin-bottom: 12px;'><span style='font-size: 14px;'><b>{rank}. {m_short}</b></span> <span style='float: right; font-weight: 900;'>{oee:.1%}</span>{p_str}</div>"
+            except Exception:
+                return ""
+
         # TAB 3
         with tab3:
             render_section_title("일일 생산성 상세 현황")
@@ -321,7 +320,6 @@ if data_to_process:
                 active_count = active_day['설비명'].nunique()
                 total_count = day_df['설비명'].nunique()
                 
-                # 🌟 [에러 완벽 차단] BEST와 WORST가 겹치지 않도록 안전하게 분리
                 best_df = active_day.head(5)
                 worst_df = active_day[~active_day.index.isin(best_df.index)].tail(5).sort_values(by='종합효율', ascending=True)
                 
@@ -332,24 +330,15 @@ if data_to_process:
                 else:
                     worst_html = "".join([get_vert_summary_label(r, i+1) for i, (_, r) in enumerate(worst_df.iterrows())])
                 
-                st.markdown(f"""
-                <div style='background: linear-gradient(135deg, #2B3A55, #1F77B4); color: white; padding: 25px; border-radius: 12px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 25px;'>
-                    <div style='font-size: 16px; opacity: 0.9; margin-bottom: 5px;'>💡 {sd3} 설비 가동 현황</div>
-                    <div style='font-size: 24px; font-weight: 900; margin-bottom: 20px;'>총 <span style='font-size: 32px; color: #E9ECEF;'>{total_count}</span>대 중 <span style='font-size: 36px; color: #FFD700;'>{active_count}</span>대 가동</div>
-                    
-                    <div style='display: flex; gap: 20px; background-color: rgba(255,255,255,0.15); padding: 20px; border-radius: 8px; text-align: left; box-sizing: border-box; line-height: 1.4;'>
-                        <div style='flex: 1;'>
-                            <div style='color: #20C997; font-weight: 900; font-size: 16px; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 8px;'>🏆 종합효율 BEST 5</div>
-                            {best_html}
-                        </div>
-                        <div style='width: 1px; background-color: rgba(255,255,255,0.2);'></div>
-                        <div style='flex: 1;'>
-                            <div style='color: #FF4B4B; font-weight: 900; font-size: 16px; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 8px;'>🚨 종합효율 WORST 5</div>
-                            {worst_html}
-                        </div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+                # 🌟 [수정 완료] 전광판의 HTML 블록의 빈 줄 및 들여쓰기를 완벽 밀착하여 에러 노출 원천 차단
+                st.markdown(f"""<div style='background: linear-gradient(135deg, #2B3A55, #1F77B4); color: white; padding: 25px; border-radius: 12px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 25px;'>
+<div style='font-size: 16px; opacity: 0.9; margin-bottom: 5px;'>💡 {sd3} 설비 가동 현황</div>
+<div style='font-size: 24px; font-weight: 900; margin-bottom: 20px;'>총 <span style='font-size: 32px; color: #E9ECEF;'>{total_count}</span>대 중 <span style='font-size: 36px; color: #FFD700;'>{active_count}</span>대 가동</div>
+<div style='display: flex; gap: 20px; background-color: rgba(255,255,255,0.15); padding: 20px; border-radius: 8px; text-align: left; box-sizing: border-box; line-height: 1.4;'>
+<div style='flex: 1;'><div style='color: #20C997; font-weight: 900; font-size: 16px; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 8px;'>🏆 종합효율 BEST 5</div>{best_html}</div>
+<div style='width: 1px; background-color: rgba(255,255,255,0.2);'></div>
+<div style='flex: 1;'><div style='color: #FF4B4B; font-weight: 900; font-size: 16px; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 8px;'>🚨 종합효율 WORST 5</div>{worst_html}</div>
+</div></div>""", unsafe_allow_html=True)
                 
                 st.markdown(f"#### 📊 {sd3} 설비별 종합효율 비교")
                 
