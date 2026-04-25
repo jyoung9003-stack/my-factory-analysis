@@ -6,6 +6,7 @@ from plotly.subplots import make_subplots
 import re
 import os
 import numpy as np
+import textwrap  # 🌟 긴 글자 줄바꿈을 위한 모듈 추가
 from collections import Counter
 from datetime import datetime
 
@@ -29,14 +30,8 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 2. 로고 및 타이틀
-col1, col2 = st.columns([1.5, 10])
-with col1:
-    logo_path = "듀링로고_가로형_빨강_JPG.jpg"
-    if os.path.exists(logo_path): st.image(logo_path, width=100)
-    else: st.markdown("<h2 style='color: #FF2A2A; font-weight: 900; margin-top: 10px; white-space: nowrap;' class='notranslate'>DÜRING</h2>", unsafe_allow_html=True)
-with col2:
-    st.markdown("<h1 style='margin-top: 0px; color: #212529;' class='notranslate'>사출생산팀 일일 생산성 정밀 분석</h1>", unsafe_allow_html=True)
+# 2. 로고 및 타이틀 (🌟 DÜRING 문구 삭제 및 중앙 정렬 적용)
+st.markdown("<h1 style='margin-top: 10px; margin-bottom: 30px; color: #212529;' class='notranslate'>사출생산팀 일일 생산성 정밀 분석</h1>", unsafe_allow_html=True)
 
 def safe_float(val):
     try:
@@ -289,14 +284,14 @@ if data_to_process:
                     render_styler_to_html(issue_disp.style.hide(axis="index"))
                 else: st.info("데이터가 없습니다.")
 
-        # 🌟 [수정 1] 탭 3의 차트 X축 가독성 개선을 위한 함수 (설비명 단축 + 품명 추가)
+        # 🌟 [수정 2] 긴 품명을 예쁘게 줄바꿈(wrapping) 해주는 함수 (가독성 극대화)
         def make_x_label(r):
             s_name = str(r['설비명']).split(' - ')[0].strip()
             p_name = str(r['품명']).strip()
             if p_name in ['', 'nan', 'NaN', 'None', '#N/A', '0', '0.0']: return s_name
-            # 품명이 너무 길면 차트가 엉키므로 13글자 정도로 제한
-            if len(p_name) > 13: p_name = p_name[:13] + ".."
-            return f"{s_name}<br><span style='font-size:11px; color:#6C757D;'>{p_name}</span>"
+            # 품명이 너무 길면 약 11글자 단위로 자연스럽게 <br> 줄바꿈 처리
+            wrapped_p_name = "<br>".join(textwrap.wrap(p_name, width=11))
+            return f"{s_name}<br><span style='font-size:11px; color:#6C757D;'>{wrapped_p_name}</span>"
 
         # TAB 3
         with tab3:
@@ -309,7 +304,6 @@ if data_to_process:
                 sd3 = st.selectbox("📅 생산일 선택", all_d3, key='tab3_date')
                 day_df = t3_df[t3_df['생산일'] == sd3].copy().sort_values(by='설비명').reset_index(drop=True)
                 
-                # 차트용 X축 라벨(설비_품명) 생성 적용
                 day_df['설비_품명'] = day_df.apply(make_x_label, axis=1)
                 
                 active_day = day_df[day_df['종합효율'] > 0].sort_values(by='종합효율', ascending=False)
@@ -317,14 +311,15 @@ if data_to_process:
                 active_count = active_day['설비명'].nunique()
                 total_count = day_df['설비명'].nunique()
                 
-                best_str = ", ".join([f"<b>{str(r['설비명']).split(' - ')[0]}</b>({safe_float(r['종합효율']):.1%})" for _, r in active_day.head(5).iterrows()])
-                worst_str = ", ".join([f"<b>{str(r['설비명']).split(' - ')[0]}</b>({safe_float(r['종합효율']):.1%})" for _, r in active_day.tail(5).sort_values(by='종합효율', ascending=True).iterrows()])
+                # 🌟 [수정 3] BEST/WORST에 풀네임 설비명 표시
+                best_str = ", ".join([f"<b>{str(r['설비명'])}</b> ({safe_float(r['종합효율']):.1%})" for _, r in active_day.head(5).iterrows()])
+                worst_str = ", ".join([f"<b>{str(r['설비명'])}</b> ({safe_float(r['종합효율']):.1%})" for _, r in active_day.tail(5).sort_values(by='종합효율', ascending=True).iterrows()])
                 
                 st.markdown(f"""
                 <div style='background: linear-gradient(135deg, #2B3A55, #1F77B4); color: white; padding: 20px; border-radius: 12px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 25px;'>
                     <div style='font-size: 16px; opacity: 0.9; margin-bottom: 5px;'>💡 {sd3} 설비 가동 현황</div>
                     <div style='font-size: 24px; font-weight: 900; margin-bottom: 15px;'>총 <span style='font-size: 32px; color: #E9ECEF;'>{total_count}</span>대 중 <span style='font-size: 36px; color: #FFD700;'>{active_count}</span>대 가동</div>
-                    <div style='background-color: rgba(255,255,255,0.15); padding: 12px; border-radius: 8px; font-size: 14px; text-align: left; display: inline-block; width: 100%; box-sizing: border-box;'>
+                    <div style='background-color: rgba(255,255,255,0.15); padding: 12px; border-radius: 8px; font-size: 14px; text-align: left; display: inline-block; width: 100%; box-sizing: border-box; line-height: 1.6;'>
                         <div style='margin-bottom: 8px;'><span style='color: #20C997; font-weight: 900; font-size: 15px;'>🏆 BEST 5:</span> {best_str}</div>
                         <div><span style='color: #FF4B4B; font-weight: 900; font-size: 15px;'>🚨 WORST 5:</span> {worst_str}</div>
                     </div>
@@ -335,25 +330,23 @@ if data_to_process:
                 
                 if not active_day.empty:
                     bar_colors = ['#1F77B4' if safe_float(row['종합효율']) >= safe_float(row['목표효율']) else '#FF4B4B' for _, row in active_day.iterrows()]
-                    
-                    # 🌟 [수정 1] X축을 짧아진 '설비_품명'으로 변경
                     fig3 = px.bar(active_day, x='설비_품명', y='종합효율', text_auto='.1%')
                     fig3.update_traces(marker_color=bar_colors, textposition="outside", textfont=dict(size=12, weight="bold"))
-                    fig3.add_hline(y=0.86, line_dash="dash", line_color="#FF4B4B", annotation_text="목표 86%")
-                    fig3.update_xaxes(title="") # 각도 조절 생략하여 브라우저가 알아서 띄어쓰기 최적화 하도록 함
+                    
+                    # 🌟 [수정 4] 86% 목표선 삭제 및 X축 텍스트 여유 공간(margin b) 대폭 확대
+                    fig3.update_xaxes(title="", tickangle=0) # 텍스트가 똑바로 보이도록 각도 0 설정
                     fig3.update_yaxes(title="종합효율", tickformat='.0%', range=[0, 1.2], showgrid=True, gridcolor='rgba(230,230,230,0.5)')
-                    fig3.update_layout(height=450, margin=dict(l=40, r=40, t=40, b=80), plot_bgcolor='white', paper_bgcolor='white')
+                    fig3.update_layout(height=480, margin=dict(l=40, r=40, t=40, b=120), plot_bgcolor='white', paper_bgcolor='white')
                     st.plotly_chart(fig3, use_container_width=True)
                 else: st.info("해당 일자에 가동된 설비가 없습니다.")
                 
                 st.write("---")
                 downtime_day = day_df[day_df['비가동시간']>0].sort_values(by='비가동시간', ascending=False)
                 
-                # 🌟 [수정 1] 비가동 차트의 X축도 짧아진 '설비_품명'으로 변경
                 fig4 = px.bar(downtime_day, x='설비_품명', y='비가동시간', text_auto='.1f', title=f"🛑 {sd3} 설비별 비가동 현황")
-                fig4.update_xaxes(title="") 
+                fig4.update_xaxes(title="", tickangle=0) 
                 fig4.update_yaxes(title="총 비가동시간") 
-                fig4.update_layout(height=450, margin=dict(l=40, r=40, t=40, b=80))
+                fig4.update_layout(height=480, margin=dict(l=40, r=40, t=40, b=120), plot_bgcolor='white', paper_bgcolor='white')
                 st.plotly_chart(fig4, use_container_width=True)
 
                 disp_day = day_df[target_order].copy()
@@ -414,7 +407,6 @@ if data_to_process:
             t5_df = f_df[f_df['생산월'].isin(sel_m5)].copy()
             
             if not t5_df.empty:
-                # 🌟 [수정 2] BEST 루프 지우고 WORST 10만 직관적으로 표출
                 st.markdown("<h4>🚨 WORST 10 (비가동 최대)</h4>", unsafe_allow_html=True)
                 res = t5_df.sort_values(by='비가동시간', ascending=False).head(10)
                 res_disp = res[['생산일', '설비명', '품명', '비가동시간', 'OPEN ISSUE']].copy()
