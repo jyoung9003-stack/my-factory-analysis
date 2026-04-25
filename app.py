@@ -37,7 +37,6 @@ with col1:
 with col2:
     st.markdown("<h1 style='margin-top: 0px; color: #212529;' class='notranslate'>사출생산팀 일일 생산성 정밀 분석</h1>", unsafe_allow_html=True)
 
-# 숫자 변환 및 클렌징 함수
 def safe_float(val):
     try:
         if isinstance(val, pd.Series): val = val.iloc[0]
@@ -136,8 +135,12 @@ if data_to_process:
                 daily_totals_data[sort_key].update({'공장종합효율': daily_total_oee, '공장성능가동율': daily_total_perf, '공장시간가동율': daily_total_avail, '공장양품율': daily_total_qual})
 
         for _, row in temp_df.iterrows():
-            m_val = str(row.get('설비명', ''))
+            m_val = str(row.get('설비명', '')).strip()
+            
+            # 🚨 [수정 4] 엑셀/CSV에서 넘어온 쓸데없는 헤더 찌꺼기 행(Unnamed, 빈칸 등) 완벽 제거
+            if m_val in ['', 'nan', 'NaN', 'None', '#N/A'] or 'Unnamed' in m_val or m_val == '설비명': continue
             if 'TOTAL' in m_val.upper() or '합계' in m_val or 'GRAND' in m_val.upper(): continue
+            
             record = {'sort_key': sort_key, '생산월': month_str, '생산일': clean_date}
             for col in target_cols:
                 if col != '생산일': record[col] = row[col] if col in temp_df.columns else None
@@ -151,16 +154,12 @@ if data_to_process:
         for col in num_cols:
             if col in df.columns: df[col] = df[col].apply(safe_float)
 
-        # 🚨 [오류 완벽 해결] 정규식의 3번째 인자(val) 누락 오타를 수정하고 안전하게 줄을 나눴습니다.
         def format_issue(text):
             val = str(text).strip()
             if val in ['', '0', '0.0', 'nan', 'NaN', 'None']: return ""
             val = val.replace('\r\n', '\n')
-            val = re.sub(r'(?<!\n)\*', '\n*', val)
-            val = re.sub(r'(?<!\n)-\.', '\n-.', val)
-            val = re.sub(r'(?<!\n)→', '\n→ ', val)
+            val = re.sub(r'(?<!\n)\*', '\n*', val); val = re.sub(r'(?<!\n)-\.', '\n-.', val); val = re.sub(r'(?<!\n)→', '\n→ ', val)
             return val.strip()
-
         df['OPEN ISSUE'] = df['OPEN ISSUE'].apply(format_issue)
 
         def split_issue_to_columns(issue_text):
@@ -207,7 +206,8 @@ if data_to_process:
                 wrapped_html = re.sub(r'<th class=\"col_heading level1 col10\".*?>OPEN ISSUE</th>', '', wrapped_html)
             st.markdown(wrapped_html, unsafe_allow_html=True)
 
-        tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["📈 종합 효율 추이", "📝 OPEN ISSUE", "📅 일별 상세 현황", "🏆 효율 BEST&WORST", "🛑 비가동 BEST&WORST", "📉 효율 급변 추적", "🤖 AI 챗봇"])
+        # 🚨 [수정 5] "효율 급변 구간 정밀 추적" 탭 완전히 삭제 (총 6개 탭으로 구성)
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📈 종합 효율 추이", "📝 OPEN ISSUE", "📅 일별 상세 현황", "🏆 효율 BEST&WORST", "🛑 비가동 BEST&WORST", "🤖 AI 챗봇"])
 
         # TAB 1
         with tab1:
@@ -219,9 +219,15 @@ if data_to_process:
             if not p_df.empty:
                 r5 = p_df.tail(5); r_cols = st.columns(5)
                 for i, (_, r) in enumerate(r5.iterrows()):
-                    oee, tgt = safe_float(r[y_v]), safe_float(r['목표효율'])
+                    oee = safe_float(r[y_v])
+                    tgt = 0.86 # 🚨 [수정 2] 사출생산팀 26년 고정 목표효율 86% 적용
+                    
+                    # 86% 미만이면 빨간색, 이상이면 파란색
                     color, bg = ("#1F77B4", "#F8FBFF") if oee >= tgt else ("#FF4B4B", "#FFF5F5")
-                    with r_cols[i]: st.markdown(f"<div style='background-color: {bg}; border: 1px solid {color}40; border-top: 4px solid {color}; border-radius: 8px; padding: 12px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 10px;'><div style='font-size: 14px; color: #495057; font-weight: bold; margin-bottom: 8px;'>{r['생산일']}</div><div style='font-size: 26px; font-weight: 900; color: {color}; margin-bottom: 8px;'>{oee:.1%}</div><div style='display: flex; justify-content: space-between; font-size: 11px; color: #6C757D; background-color: rgba(255,255,255,0.6); padding: 4px 6px; border-radius: 4px;'><span>시간 <b>{safe_float(r[av]):.1%}</b></span><span>성능 <b>{safe_float(r[pv]):.1%}</b></span><span>양품 <b>{safe_float(r[qv]):.1%}</b></span></div></div>", unsafe_allow_html=True)
+                    
+                    with r_cols[i]: 
+                        # 🚨 [수정 1] 시간, 성능, 양품율 표시 부분 깔끔하게 삭제
+                        st.markdown(f"<div style='background-color: {bg}; border: 1px solid {color}40; border-top: 4px solid {color}; border-radius: 8px; padding: 12px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 10px;'><div style='font-size: 14px; color: #495057; font-weight: bold; margin-bottom: 8px;'>{r['생산일']}</div><div style='font-size: 26px; font-weight: 900; color: {color}; margin-bottom: 8px;'>{oee:.1%}</div></div>", unsafe_allow_html=True)
             
             st.markdown("<hr style='border:1px solid #DEE2E6; margin-top:15px; margin-bottom:30px;'>", unsafe_allow_html=True)
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #FF4B4B;'>■</span> 월별 종합 효율 추이 및 요인 분석</h3>", unsafe_allow_html=True)
@@ -248,7 +254,16 @@ if data_to_process:
                 issue_df = t2_df[(t2_df['생산일'] == sd2) & (t2_df['OPEN ISSUE'] != "")].copy()
                 if not issue_df.empty:
                     issue_disp = issue_df[['생산일', '설비명', '품명', '종합효율', 'OPEN ISSUE']].copy()
-                    issue_disp['종합효율'] = issue_disp['종합효율'].apply(lambda x: f"{safe_float(x):.1%}")
+                    
+                    # 🚨 [수정 3] 비가동 설비의 폼목/종합효율을 완전 공란으로 지움
+                    for idx, row in issue_disp.iterrows():
+                        prod = str(row['품명']).strip()
+                        if prod in ['', 'nan', 'NaN', 'None', '#N/A', '0', '0.0']:
+                            issue_disp.at[idx, '품명'] = ""
+                            issue_disp.at[idx, '종합효율'] = ""
+                        else:
+                            issue_disp.at[idx, '종합효율'] = f"{safe_float(row['종합효율']):.1%}"
+                            
                     issue_disp['OPEN ISSUE'] = issue_disp['OPEN ISSUE'].apply(split_issue_to_columns)
                     render_styler_to_html(issue_disp.style.hide(axis="index"))
                 else: st.info("특이사항이 없습니다.")
@@ -264,14 +279,44 @@ if data_to_process:
                 sd3 = st.selectbox("📅 생산일 선택", all_d3, key='tab3_date')
                 day_df = t3_df[t3_df['생산일'] == sd3].copy().sort_values(by='설비명').reset_index(drop=True)
                 
+                # 🚨 [수정 6] 당일 가동 설비 수 요약 바 부활
+                active_count = day_df[day_df['종합효율'] > 0]['설비명'].nunique()
+                st.markdown(f"<div class='machine-summary'>💡 <b>{sd3}</b> 가동 설비 현황: 총 <b>{active_count}대</b> 가동</div>", unsafe_allow_html=True)
+                
                 fig4 = px.bar(day_df[day_df['비가동시간']>0], x='설비명', y='비가동시간', text_auto='.1f', title=f"🛑 {sd3} 설비별 비가동 현황")
                 fig4.update_yaxes(title="총 비가동시간") 
                 st.plotly_chart(fig4, use_container_width=True)
 
                 disp_day = day_df[target_order].copy()
+                
+                # 🚨 [수정 3 & 수정 4] 비가동 설비 공란 처리 및 수량 소수점 제거 (정수 포맷)
+                for idx, row in disp_day.iterrows():
+                    prod = str(row['품명']).strip()
+                    if prod in ['', 'nan', 'NaN', 'None', '#N/A', '0', '0.0']:
+                        disp_day.at[idx, '품명'] = ""
+                        for c in ['종합효율', '양품율', '성능가동율', '시간가동율', '양품수량', '불량수량', '총 생산수량']: 
+                            if c in disp_day.columns: disp_day.at[idx, c] = ""
+                    else:
+                        for c in ['종합효율', '양품율', '성능가동율', '시간가동율']:
+                            if c in disp_day.columns: disp_day.at[idx, c] = f"{safe_float(row[c]):.1%}"
+                        for c in ['양품수량', '불량수량', '총 생산수량']:
+                            if c in disp_day.columns: disp_day.at[idx, c] = f"{int(safe_float(row[c])):,}" # 정수 및 콤마 처리
+                            
                 disp_day['OPEN ISSUE'] = disp_day['OPEN ISSUE'].apply(split_issue_to_columns)
-                for c in ['종합효율', '양품율', '성능가동율', '시간가동율']: disp_day[c] = disp_day[c].apply(lambda x: f"{safe_float(x):.1%}")
-                render_styler_to_html(disp_day.style.hide(axis="index"), is_multi=True)
+                disp_day.columns = pd.MultiIndex.from_tuples(multi_cols)
+                
+                def style_day_row(row):
+                    styles = [''] * len(row)
+                    idx = row.name
+                    try:
+                        if 0 < safe_float(day_df.loc[idx, '종합효율']) < safe_float(day_df.loc[idx, '목표효율']):
+                            pos = row.index.get_loc(('생산성', '종합효율'))
+                            if isinstance(pos, np.ndarray): pos = np.where(pos)[0][0]
+                            styles[pos] = 'color: #FF4B4B; font-weight: bold;'
+                    except: pass
+                    return styles
+
+                render_styler_to_html(disp_day.style.apply(style_day_row, axis=1).hide(axis="index"), is_multi=True)
 
         # TAB 4
         with tab4:
@@ -284,7 +329,16 @@ if data_to_process:
                     st.markdown(f"<h4>{label}</h4>", unsafe_allow_html=True)
                     res = t4_df.sort_values(by='종합효율', ascending=asc).head(5)
                     res_disp = res[['생산일', '설비명', '품명', '종합효율', 'OPEN ISSUE']].copy()
-                    res_disp['종합효율'] = res_disp['종합효율'].apply(lambda x: f"{safe_float(x):.1%}")
+                    
+                    # 🚨 비가동 설비 공란 처리
+                    for idx, row in res_disp.iterrows():
+                        prod = str(row['품명']).strip()
+                        if prod in ['', 'nan', 'NaN', 'None', '#N/A', '0', '0.0']:
+                            res_disp.at[idx, '품명'] = ""
+                            res_disp.at[idx, '종합효율'] = ""
+                        else:
+                            res_disp.at[idx, '종합효율'] = f"{safe_float(row['종합효율']):.1%}"
+                            
                     res_disp['OPEN ISSUE'] = res_disp['OPEN ISSUE'].apply(split_issue_to_columns)
                     render_styler_to_html(res_disp.style.hide(axis="index"))
 
@@ -299,13 +353,19 @@ if data_to_process:
                     st.markdown(f"<h4>{label}</h4>", unsafe_allow_html=True)
                     res = t5_df.sort_values(by='비가동시간', ascending=asc).head(5)
                     res_disp = res[['생산일', '설비명', '품명', '비가동시간', 'OPEN ISSUE']].copy()
+                    
+                    # 🚨 비가동 설비 품명 공란 처리
+                    for idx, row in res_disp.iterrows():
+                        prod = str(row['품명']).strip()
+                        if prod in ['', 'nan', 'NaN', 'None', '#N/A', '0', '0.0']:
+                            res_disp.at[idx, '품명'] = ""
+                    
                     res_disp['비가동시간'] = res_disp['비가동시간'].apply(lambda x: f"{safe_float(x):.1f}h")
                     res_disp['OPEN ISSUE'] = res_disp['OPEN ISSUE'].apply(split_issue_to_columns)
                     render_styler_to_html(res_disp.style.hide(axis="index"))
 
-        # TAB 6 & 7
-        with tab6: st.write("공사 중...")
-        with tab7:
+        # TAB 6 (AI 챗봇 탭으로 땡겨옴)
+        with tab6:
             st.markdown("<h3 style='font-weight: 800; color: #212529;'><span style='color: #1F77B4;'>■</span> 🤖 AI 생산 데이터 챗봇</h3>", unsafe_allow_html=True)
             ak = st.text_input("🔑 OpenAI API Key 입력", type="password")
             if "msgs" not in st.session_state: st.session_state.msgs = [{"role": "assistant", "content": "무엇을 분석해 드릴까요?"}]
