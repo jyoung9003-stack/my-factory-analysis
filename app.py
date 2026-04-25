@@ -151,12 +151,16 @@ if data_to_process:
         for col in num_cols:
             if col in df.columns: df[col] = df[col].apply(safe_float)
 
+        # 🚨 [오류 완벽 해결] 정규식의 3번째 인자(val) 누락 오타를 수정하고 안전하게 줄을 나눴습니다.
         def format_issue(text):
             val = str(text).strip()
             if val in ['', '0', '0.0', 'nan', 'NaN', 'None']: return ""
             val = val.replace('\r\n', '\n')
-            val = re.sub(r'(?<!\n)\*', '\n*', val); val = re.sub(r'(?<!\n)-\.', '\n-.'); val = re.sub(r'(?<!\n)→', '\n→ ', val)
+            val = re.sub(r'(?<!\n)\*', '\n*', val)
+            val = re.sub(r'(?<!\n)-\.', '\n-.', val)
+            val = re.sub(r'(?<!\n)→', '\n→ ', val)
             return val.strip()
+
         df['OPEN ISSUE'] = df['OPEN ISSUE'].apply(format_issue)
 
         def split_issue_to_columns(issue_text):
@@ -191,28 +195,16 @@ if data_to_process:
         sel_prod = st.sidebar.selectbox("📦 품목 선택", ["전체 품목"] + actual_prods)
         f_df = pool_df[pool_df['품명'].str.strip() == sel_prod].copy() if sel_prod != "전체 품목" else pool_df.copy()
 
-        # 🚨 [에러 완벽 수정] f-string 문법 에러가 발생하지 않도록 치환 로직을 분리했습니다.
         def render_styler_to_html(styler, is_multi=False):
             try: html_str = styler.to_html(escape=False)
             except: html_str = styler.to_html()
             
-            # 파이썬 구버전 호환을 위해 f-string 밖에서 replace 실행
             html_str = html_str.replace('<table', '<table class="custom-table notranslate"')
             
-            wrapped_html = f"""<div style="width: 100%; max-height: 500px; overflow: auto; border: 1px solid #DEE2E6; border-radius: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 30px;">
-<style>
-.custom-table {{ width: 100%; border-collapse: collapse; font-size: 13px; color: #333; background-color: white; }}
-.custom-table th {{ background-color: #F8F9FA; border: 1px solid #DEE2E6; padding: 10px; text-align: center !important; vertical-align: middle !important; font-weight: bold; position: sticky; top: 0; z-index: 2; }}
-.custom-table thead tr:nth-child(2) th {{ top: 38px; }}
-.custom-table td {{ border: 1px solid #DEE2E6; padding: 8px 10px; text-align: center !important; vertical-align: middle !important; }}
-.custom-table tbody tr:hover {{ background-color: #F1F3F5; }}
-.custom-table td:last-child {{ text-align: left !important; white-space: pre-wrap !important; min-width: 450px; line-height: 1.5; }}
-</style>
-{html_str}
-</div>"""
+            wrapped_html = f"<div style='width: 100%; max-height: 500px; overflow: auto; border: 1px solid #DEE2E6; border-radius: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 30px;'><style>.custom-table {{ width: 100%; border-collapse: collapse; font-size: 13px; color: #333; background-color: white; }}.custom-table th {{ background-color: #F8F9FA; border: 1px solid #DEE2E6; padding: 10px; text-align: center !important; font-weight: bold; position: sticky; top: 0; z-index: 2; }}.custom-table thead tr:nth-child(2) th {{ top: 38px; }}.custom-table td {{ border: 1px solid #DEE2E6; padding: 8px 10px; text-align: center !important; }}.custom-table td:last-child {{ text-align: left !important; min-width: 450px; line-height: 1.5; }}</style>{html_str}</div>"
             if is_multi:
-                wrapped_html = re.sub(r'<th class="col_heading level0 col10".*?>OPEN ISSUE</th>', r'<th class="col_heading level0 col10" rowspan="2" style="vertical-align: middle;">OPEN ISSUE</th>', wrapped_html)
-                wrapped_html = re.sub(r'<th class="col_heading level1 col10".*?>OPEN ISSUE</th>', '', wrapped_html)
+                wrapped_html = re.sub(r'<th class=\"col_heading level0 col10\".*?>OPEN ISSUE</th>', r'<th class=\"col_heading level0 col10\" rowspan=\"2\" style=\"vertical-align: middle;\">OPEN ISSUE</th>', wrapped_html)
+                wrapped_html = re.sub(r'<th class=\"col_heading level1 col10\".*?>OPEN ISSUE</th>', '', wrapped_html)
             st.markdown(wrapped_html, unsafe_allow_html=True)
 
         tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["📈 종합 효율 추이", "📝 OPEN ISSUE", "📅 일별 상세 현황", "🏆 효율 BEST&WORST", "🛑 비가동 BEST&WORST", "📉 효율 급변 추적", "🤖 AI 챗봇"])
@@ -303,7 +295,7 @@ if data_to_process:
             sel_m5 = st.multiselect("📅 월 선택", mons5, default=[mons5[-1]] if mons5 else [], key='t5_m')
             t5_df = f_df[f_df['생산월'].isin(sel_m5)].copy()
             if not t5_df.empty:
-                for label, asc in [("🏆 BEST 5 (비가동 최소)", True), ("🚨 WORST 5 (비가동 최대)", False)]:
+                for label, asc in [("🏆 BEST 5", True), ("🚨 WORST 5", False)]:
                     st.markdown(f"<h4>{label}</h4>", unsafe_allow_html=True)
                     res = t5_df.sort_values(by='비가동시간', ascending=asc).head(5)
                     res_disp = res[['생산일', '설비명', '품명', '비가동시간', 'OPEN ISSUE']].copy()
