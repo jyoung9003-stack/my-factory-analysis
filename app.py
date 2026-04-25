@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots  # 🚨 콤보 차트를 위한 모듈 추가
+from plotly.subplots import make_subplots
 import re
 import os
 import numpy as np
@@ -216,7 +216,7 @@ if data_to_process:
                 r5 = p_df.sort_values('sort_key').tail(5); r_cols = st.columns(5)
                 for i, (_, r) in enumerate(r5.iterrows()):
                     oee = safe_float(r[y_v])
-                    tgt = 0.86 # 🚨 26년 고정 목표 86%
+                    tgt = 0.86 
                     color, bg = ("#1F77B4", "#F8FBFF") if oee >= tgt else ("#FF4B4B", "#FFF5F5")
                     with r_cols[i]: 
                         st.markdown(f"<div style='background-color: {bg}; border: 1px solid {color}40; border-top: 4px solid {color}; border-radius: 8px; padding: 12px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 10px;'><div style='font-size: 14px; color: #495057; font-weight: bold; margin-bottom: 8px;'>{r['생산일']}</div><div style='font-size: 26px; font-weight: 900; color: {color}; margin-bottom: 8px;'>{oee:.1%}</div></div>", unsafe_allow_html=True)
@@ -227,7 +227,6 @@ if data_to_process:
             mons = list(dict.fromkeys(p_df['생산월'].tolist()))
             sel_mons = st.multiselect("📅 조회할 월을 선택하세요", mons, default=[mons[-1]] if mons else [], key='t1_m')
             
-            # 🌟 [수정 2] 탭 1 콤보 차트 (가동대수 막대 + 종합효율 선)
             for m in sel_mons:
                 m_p = p_df[p_df['생산월'] == m].copy()
                 if m_p.empty: continue
@@ -240,14 +239,11 @@ if data_to_process:
                 combo['x_label'] = combo['생산일']
                 
                 fig1 = make_subplots(specs=[[{"secondary_y": True}]])
-                
-                # 1. 가동대수 바 차트 (회색)
                 fig1.add_trace(go.Bar(
                     x=combo['x_label'], y=combo['가동대수'], name='가동 대수',
                     marker_color='#E9ECEF', text=combo['가동대수'], textposition='inside'
                 ), secondary_y=False)
                 
-                # 2. 종합효율 라인 차트 (파란색/빨간색 텍스트)
                 text_colors = ['#1F77B4' if safe_float(row[y_v]) >= 0.86 else '#FF4B4B' for _, row in combo.iterrows()]
                 fig1.add_trace(go.Scatter(
                     x=combo['x_label'], y=combo[y_v], name='종합효율', mode='lines+markers+text',
@@ -257,9 +253,7 @@ if data_to_process:
                     textfont=dict(color=text_colors, weight='bold')
                 ), secondary_y=True)
                 
-                # 3. 86% 목표 점선 추가
                 fig1.add_hline(y=0.86, line_dash='dash', line_color='#FF4B4B', annotation_text='목표 86%', secondary_y=True)
-                
                 fig1.update_layout(
                     title=f"📈 {m} 생산성 통합 추이", plot_bgcolor='white', paper_bgcolor='white',
                     legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="right", x=1),
@@ -279,11 +273,12 @@ if data_to_process:
             all_d2 = list(reversed([d for d in t2_df['생산일'].unique() if str(d).strip() != ""]))
             if all_d2:
                 sd2 = st.selectbox("조회할 생산일 선택", all_d2, key='tab2_date')
-                issue_df = t2_df[(t2_df['생산일'] == sd2) & (t2_df['OPEN ISSUE'] != "")].copy()
+                
+                # 🚨 [수정 3] 이슈가 없어도 모든 설비를 가져오도록 조건 변경
+                issue_df = t2_df[t2_df['생산일'] == sd2].copy()
+                
                 if not issue_df.empty:
                     issue_disp = issue_df[['생산일', '설비명', '품명', '종합효율', 'OPEN ISSUE']].copy()
-                    
-                    # 🚨 [수정 4] 탭 2 설비명 순서대로 나열
                     issue_disp = issue_disp.sort_values(by='설비명').reset_index(drop=True)
                     
                     for idx, row in issue_disp.iterrows():
@@ -294,7 +289,7 @@ if data_to_process:
                             
                     issue_disp['OPEN ISSUE'] = issue_disp['OPEN ISSUE'].apply(split_issue_to_columns)
                     render_styler_to_html(issue_disp.style.hide(axis="index"))
-                else: st.info("특이사항이 없습니다.")
+                else: st.info("데이터가 없습니다.")
 
         # TAB 3
         with tab3:
@@ -307,25 +302,33 @@ if data_to_process:
                 sd3 = st.selectbox("📅 생산일 선택", all_d3, key='tab3_date')
                 day_df = t3_df[t3_df['생산일'] == sd3].copy().sort_values(by='설비명').reset_index(drop=True)
                 
-                # 🌟 [수정 1] 전광판 느낌의 가동 현황 요약 박스
-                active_count = day_df[day_df['종합효율'] > 0]['설비명'].nunique()
+                active_day = day_df[day_df['종합효율'] > 0].sort_values(by='종합효율', ascending=False)
+                
+                active_count = active_day['설비명'].nunique()
                 total_count = day_df['설비명'].nunique()
+                
+                # 🌟 [수정 1] 전광판 안에 BEST 5 / WORST 5 텍스트 추가
+                best_str = ", ".join([f"<b>{str(r['설비명']).split(' - ')[0]}</b>({safe_float(r['종합효율']):.1%})" for _, r in active_day.head(5).iterrows()])
+                worst_str = ", ".join([f"<b>{str(r['설비명']).split(' - ')[0]}</b>({safe_float(r['종합효율']):.1%})" for _, r in active_day.tail(5).sort_values(by='종합효율', ascending=True).iterrows()])
+                
                 st.markdown(f"""
                 <div style='background: linear-gradient(135deg, #2B3A55, #1F77B4); color: white; padding: 20px; border-radius: 12px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 25px;'>
                     <div style='font-size: 16px; opacity: 0.9; margin-bottom: 5px;'>💡 {sd3} 설비 가동 현황</div>
-                    <div style='font-size: 24px; font-weight: 900;'>총 <span style='font-size: 32px; color: #E9ECEF;'>{total_count}</span>대 중 <span style='font-size: 36px; color: #FFD700;'>{active_count}</span>대 가동</div>
+                    <div style='font-size: 24px; font-weight: 900; margin-bottom: 15px;'>총 <span style='font-size: 32px; color: #E9ECEF;'>{total_count}</span>대 중 <span style='font-size: 36px; color: #FFD700;'>{active_count}</span>대 가동</div>
+                    <div style='background-color: rgba(255,255,255,0.15); padding: 12px; border-radius: 8px; font-size: 14px; text-align: left; display: inline-block; width: 100%; box-sizing: border-box;'>
+                        <div style='margin-bottom: 8px;'><span style='color: #20C997; font-weight: 900; font-size: 15px;'>🏆 BEST 5:</span> {best_str}</div>
+                        <div><span style='color: #FF4B4B; font-weight: 900; font-size: 15px;'>🚨 WORST 5:</span> {worst_str}</div>
+                    </div>
                 </div>
                 """, unsafe_allow_html=True)
                 
                 st.markdown(f"#### 📊 {sd3} 설비별 종합효율 비교")
-                active_day = day_df[day_df['종합효율'] > 0].sort_values(by='종합효율', ascending=False)
                 
-                # 🌟 [수정 3] 종합효율 바 차트 86% 목표 점선 추가
+                # 🌟 [수정 2] 86% 목표선 제거 & 개별 목표효율 기준 컬러링 복구
                 if not active_day.empty:
-                    bar_colors = ['#1F77B4' if safe_float(row['종합효율']) >= 0.86 else '#FF4B4B' for _, row in active_day.iterrows()]
+                    bar_colors = ['#1F77B4' if safe_float(row['종합효율']) >= safe_float(row['목표효율']) else '#FF4B4B' for _, row in active_day.iterrows()]
                     fig3 = px.bar(active_day, x='설비명', y='종합효율', text_auto='.1%')
                     fig3.update_traces(marker_color=bar_colors, textposition="outside", textfont=dict(size=12, weight="bold"))
-                    fig3.add_hline(y=0.86, line_dash="dash", line_color="#FF4B4B", annotation_text="목표 86%")
                     fig3.update_xaxes(title="", tickangle=45)
                     fig3.update_yaxes(title="종합효율", tickformat='.0%', range=[0, 1.2], showgrid=True, gridcolor='rgba(230,230,230,0.5)')
                     fig3.update_layout(height=400, margin=dict(l=40, r=40, t=40, b=80), plot_bgcolor='white', paper_bgcolor='white')
@@ -357,7 +360,7 @@ if data_to_process:
                     styles = [''] * len(row)
                     idx = row.name
                     try:
-                        if 0 < safe_float(day_df.loc[idx, '종합효율']) < 0.86: # 86% 기준
+                        if 0 < safe_float(day_df.loc[idx, '종합효율']) < safe_float(day_df.loc[idx, '목표효율']):
                             pos = row.index.get_loc(('생산성', '종합효율'))
                             if isinstance(pos, np.ndarray): pos = np.where(pos)[0][0]
                             styles[pos] = 'color: #FF4B4B; font-weight: bold;'
