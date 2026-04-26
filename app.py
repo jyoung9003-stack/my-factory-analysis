@@ -38,7 +38,7 @@ st.markdown("""
     .section-banner {
         background-color: #ffffff;
         border: 1px solid #F1F5F9;
-        border-left: 6px solid #D91B1B; /* DURING Signature Red */
+        border-left: 6px solid #D91B1B;
         padding: 16px 22px;
         border-radius: 10px;
         margin-top: 30px;
@@ -52,7 +52,6 @@ st.markdown("""
         font-size: 19px;
     }
 
-    /* 탭별 AI 맞춤형 분석 리포트 카드 */
     .analysis-report-card {
         background-color: #FFF5F5;
         border: 1px solid #FEE2E2;
@@ -95,7 +94,6 @@ def safe_float(val):
 def render_section_title(text):
     st.markdown(f"<div class='section-banner'><h3>{text}</h3></div>", unsafe_allow_html=True)
 
-# 🌟 탭별 맞춤형 AI 리포트를 그려주는 공통 함수
 def render_tab_insight(title, content):
     st.markdown(f"""
     <div class='analysis-report-card'>
@@ -105,6 +103,36 @@ def render_tab_insight(title, content):
         </p>
     </div>
     """, unsafe_allow_html=True)
+
+# 🌟 [자연어 처리 로직] OPEN ISSUE 문구를 복붙 느낌 없이 사람처럼 요약해주는 함수
+def get_natural_issue_summary(issue_text):
+    if not issue_text or str(issue_text).strip() in ['', 'nan', 'None', '0', '0.0']:
+        return "별도의 특이사항 없이"
+    
+    text = str(issue_text)
+    # 1. 특수기호 및 단순 교대조 지시어, 상투적 표현 삭제 (허구 작성 아님, 순수 필터링)
+    text = re.sub(r'[\*→\-\.※○●]', ' ', text)
+    text = re.sub(r'\b(주간|야간|주, 야간|주야간|상기\s*\d+건|해당|발생)\b', ' ', text)
+    
+    # 2. 줄바꿈을 기준으로 문제 상황을 분리하고 다중 공백 제거
+    phrases = [p.strip() for p in text.split('\n') if p.strip()]
+    
+    valid_phrases = []
+    for p in phrases:
+        clean_p = re.sub(r'\s+', ' ', p).strip()
+        if len(clean_p) > 3: # 너무 짧은 무의미한 단어는 제외
+            valid_phrases.append(clean_p)
+            
+    if not valid_phrases:
+        return "명확히 기록되지 않은 원인"
+        
+    # 3. 핵심 구문을 자연스럽게 연결 (최대 2개까지만 나열하여 지저분하지 않게)
+    if len(valid_phrases) == 1:
+        return f"<b>[{valid_phrases[0]}]</b> 이슈"
+    elif len(valid_phrases) == 2:
+        return f"<b>[{valid_phrases[0]}]</b> 및 <b>[{valid_phrases[1]}]</b> 이슈"
+    else:
+        return f"<b>[{valid_phrases[0]}]</b>, <b>[{valid_phrases[1]}]</b> 등 다수의 복합적인 요인"
 
 st.markdown("<h1 style='margin-top: 10px; margin-bottom: 10px; color: #1E293B; font-weight: 900; font-size: 30px;' class='notranslate'>사출생산팀 일일 생산성 정밀 분석</h1>", unsafe_allow_html=True)
 
@@ -236,7 +264,6 @@ if data_to_process:
             night_html = '<br>'.join(night_lines) if night_lines else "<span style='color:#ADB5BD; font-size:12px;'>특이사항 없음</span>"
             return f"<div style='display: flex; gap: 10px; margin-top: 5px; width: 100%; min-width: 400px;'><div style='flex: 1; background-color: #F8FAFC; border: 1px solid #E9ECEF; border-radius: 6px; padding: 12px; border-top: 3px solid #FBBF24;'><div style='font-size:11px; font-weight:bold; color:#B45309; margin-bottom:4px;'>☀️ 주간</div><div style='font-size:13px; color:#495057; line-height:1.6;'>{day_html}</div></div><div style='flex: 1; background-color: #F8FAFC; border: 1px solid #E9ECEF; border-radius: 6px; padding: 12px; border-top: 3px solid #1E293B;'><div style='font-size:11px; font-weight:bold; color:#1E293B; margin-bottom:4px;'>🌙 야간</div><div style='font-size:13px; color:#495057; line-height:1.6;'>{night_html}</div></div></div>"
 
-        # 🌟 [에러 복구] 오리지널 정밀 필터링 (사이드바) 
         st.sidebar.markdown("<h2 style='font-weight: 800; color: #D91B1B; font-size: 18px; margin-bottom: 20px;'>🎯 정밀 필터링</h2>", unsafe_allow_html=True)
         df['설비명'] = df['설비명'].fillna("").astype(str)
         all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
@@ -255,12 +282,38 @@ if data_to_process:
         sel_prod = st.sidebar.selectbox("📦 품목 선택", ["전체 품목"] + actual_prods)
         f_df = pool_df[pool_df['품명'].str.strip() == sel_prod].copy() if sel_prod != "전체 품목" else pool_df.copy()
 
+        # 최상단 통합 분석용 (선택적)
+        def render_total_analysis(filtered_df):
+            if filtered_df.empty: return
+            avg_oee = filtered_df[filtered_df['종합효율'] > 0]['종합효율'].mean()
+            worst_row = filtered_df[filtered_df['종합효율'] > 0].sort_values(by='종합효율').iloc[0]
+            worst_mc = str(worst_row['설비명']).split(' - ')[0]
+            worst_prod = worst_row['품명']
+            worst_oee = worst_row['종합효율']
+            
+            # 🌟 [적용] 자연스러운 이슈 요약으로 변환
+            summarized_issue = get_natural_issue_summary(worst_row['OPEN ISSUE'])
+            
+            st.markdown(f"""
+            <div class='analysis-report-card'>
+                <h4 style='margin-top:0; color:#9F1239; font-weight:800;'>📊 금일 생산 실적 종합 분석 리포트</h4>
+                <p style='line-height:1.7; font-size:15px; color:#334155;'>
+                    금일 사출생산팀의 <b>평균 종합효율은 {avg_oee:.1%}</b>를 기록하였습니다.<br>
+                    가장 집중 관리가 필요한 설비는 <b>{worst_mc} ({worst_prod})</b>호기로, 
+                    <b>종합효율 {worst_oee:.1%}</b>로 저조한 수치를 보였습니다.
+                    오픈 이슈 확인 결과, 해당 설비는 {summarized_issue}(으)로 인해 가동에 차질이 발생한 것으로 분석됩니다. 
+                    해당 요인에 대한 신속한 조치 및 재발 방지 모니터링이 필요합니다.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        render_total_analysis(d_f_df)
+
         def render_styler_to_html(styler, is_multi=False):
             try: html_str = styler.to_html(escape=False)
             except: html_str = styler.to_html()
             html_str = html_str.replace('<table', '<table class="custom-table notranslate"')
             
-            # 프리미엄 레드 표 디자인
             wrapped_html = f"""<div style='width: 100%; max-height: 500px; overflow: auto; border: 1px solid #E2E8F0; border-radius: 8px; box-shadow: 0 1px 3px 0 rgba(0,0,0,0.03); background-color: white; margin-bottom: 24px;'><style>.custom-table {{ width: 100%; border-collapse: collapse; font-size: 13px; color: #1E293B; background-color: white; }}.custom-table th {{ background-color: #D91B1B; border: 1px solid #E2E8F0; padding: 12px 16px; text-align: center !important; font-weight: 600; color: white; position: sticky; top: 0; z-index: 2; }}.custom-table thead tr:nth-child(2) th {{ top: 40px; }}.custom-table td {{ border: 1px solid #F1F5F9; padding: 10px 16px; text-align: center !important; }}.custom-table td:last-child {{ text-align: left !important; min-width: 450px; line-height: 1.5; }} .custom-table tr:hover {{ background-color: #FFF5F5; }}</style>{html_str}</div>"""
             if is_multi:
                 wrapped_html = re.sub(r'<th class=\"col_heading level0 col10\".*?>OPEN ISSUE</th>', r'<th class=\"col_heading level0 col10\" rowspan=\"2\" style=\"vertical-align: middle;\">OPEN ISSUE</th>', wrapped_html)
@@ -280,7 +333,6 @@ if data_to_process:
                 y_v = '공장종합효율'
             else: 
                 act_oee = f_df[f_df['종합효율'] > 0]
-                # 🚨 [에러 완벽 차단] numeric_only=True 추가하여 글자 연산 방지
                 p_df = act_oee.groupby(['sort_key', '생산월', '생산일'])[['종합효율', '목표효율']].mean(numeric_only=True).reset_index().sort_values('sort_key')
                 tgt = 0.86
                 y_v = '종합효율'
@@ -293,11 +345,10 @@ if data_to_process:
                 m_p = p_df[p_df['생산월'] == m].copy()
                 if m_p.empty: continue
                 
-                # 🌟 [탭 1 맞춤형 AI 리포트]
                 avg_oee = m_p[y_v].mean()
                 max_row = m_p.loc[m_p[y_v].idxmax()]
                 min_row = m_p.loc[m_p[y_v].idxmin()]
-                c_text = f"<b>{m}</b> 전체 가동일 기준 <b>평균 종합효율은 {avg_oee:.1%}</b>입니다.<br>해당 월 중 가장 생산성이 우수했던 날은 <b>{max_row['생산일']} ({max_row[y_v]:.1%})</b>이며, 반대로 가장 저조했던 날은 <b>{min_row['생산일']} ({min_row[y_v]:.1%})</b>로 확인됩니다. 일자별 효율 편차와 가동 대수의 상관관계를 점검하시기 바랍니다."
+                c_text = f"<b>{m}</b> 전체 가동일 기준 <b>평균 종합효율은 {avg_oee:.1%}</b>입니다.<br>해당 월 중 가장 생산성이 우수했던 날은 <b>{max_row['생산일']} ({max_row[y_v]:.1%})</b>이며, 반대로 가장 저조했던 날은 <b>{min_row['생산일']} ({min_row[y_v]:.1%})</b>로 확인됩니다."
                 render_tab_insight(f"📊 {m} 종합 생산성 동향 총평", c_text)
 
                 m_f_df = f_df[f_df['생산월'] == m].copy()
@@ -316,7 +367,7 @@ if data_to_process:
                 ))
                 fig_oee.add_hline(y=0.86, line_dash='dash', line_color='#D91B1B', annotation_text='목표 86%')
                 fig_oee.update_layout(
-                    title=dict(text=f"📊 {m} 종합효율 추이", font=dict(size=16, weight=800, color='#1E293B')),
+                    title=dict(text=f"📈 {m} 종합효율 추이", font=dict(size=16, weight=800, color='#1E293B')),
                     plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
                     margin=dict(l=10, r=10, t=50, b=10), height=350,
                     xaxis=dict(gridcolor='#F1F5F9'), yaxis=dict(gridcolor='#F1F5F9', tickformat='.0%', range=[0, 1.0])
@@ -374,14 +425,16 @@ if data_to_process:
                 day_df['설비_짧은명'] = day_df['설비명'].apply(lambda x: str(x).split(' - ')[0].strip())
                 active_day = day_df[day_df['종합효율'] > 0].sort_values(by='종합효율', ascending=False)
                 
-                # 🌟 [탭 3 맞춤형 AI 리포트]
                 if not active_day.empty:
                     d_avg_oee = active_day['종합효율'].mean()
                     worst_r = active_day.iloc[-1]
                     w_mc = str(worst_r['설비명']).split(' - ')[0]
                     w_prod = worst_r['품명']
-                    w_issue = worst_r['OPEN ISSUE'] if str(worst_r['OPEN ISSUE']).strip() else "특이사항 기록 없음"
-                    c_text3 = f"<b>{sd3}</b> 당일 생산 설비의 <b>평균 종합효율은 {d_avg_oee:.1%}</b>입니다.<br>가장 효율이 저조했던 <b>{w_mc} ({w_prod}, {worst_r['종합효율']:.1%})</b>의 경우, <b>'{w_issue}'</b> 문제가 핵심 원인으로 작용했습니다. 해당 이슈의 재발 여부 및 야간/주간 교대조의 인수인계 사항을 집중 점검하시기 바랍니다."
+                    
+                    # 🌟 [적용] 자연스러운 이슈 요약
+                    w_issue_summary = get_natural_issue_summary(worst_r['OPEN ISSUE'])
+                    
+                    c_text3 = f"<b>{sd3}</b> 당일 생산 설비의 <b>평균 종합효율은 {d_avg_oee:.1%}</b>입니다.<br>가장 효율이 저조했던 <b>{w_mc} ({w_prod}, {worst_r['종합효율']:.1%})</b>의 경우, {w_issue_summary}(이)가 핵심 원인으로 작용했습니다. 해당 이슈의 재발 여부를 집중 점검하시기 바랍니다."
                     render_tab_insight(f"📊 {sd3} 일일 가동 종합평", c_text3)
 
                 active_count = active_day['설비명'].nunique()
@@ -419,7 +472,6 @@ if data_to_process:
                 st.write("---")
                 disp_day = day_df[target_order].copy()
                 
-                # 🚨 [에러 완벽 차단] 줄바꿈 철저히 분리
                 for idx, row in disp_day.iterrows():
                     prod = str(row['품명']).strip()
                     if prod in ['', 'nan', '0', '0.0']:
@@ -461,14 +513,13 @@ if data_to_process:
             sel_m4 = st.multiselect("📅 월 선택", mons4, default=[mons4[-1]] if mons4 else [], key='t4_m')
             t4_df = f_df[(f_df['생산월'].isin(sel_m4)) & (f_df['종합효율'] > 0)].copy()
             
-            # 🌟 [탭 4 맞춤형 AI 리포트]
             if not t4_df.empty:
                 b5 = t4_df.sort_values(by='종합효율', ascending=False).head(5)
                 w5 = t4_df.sort_values(by='종합효율', ascending=True).head(5)
                 b_avg = b5['종합효율'].mean()
                 w_avg = w5['종합효율'].mean()
                 w_mc_list = ", ".join(list(dict.fromkeys([str(x).split(' - ')[0] for x in w5['설비명']])))
-                c_text4 = f"해당 기간 내 <b>최상위 5건의 평균 종합효율은 {b_avg:.1%}</b>인 반면, <b>최하위 5건은 평균 {w_avg:.1%}</b>에 머물러 극심한 양극화를 보이고 있습니다.<br>특히 하위 설비군(<b>{w_mc_list}</b> 등)에서 반복적인 수율 저하가 관찰되며, 하단 표의 오픈 이슈를 대조하여 고질적인 불량 패턴이나 설비 노후화 문제를 파악해야 합니다."
+                c_text4 = f"해당 기간 내 <b>최상위 5건의 평균 종합효율은 {b_avg:.1%}</b>인 반면, <b>최하위 5건은 평균 {w_avg:.1%}</b>에 머물러 양극화를 보이고 있습니다.<br>하위 설비군(<b>{w_mc_list}</b> 등)에서 관찰되는 불량 패턴이나 설비 문제를 하단 리스트의 이슈를 통해 파악하시기 바랍니다."
                 render_tab_insight("📊 종합효율 양극화(BEST vs WORST) 진단", c_text4)
 
                 for label, asc in [("🏆 BEST 5 (최고 효율)", False), ("🚨 WORST 5 (최저 효율)", True)]:
@@ -497,15 +548,17 @@ if data_to_process:
             sel_m5 = st.multiselect("📅 월 선택", mons5, default=[mons5[-1]] if mons5 else [], key='t5_m')
             t5_df = f_df[f_df['생산월'].isin(sel_m5)].copy()
             
-            # 🌟 [탭 5 맞춤형 AI 리포트]
             if not t5_df.empty:
                 w_dt = t5_df.sort_values(by='비가동시간', ascending=False).head(10)
                 tot_dt = w_dt['비가동시간'].sum()
                 if tot_dt > 0:
                     w1_r = w_dt.iloc[0]
                     w1_mc = str(w1_r['설비명']).split(' - ')[0]
-                    w1_iss = w1_r['OPEN ISSUE'] if str(w1_r['OPEN ISSUE']).strip() else "원인 미상 (기록 누락)"
-                    c_text5 = f"해당 기간 동안 <b>비가동 최악 10건의 총 누적 손실은 {tot_dt:.1f}시간</b>에 달합니다.<br>가장 치명적인 멈춤을 유발한 설비는 <b>{w1_mc} ({w1_r['비가동시간']:.1f}시간 손실)</b>이며, 주된 사유는 <b>'{w1_iss}'</b>로 분석되었습니다. 하단 리스트의 주요 비가동 원인들을 그룹화하여, 예방 보전(PM) 스케줄을 앞당길 것을 강력히 권고합니다."
+                    
+                    # 🌟 [적용] 자연스러운 이슈 요약
+                    w1_iss_summary = get_natural_issue_summary(w1_r['OPEN ISSUE'])
+                    
+                    c_text5 = f"해당 기간 동안 <b>비가동 최악 10건의 총 누적 손실은 {tot_dt:.1f}시간</b>에 달합니다.<br>가장 치명적인 멈춤을 유발한 설비는 <b>{w1_mc} ({w1_r['비가동시간']:.1f}시간 손실)</b>이며, 주된 사유는 {w1_iss_summary}(으)로 분석되었습니다. 예방 보전(PM) 스케줄 점검을 권고합니다."
                     render_tab_insight("🛑 비가동 손실 타격 정밀 진단", c_text5)
 
                 st.markdown("<h4 style='font-weight: 800; color: #1E293B; margin-top: 15px; margin-bottom: 15px; font-size: 16px;'><span style='color: #D91B1B; margin-right: 8px;'>■</span>🚨 WORST 10 (비가동 최장 설비)</h4>", unsafe_allow_html=True)
