@@ -106,7 +106,7 @@ def render_tab_insight(title, content):
 
 def get_natural_issue_summary(issue_text):
     if not issue_text or str(issue_text).strip() in ['', 'nan', 'None', '0', '0.0']:
-        return "별도의 특이사항 없이"
+        return "별도의 특이사항 없음"
     
     text = str(issue_text)
     text = re.sub(r'[\*→\-\.※○●]', ' ', text)
@@ -124,11 +124,11 @@ def get_natural_issue_summary(issue_text):
         return "명확히 기록되지 않은 원인"
         
     if len(valid_phrases) == 1:
-        return f"<b>[{valid_phrases[0]}]</b> 이슈"
+        return f"{valid_phrases[0]}"
     elif len(valid_phrases) == 2:
-        return f"<b>[{valid_phrases[0]}]</b> 및 <b>[{valid_phrases[1]}]</b> 이슈"
+        return f"{valid_phrases[0]} 및 {valid_phrases[1]}"
     else:
-        return f"<b>[{valid_phrases[0]}]</b>, <b>[{valid_phrases[1]}]</b> 등 다수의 복합적인 요인"
+        return f"{valid_phrases[0]}, {valid_phrases[1]} 등 복합적 요인"
 
 st.markdown("<h1 style='margin-top: 10px; margin-bottom: 10px; color: #1E293B; font-weight: 900; font-size: 30px;' class='notranslate'>사출생산팀 일일 생산성 정밀 분석</h1>", unsafe_allow_html=True)
 
@@ -196,6 +196,8 @@ if data_to_process:
         else: clean_date = file_name.split('.')[0]; month_str = "분류 안됨"; sort_key = clean_date
         
         daily_total_oee = 0.0; daily_total_perf = 0.0; daily_total_avail = 0.0; daily_total_qual = 0.0
+        
+        # 🌟 [핵심 수정 1] 업로드한 원본 파일의 "합계" 행에서 정확한 공장 전체 수치 추출
         for _, row in temp_df.iterrows():
             m_val = str(row.get('설비명', ''))
             if 'TOTAL' in m_val.upper() or '합계' in m_val or 'GRAND' in m_val.upper():
@@ -204,6 +206,7 @@ if data_to_process:
                 daily_total_avail = safe_float(row.get('시간가동율', 0.0))
                 daily_total_qual = safe_float(row.get('양품율', 0.0))
                 break
+                
         if daily_total_oee == 0.0:
             try: 
                 daily_total_oee = safe_float(temp_df['종합효율'].iloc[45])
@@ -278,8 +281,6 @@ if data_to_process:
         sel_prod = st.sidebar.selectbox("📦 품목 선택", ["전체 품목"] + actual_prods)
         f_df = pool_df[pool_df['품명'].str.strip() == sel_prod].copy() if sel_prod != "전체 품목" else pool_df.copy()
 
-        # 🚨 [수정 1] 모든 탭에 공통으로 뜨던 전체 분석 요약을 완전히 삭제했습니다! (이제 탭 안에서만 나옵니다)
-
         def render_styler_to_html(styler, is_multi=False):
             try: html_str = styler.to_html(escape=False)
             except: html_str = styler.to_html()
@@ -319,7 +320,6 @@ if data_to_process:
                 avg_oee = m_p[y_v].mean()
                 max_row = m_p.loc[m_p[y_v].idxmax()]
                 min_row = m_p.loc[m_p[y_v].idxmin()]
-                # 🌟 [수정 2] 정확한 월(Month)만 지칭하도록 수정
                 c_text = f"<b>{m}</b> 전체 가동일 기준 <b>평균 종합효율은 {avg_oee:.1%}</b>입니다.<br>해당 월 중 가장 생산성이 우수했던 날은 <b>{max_row['생산일']} ({max_row[y_v]:.1%})</b>이며, 반대로 가장 저조했던 날은 <b>{min_row['생산일']} ({min_row[y_v]:.1%})</b>로 확인됩니다."
                 render_tab_insight(f"📊 {m} 종합 생산성 동향 총평", c_text)
 
@@ -398,15 +398,20 @@ if data_to_process:
                 active_day = day_df[day_df['종합효율'] > 0].sort_values(by='종합효율', ascending=False)
                 
                 if not active_day.empty:
-                    d_avg_oee = active_day['종합효율'].mean()
+                    # 🌟 [수정 1] 원본 파일의 "합계" 라인에서 정확한 종합효율(Total OEE) 추출
+                    day_total_df = daily_df[daily_df['생산일'] == sd3]
+                    if not day_total_df.empty and day_total_df['공장종합효율'].iloc[0] > 0:
+                        d_avg_oee = day_total_df['공장종합효율'].iloc[0]
+                    else:
+                        d_avg_oee = active_day['종합효율'].mean()
+                        
                     worst_r = active_day.iloc[-1]
                     w_mc = str(worst_r['설비명']).split(' - ')[0]
                     w_prod = worst_r['품명']
                     w_issue_summary = get_natural_issue_summary(worst_r['OPEN ISSUE'])
                     
-                    # 🌟 [수정 2] 선택된 특정 일자에 맞는 문구로 수정 완료
-                    c_text3 = f"<b>{sd3}</b> 당일 생산 설비의 <b>평균 종합효율은 {d_avg_oee:.1%}</b>입니다.<br>가장 효율이 저조했던 <b>{w_mc} ({w_prod}, {worst_r['종합효율']:.1%})</b>의 경우, {w_issue_summary}(이)가 핵심 원인으로 작용했습니다. 해당 이슈의 재발 여부를 집중 점검하시기 바랍니다."
-                    render_tab_insight(f"📊 {sd3} 일일 가동 종합평", c_text3)
+                    c_text3 = f"<b>{sd3}</b> 당일 전체 설비의 <b>공장 종합효율(합계 기준)은 {d_avg_oee:.1%}</b>입니다.<br>가장 효율이 저조했던 <b>{w_mc} ({w_prod}, {worst_r['종합효율']:.1%})</b>의 경우, <b><span style='color:#D91B1B;'>[{w_issue_summary}]</span></b> 등의 이슈가 핵심 원인으로 파악되었습니다. 해당 라인의 인수인계 사항을 집중 점검하시기 바랍니다."
+                    render_tab_insight(f"📊 {sd3} 일일 가동 총평", c_text3)
 
                 active_count = active_day['설비명'].nunique()
                 total_count = day_df['설비명'].nunique()
@@ -489,9 +494,19 @@ if data_to_process:
                 w5 = t4_df.sort_values(by='종합효율', ascending=True).head(5)
                 b_avg = b5['종합효율'].mean()
                 w_avg = w5['종합효율'].mean()
-                w_mc_list = ", ".join(list(dict.fromkeys([str(x).split(' - ')[0] for x in w5['설비명']])))
-                c_text4 = f"해당 기간 내 <b>최상위 5건의 평균 종합효율은 {b_avg:.1%}</b>인 반면, <b>최하위 5건은 평균 {w_avg:.1%}</b>에 머물러 양극화를 보이고 있습니다.<br>하위 설비군(<b>{w_mc_list}</b> 등)에서 관찰되는 불량 패턴이나 설비 문제를 하단 리스트의 이슈를 통해 파악하시기 바랍니다."
-                render_tab_insight("📊 종합효율 양극화(BEST vs WORST) 진단", c_text4)
+                
+                # 🌟 [수정 2] 하위 설비군에 대한 명확한 이슈 브리핑 박스 생성
+                w_details = ""
+                for _, rw in w5.iterrows():
+                    mc = str(rw['설비명']).split(' - ')[0]
+                    pd_name = str(rw['품명'])
+                    oee_val = safe_float(rw['종합효율'])
+                    iss_sum = get_natural_issue_summary(rw['OPEN ISSUE'])
+                    w_details += f"&nbsp;&nbsp;📍 <b>{mc}</b> ({pd_name}, {oee_val:.1%}) ➔ <span style='color:#D91B1B;'>{iss_sum}</span><br>"
+
+                c_text4 = f"해당 기간 내 <b>최상위 5건의 평균 종합효율은 {b_avg:.1%}</b>인 반면, <b>최하위 5건은 평균 {w_avg:.1%}</b>에 머물러 양극화를 보이고 있습니다.<br>특히 하위 설비군에서 다음과 같은 치명적 문제점들이 확인되었습니다:<br><div style='background-color:rgba(217,27,27,0.03); padding:12px; border-radius:8px; margin-top:8px; border-left:3px solid #D91B1B; line-height: 1.6;'>{w_details}</div>위 이슈들을 대조하여 고질적인 불량 패턴이나 설비 노후화 문제를 즉각 파악하시기 바랍니다."
+                
+                render_tab_insight("📊 종합효율 양극화 진단 및 집중관리 대상", c_text4)
 
                 for label, asc in [("🏆 BEST 5 (최고 효율)", False), ("🚨 WORST 5 (최저 효율)", True)]:
                     color = "#20C997" if not asc else "#D91B1B"
@@ -523,11 +538,17 @@ if data_to_process:
                 w_dt = t5_df.sort_values(by='비가동시간', ascending=False).head(10)
                 tot_dt = w_dt['비가동시간'].sum()
                 if tot_dt > 0:
-                    w1_r = w_dt.iloc[0]
-                    w1_mc = str(w1_r['설비명']).split(' - ')[0]
-                    w1_iss_summary = get_natural_issue_summary(w1_r['OPEN ISSUE'])
+                    # 🌟 [수정 2] 최악 비가동 설비 Top 3를 추출하여 요약 박스 구성
+                    w_dt_details = ""
+                    for _, rw in w_dt.head(3).iterrows():
+                        mc = str(rw['설비명']).split(' - ')[0]
+                        pd_name = str(rw['품명'])
+                        dt_val = safe_float(rw['비가동시간'])
+                        iss_sum = get_natural_issue_summary(rw['OPEN ISSUE'])
+                        w_dt_details += f"&nbsp;&nbsp;🛑 <b>{mc}</b> ({pd_name}, {dt_val:.1f}h 손실) ➔ <span style='color:#D91B1B;'>{iss_sum}</span><br>"
+
+                    c_text5 = f"해당 기간 동안 <b>비가동 최악 10건의 총 누적 손실은 {tot_dt:.1f}시간</b>에 달합니다.<br>가장 치명적인 멈춤을 유발한 상위 3대 핵심 설비 및 사유는 다음과 같습니다:<br><div style='background-color:rgba(217,27,27,0.03); padding:12px; border-radius:8px; margin-top:8px; border-left:3px solid #D91B1B; line-height: 1.6;'>{w_dt_details}</div>위 핵심 요인들을 중심으로 예방 보전(PM) 및 자재 공급 스케줄을 즉각 점검할 것을 권고합니다."
                     
-                    c_text5 = f"해당 기간 동안 <b>비가동 최악 10건의 총 누적 손실은 {tot_dt:.1f}시간</b>에 달합니다.<br>가장 치명적인 멈춤을 유발한 설비는 <b>{w1_mc} ({w1_r['비가동시간']:.1f}시간 손실)</b>이며, 주된 사유는 {w1_iss_summary}(으)로 분석되었습니다. 예방 보전(PM) 스케줄 점검을 권고합니다."
                     render_tab_insight("🛑 비가동 손실 타격 정밀 진단", c_text5)
 
                 st.markdown("<h4 style='font-weight: 800; color: #1E293B; margin-top: 15px; margin-bottom: 15px; font-size: 16px;'><span style='color: #D91B1B; margin-right: 8px;'>■</span>🚨 WORST 10 (비가동 최장 설비)</h4>", unsafe_allow_html=True)
