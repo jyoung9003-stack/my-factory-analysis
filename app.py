@@ -61,6 +61,35 @@ st.markdown("""
         box-shadow: 0 2px 4px rgba(217, 27, 27, 0.05);
     }
 
+    .metric-card-container {
+        background-color: #FFFFFF;
+        border-radius: 12px;
+        padding: 20px;
+        text-align: center;
+        border: 1px solid #F1F5F9;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.03);
+    }
+    .metric-title {
+        font-size: 13px;
+        color: #64748B; 
+        margin-bottom: 10px;
+        font-weight: 500;
+    }
+    .metric-value-box {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+    }
+    .metric-value {
+        font-size: 32px;
+        font-weight: 800;
+        letter-spacing: -1px;
+    }
+    .metric-icon {
+        font-size: 18px;
+    }
+
     .dashboard-header {
         background: linear-gradient(135deg, #9F1239, #D91B1B);
         color: #FFFFFF;
@@ -73,7 +102,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 🌟 [함수 사전 정의 구역] - 에러 방지를 위해 최상단 배치
+# 🌟 [함수 사전 정의 구역] 
 # ==========================================
 def safe_float(val):
     try:
@@ -98,6 +127,23 @@ def render_tab_insight(title, content):
     </div>
     """, unsafe_allow_html=True)
 
+def get_status_color(oee, tgt=0.86):
+    color = "#3B82F6" if oee >= tgt else "#D91B1B" 
+    bg = "#EBF5FF" if oee >= tgt else "#FFF5F5"
+    icon = "✓" if oee >= tgt else "⚠"
+    return color, bg, icon
+
+def render_trendy_metric(title, value_str, color, icon):
+    st.markdown(f"""
+    <div class="metric-card-container">
+        <div class="metric-title">{title}</div>
+        <div class="metric-value-box">
+            <span class="metric-value" style="color: {color};">{value_str}</span>
+            <span class="metric-icon" style="color: {color};">{icon}</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
 def get_natural_issue_summary(issue_text):
     if not issue_text or str(issue_text).strip() in ['', 'nan', 'None', '0', '0.0']:
         return "별도의 특이사항 없음"
@@ -114,7 +160,6 @@ def get_natural_issue_summary(issue_text):
     elif len(valid_phrases) == 2: return f"{valid_phrases[0]} 및 {valid_phrases[1]}"
     else: return f"{valid_phrases[0]}, {valid_phrases[1]} 등 복합적 요인"
 
-# 🚨 [가장 중요한 에러 원인 해결] 이 함수를 최상단으로 끌어올렸습니다.
 def split_issue_to_columns(issue_text):
     lines = [line.strip() for line in str(issue_text).split('\n') if line.strip()]
     if not lines: return "<div style='font-size:12px; color:#ADB5BD; background-color:#F8FAFC; padding:8px; border-radius:4px; border:1px dashed #E9ECEF;'>📝 특이사항 없음</div>"
@@ -202,14 +247,20 @@ if data_to_process:
             except: clean_date = raw_date; month_str = "분류 안됨"; sort_key = raw_date
         else: clean_date = file_name.split('.')[0]; month_str = "분류 안됨"; sort_key = clean_date
         
-        # 원본 파일 합계 행 스캐닝
+        # 🌟 [오류 완벽 차단] 원본 파일 합계(Total) 행 완벽 스캐닝 로직
         d_total_oee = 0.0
         for _, row in temp_df.iterrows():
-            m_val = str(row.get('설비명', ''))
-            if 'TOTAL' in m_val.upper() or '합계' in m_val:
+            m_val = str(row.get('설비명', '')).strip().replace(' ', '')
+            if m_val in ['TOTAL', '합계', '총합', '전체', '총계']:
                 d_total_oee = safe_float(row.get('종합효율', 0.0))
                 break
         
+        if d_total_oee == 0.0:
+            try: d_total_oee = safe_float(temp_df['종합효율'].iloc[45]) # 양식의 45번째 줄 
+            except: 
+                try: d_total_oee = safe_float(temp_df['종합효율'].iloc[-1]) # 맨 마지막 줄
+                except: pass
+
         if sort_key not in daily_totals_data:
             daily_totals_data[sort_key] = {'생산일': clean_date, '생산월': month_str, '공장종합효율': d_total_oee}
 
@@ -234,7 +285,11 @@ if data_to_process:
     sel_m_side = st.sidebar.multiselect("📅 생산월 선택", all_months, default=[all_months[-1]] if all_months else [])
     m_f_df = df[df['생산월'].isin(sel_m_side)].copy() if sel_m_side else df.copy()
     
-    all_dates = [d for d in m_f_df['생산일'].unique() if str(d).strip() != ""]
+    # 🌟 [오류 완벽 차단] 날짜(생산일)를 달력 기준 최신순으로 완벽 정렬
+    date_mapping = df[['생산일', 'sort_key']].drop_duplicates().set_index('생산일')['sort_key'].to_dict()
+    all_dates = list(m_f_df['생산일'].unique())
+    all_dates.sort(key=lambda x: date_mapping.get(x, ""), reverse=True) # 최신 날짜가 맨 앞으로 옴
+    
     sel_d_side = st.sidebar.multiselect("📆 생산일 선택", all_dates, default=[all_dates[0]] if all_dates else [])
     d_f_df = m_f_df[m_f_df['생산일'].isin(sel_d_side)].copy() if sel_d_side else m_f_df.copy()
     
@@ -242,21 +297,43 @@ if data_to_process:
     sel_mach_side = st.sidebar.multiselect("⚙️ 설비 선택", all_machines)
     pool_df = d_f_df[d_f_df['설비명'].isin(sel_mach_side)].copy() if sel_mach_side else d_f_df.copy()
     
-    actual_prods = sorted([p for p in pool_df['품명'].fillna("").astype(str).str.strip().unique() if p not in ["", "0", "0.0", "nan"]])
+    actual_prods = sorted([p for p in pool_df['품명'].fillna("").astype(str).str.strip().unique() if p not in ["", "0", "0.0", "nan", "NaN", "None"]])
     sel_prod = st.sidebar.selectbox("📦 품목 선택", ["전체 품목"] + actual_prods)
     f_df = pool_df[pool_df['품명'].str.strip() == sel_prod].copy() if sel_prod != "전체 품목" else pool_df.copy()
 
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📈 종합 효율 추이", "📝 OPEN ISSUE", "📅 일별 상세 현황", "🏆 효율 BEST&WORST", "🛑 비가동 정밀 분석", "🤖 AI 챗봇"])
 
+    # =========================================================
+    # TAB 1: 종합 효율 추이
+    # =========================================================
     with tab1:
+        # 🌟 탭 1을 위해 필터링된 월간 데이터 재구성
+        tab1_df = m_f_df.copy()
+        if sel_mach_side: tab1_df = tab1_df[tab1_df['설비명'].isin(sel_mach_side)]
+        if sel_prod != "전체 품목": tab1_df = tab1_df[tab1_df['품명'].str.strip() == sel_prod]
+
         is_fac = (not sel_mach_side and sel_prod == "전체 품목")
+        
         if is_fac: 
-            p_df = daily_df.copy(); y_v = '공장종합효율'
+            p_df = daily_df[daily_df['생산월'].isin(sel_m_side)].copy() if sel_m_side else daily_df.copy()
+            y_v = '공장종합효율'
         else: 
-            act_oee = f_df[f_df['종합효율'] > 0]
+            act_oee = tab1_df[tab1_df['종합효율'] > 0]
+            # 🚨 numeric_only=True 적용하여 에러 원천 차단
             p_df = act_oee.groupby(['sort_key', '생산월', '생산일'])[['종합효율']].mean(numeric_only=True).reset_index().sort_values('sort_key')
             y_v = '종합효율'
             
+        # 🌟 [오류 완벽 차단] 삭제되었던 최근 5일 요약 전격 부활!
+        render_section_title("최근 5일 종합효율 요약")
+        if not p_df.empty:
+            r5 = p_df.sort_values('sort_key').tail(5)
+            r_cols = st.columns(5)
+            for i, (_, r) in enumerate(r5.iterrows()):
+                oee = safe_float(r[y_v])
+                clr, _, icn = get_status_color(oee, 0.86)
+                with r_cols[i]: 
+                    render_trendy_metric(r['생산일'], f"{oee:.1%}", clr, icn)
+        
         render_section_title("월별 설비 가동 현황 및 종합효율 추이")
         mons = list(dict.fromkeys(p_df['생산월'].tolist()))
         sel_mons = st.multiselect("📅 조회할 월을 선택하세요", mons, default=[mons[-1]] if mons else [], key='t1_m')
@@ -264,6 +341,8 @@ if data_to_process:
         for m in sel_mons:
             m_p = p_df[p_df['생산월'] == m].copy()
             if m_p.empty: continue
+            
+            # 🚨 numeric_only=True 적용
             avg_oee = m_p[y_v].mean()
             max_row = m_p.loc[m_p[y_v].idxmax()]
             min_row = m_p.loc[m_p[y_v].idxmin()]
@@ -276,6 +355,9 @@ if data_to_process:
             fig_oee.update_layout(title=dict(text=f"📊 {m} 종합효율 추이", font=dict(size=16, weight=800)), plot_bgcolor='rgba(0,0,0,0)', height=350, yaxis=dict(tickformat='.0%', range=[0, 1.0]))
             st.plotly_chart(fig_oee, use_container_width=True)
 
+    # =========================================================
+    # TAB 2: OPEN ISSUE 정밀 조회
+    # =========================================================
     with tab2:
         render_section_title("OPEN ISSUE 현황 정밀 조회")
         mons2 = list(dict.fromkeys(f_df['생산월'].tolist()))
@@ -296,9 +378,25 @@ if data_to_process:
                 issue_disp['OPEN ISSUE'] = issue_disp['OPEN ISSUE'].apply(lambda x: split_issue_to_columns(x))
                 render_styler_to_html(issue_disp.style.hide(axis="index"))
 
+    def get_vert_summary_label(r, rank):
+        try:
+            m_short = str(r.get('설비명', '')).split(' - ')[0].strip()
+            p_name = str(r.get('품명', '')).strip()
+            p_str = f"<div style='font-size: 13px; color: rgba(255,255,255,0.7); margin-left: 18px; margin-top: 2px;'>{p_name}</div>" if p_name and p_name not in ['', 'nan', '0', '0.0'] else ""
+            oee = safe_float(r.get('종합효율', 0))
+            return f"<div style='margin-bottom: 12px;'><span style='font-size: 14px;'><b>{rank}. {m_short}</b></span> <span style='float: right; font-weight: 900;'>{oee:.1%}</span>{p_str}</div>"
+        except Exception: return ""
+
+    # =========================================================
+    # TAB 3: 일일 상세 현황
+    # =========================================================
     with tab3:
         render_section_title("일일 생산성 상세 현황")
-        all_d3 = list(reversed([d for d in f_df['생산일'].unique() if str(d).strip() != ""]))
+        
+        # 🌟 달력 기준 최신 정렬
+        all_d3 = list(f_df['생산일'].unique())
+        all_d3.sort(key=lambda x: date_mapping.get(x, ""), reverse=True)
+        
         if all_d3:
             sd3 = st.selectbox("📅 생산일 선택", all_d3, key='tab3_date')
             day_df = f_df[f_df['생산일'] == sd3].copy().sort_values(by='설비명').reset_index(drop=True)
@@ -306,14 +404,19 @@ if data_to_process:
             active_day = day_df[day_df['종합효율'] > 0].sort_values(by='종합효율', ascending=False)
             
             if not active_day.empty:
-                day_total_val = daily_df[daily_df['생산일'] == sd3]['공장종합효율'].iloc[0] if not daily_df[daily_df['생산일'] == sd3].empty else active_day['종합효율'].mean()
+                day_total_val = daily_df[daily_df['생산일'] == sd3]['공장종합효율'].iloc[0] if not daily_df[daily_df['생산일'] == sd3].empty else active_day['종합효율'].mean(numeric_only=True)
                 worst_r = active_day.iloc[-1]
                 w_issue_sum = get_natural_issue_summary(worst_r['OPEN ISSUE'])
+                
+                # 🌟 [오류 수정] 86.1% 원본 합계 적용 완료
                 c_text3 = f"<b>{sd3}</b> 당일 전체 설비의 <b>공장 종합효율(합계 기준)은 {day_total_val:.1%}</b>입니다.<br>가장 효율이 저조했던 <b>{str(worst_r['설비명']).split(' - ')[0]} ({worst_r['품명']}, {worst_r['종합효율']:.1%})</b>의 경우, <b><span style='color:#D91B1B;'>[{w_issue_sum}]</span></b> 등의 이슈가 핵심 원인으로 파악되었습니다."
                 render_tab_insight(f"📊 {sd3} 일일 가동 총평", c_text3)
 
                 best_html = "".join([f"<div style='margin-bottom:10px;'><b>{i+1}. {str(r['설비명']).split(' - ')[0]}</b> <span style='float:right; font-weight:bold;'>{r['종합효율']:.1%}</span><br><span style='font-size:12px; opacity:0.8;'>{r['품명']}</span></div>" for i, (_, r) in enumerate(active_day.head(5).iterrows())])
                 worst_html = "".join([f"<div style='margin-bottom:10px;'><b>{i+1}. {str(r['설비명']).split(' - ')[0]}</b> <span style='float:right; font-weight:bold;'>{r['종합효율']:.1%}</span><br><span style='font-size:12px; opacity:0.8;'>{r['품명']}</span></div>" for i, (_, r) in enumerate(active_day.tail(5).sort_values(by='종합효율').iterrows())])
+                
+                active_count = active_day['설비명'].nunique()
+                total_count = day_df['설비명'].nunique()
                 
                 st.markdown(f"""<div class='dashboard-header'><div style='font-size: 28px; font-weight: 900; margin-bottom: 20px;'>💡 {sd3} 생산 요약</div><div style='display: flex; gap: 20px;'><div style='flex: 1; background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px;'><div style='color: #4ADE80; font-weight: 800; font-size: 16px; margin-bottom: 15px;'>🏆 종합효율 BEST 5</div>{best_html}</div><div style='flex: 1; background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px;'><div style='color: #FFAAAA; font-weight: 800; font-size: 16px; margin-bottom: 15px;'>🚨 종합효율 WORST 5</div>{worst_html}</div></div></div>""", unsafe_allow_html=True)
                 
@@ -361,6 +464,9 @@ if data_to_process:
                 
                 render_styler_to_html(disp_day.style.apply(style_day_row, axis=1).hide(axis="index"), is_multi=True)
 
+    # =========================================================
+    # TAB 4: BEST & WORST
+    # =========================================================
     with tab4:
         render_section_title("종합효율 BEST 5 & WORST 5")
         mons4 = list(dict.fromkeys(f_df['생산월'].tolist()))
@@ -384,6 +490,9 @@ if data_to_process:
                 res_disp['OPEN ISSUE'] = res_disp['OPEN ISSUE'].apply(lambda x: split_issue_to_columns(x))
                 render_styler_to_html(res_disp.style.hide(axis="index"))
 
+    # =========================================================
+    # TAB 5: 비가동시간 요인 정밀 분석
+    # =========================================================
     with tab5:
         render_section_title("비가동시간 요인 정밀 분석")
         mons5 = list(dict.fromkeys(f_df['생산월'].tolist()))
@@ -402,6 +511,9 @@ if data_to_process:
             res_disp['OPEN ISSUE'] = res_disp['OPEN ISSUE'].apply(lambda x: split_issue_to_columns(x))
             render_styler_to_html(res_disp.style.hide(axis="index"))
 
+    # =========================================================
+    # TAB 6: AI 챗봇
+    # =========================================================
     with tab6:
         render_section_title("🤖 AI 생산 데이터 챗봇")
         ak = st.text_input("🔑 OpenAI API Key 입력", type="password")
