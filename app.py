@@ -241,7 +241,6 @@ if data_to_process:
             raw_date = date_match.group()[2:]
             try:
                 dt = datetime.strptime(raw_date, '%y%m%d')
-                # 🌟 [수정 1] 요일 표시 배열 추가 및 포맷 수정
                 week_arr = ['월', '화', '수', '목', '금', '토', '일']
                 clean_date = f"{dt.strftime('%y')}년 {dt.month}월 {dt.day}일 ({week_arr[dt.weekday()]})"
                 month_str = f"{dt.strftime('%y')}년 {dt.month}월"
@@ -249,19 +248,27 @@ if data_to_process:
             except: clean_date = raw_date; month_str = "분류 안됨"; sort_key = raw_date
         else: clean_date = file_name.split('.')[0]; month_str = "분류 안됨"; sort_key = clean_date
         
-        # 합계(TOTAL) 행 완벽 스캐닝
+        # 합계(TOTAL) 행 딥 스캐닝
         d_total_oee = 0.0
         for _, row in temp_df.iterrows():
-            m_val = str(row.get('설비명', '')).strip().replace(' ', '')
-            if m_val in ['TOTAL', '합계', '총합', '전체', '총계']:
-                d_total_oee = safe_float(row.get('종합효율', 0.0))
-                break
+            row_str = "".join([str(v).replace(' ', '').upper() for v in row.values])
+            if any(kw in row_str for kw in ['TOTAL', '합계', '총합', '전체', '총계', '평균']):
+                val = row.get('종합효율', 0.0)
+                if pd.notna(val) and str(val).strip() != '':
+                    d_total_oee = safe_float(val)
+                    if d_total_oee > 0: break
         
         if d_total_oee == 0.0:
-            try: d_total_oee = safe_float(temp_df['종합효율'].iloc[45])
-            except: 
-                try: d_total_oee = safe_float(temp_df['종합효율'].iloc[-1])
-                except: pass
+            try: 
+                last_val = safe_float(temp_df['종합효율'].iloc[-1])
+                if last_val > 0: d_total_oee = last_val
+            except: pass
+            
+        if d_total_oee == 0.0:
+            try:
+                valid_oees = [safe_float(x) for x in temp_df['종합효율'] if safe_float(x) > 0]
+                if valid_oees: d_total_oee = sum(valid_oees) / len(valid_oees)
+            except: pass
 
         if sort_key not in daily_totals_data:
             daily_totals_data[sort_key] = {'생산일': clean_date, '생산월': month_str, '공장종합효율': d_total_oee}
@@ -274,7 +281,6 @@ if data_to_process:
                 if col != '생산일': record[col] = row[col] if col in temp_df.columns else None
             all_records.append(record)
 
-    # DataFrame 생성 직후 date_mapping을 선언하여 날짜 정렬 시 에러 원천 차단
     df = pd.DataFrame(all_records).sort_values(by='sort_key').reset_index(drop=True)
     date_mapping = dict(zip(df['생산일'], df['sort_key']))
 
@@ -291,7 +297,6 @@ if data_to_process:
     sel_m_side = st.sidebar.multiselect("📅 생산월 선택", all_months, default=[all_months[-1]] if all_months else [])
     m_f_df = df[df['생산월'].isin(sel_m_side)].copy() if sel_m_side else df.copy()
     
-    # 달력 기준 정렬 (date_mapping 사용)
     all_dates = list(m_f_df['생산일'].unique())
     all_dates.sort(key=lambda x: date_mapping.get(x, ""), reverse=True)
     
@@ -420,7 +425,23 @@ if data_to_process:
                 active_count = active_day['설비명'].nunique()
                 total_count = day_df['설비명'].nunique()
                 
-                st.markdown(f"""<div class='dashboard-header'><div style='font-size: 28px; font-weight: 900; margin-bottom: 20px;'>💡 {sd3} 생산 요약</div><div style='display: flex; gap: 20px;'><div style='flex: 1; background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px;'><div style='color: #4ADE80; font-weight: 800; font-size: 16px; margin-bottom: 15px;'>🏆 종합효율 BEST 5</div>{best_html}</div><div style='flex: 1; background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px;'><div style='color: #FFAAAA; font-weight: 800; font-size: 16px; margin-bottom: 15px;'>🚨 종합효율 WORST 5</div>{worst_html}</div></div></div>""", unsafe_allow_html=True)
+                # 🌟 [복구] 총 OO대 중 OO대 가동 중 문구
+                st.markdown(f"""
+                <div class='dashboard-header'>
+                    <div style='font-size: 16px; opacity: 0.9; margin-bottom: 5px; font-weight: 500;'>💡 {sd3} 생산 요약</div>
+                    <div style='font-size: 32px; font-weight: 900; margin-bottom: 25px; letter-spacing: -1.5px;'>총 <span style='color: #E2E8F0;'>{total_count}</span>대 중 <span style='color: #FBBF24;'>{active_count}</span>대 가동 중</div>
+                    <div style='display: flex; gap: 20px;'>
+                        <div style='flex: 1; background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px;'>
+                            <div style='color: #4ADE80; font-weight: 800; font-size: 16px; margin-bottom: 15px;'>🏆 종합효율 BEST 5</div>
+                            {best_html}
+                        </div>
+                        <div style='flex: 1; background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px;'>
+                            <div style='color: #FFAAAA; font-weight: 800; font-size: 16px; margin-bottom: 15px;'>🚨 종합효율 WORST 5</div>
+                            {worst_html}
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
                 
                 st.markdown(f"#### 📊 {sd3} 설비별 종합효율 비교")
                 bar_clrs = ['#3B82F6' if safe_float(row['종합효율']) >= 0.86 else '#D91B1B' for _, row in active_day.iterrows()]
