@@ -11,7 +11,7 @@ from collections import Counter
 from datetime import datetime
 
 # ==========================================
-# 🌟 [프리미엄 레드 에디션] 테마 설정
+# 🌟 [트렌디 레드 에디션] 테마 설정 (디자인만 변경)
 # ==========================================
 st.set_page_config(
     page_title="사출생산팀 일일 생산성 정밀 분석", 
@@ -23,9 +23,11 @@ st.markdown("""
 <meta name="google" content="notranslate">
 <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/static/pretendard.css');
+    
+    /* 기본 배경 및 폰트: 흰색 바탕의 미학 */
     html, body, [class*="css"] {
         font-family: 'Pretendard', sans-serif !important;
-        background-color: #FDFDFD; 
+        background-color: #FFFFFF; 
         color: #1E293B; 
         translate: no; 
     }
@@ -34,11 +36,16 @@ st.markdown("""
         background-color: #FFFFFF;
         border-right: 1px solid #E2E8F0;
     }
+    
+    [data-testid="stSidebar"] h2 {
+        color: #1E293B !important;
+    }
 
+    /* 섹션 타이틀: 빨간색 바(Bar) 포인트 Accent */
     .section-banner {
         background-color: #ffffff;
         border: 1px solid #F1F5F9;
-        border-left: 6px solid #D91B1B;
+        border-left: 6px solid #D91B1B; 
         padding: 16px 22px;
         border-radius: 10px;
         margin-top: 30px;
@@ -52,15 +59,26 @@ st.markdown("""
         font-size: 19px;
     }
 
+    /* AI 진단 리포트 카드: 은은한 빨간색 배경 */
     .analysis-report-card {
-        background-color: #FFF5F5;
-        border: 1px solid #FEE2E2;
+        background-color: #FFF5F5; 
+        border: 1px solid #FEE2E2; 
         border-radius: 12px;
         padding: 20px 25px;
         margin-bottom: 25px;
         box-shadow: 0 2px 4px rgba(217, 27, 27, 0.05);
     }
 
+    /* 트렌디 메트릭 카드: 흰색 배경에 그림자 효과 */
+    .trendy-card {
+        background-color: #FFFFFF;
+        border-radius: 12px;
+        padding: 24px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        border: 1px solid #F1F5F9;
+        margin-bottom: 24px;
+    }
+    
     .metric-card-container {
         background-color: #FFFFFF;
         border-radius: 12px;
@@ -90,8 +108,9 @@ st.markdown("""
         font-size: 18px;
     }
 
+    /* 전광판 헤더: 딥 레드로 강력한 아이덴티티 부여 */
     .dashboard-header {
-        background: linear-gradient(135deg, #9F1239, #D91B1B);
+        background: linear-gradient(135deg, #9F1239, #D91B1B); 
         color: #FFFFFF;
         border-radius: 12px;
         padding: 25px;
@@ -102,7 +121,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 🌟 [함수 사전 정의 구역] 
+# 🌟 [함수 사전 정의 구역] - 모든 로직 100% 보존
 # ==========================================
 def safe_float(val):
     try:
@@ -189,7 +208,8 @@ def render_styler_to_html(styler, is_multi=False):
     try: html_str = styler.to_html(escape=False)
     except: html_str = styler.to_html()
     html_str = html_str.replace('<table', '<table class="custom-table notranslate"')
-    wrapped_html = f"""<div style='width: 100%; max-height: 500px; overflow: auto; border: 1px solid #E2E8F0; border-radius: 8px; box-shadow: 0 1px 3px 0 rgba(0,0,0,0.03); background-color: white; margin-bottom: 24px;'><style>.custom-table {{ width: 100%; border-collapse: collapse; font-size: 13px; color: #1E293B; background-color: white; }}.custom-table th {{ background-color: #D91B1B; border: 1px solid #E2E8F0; padding: 12px 16px; text-align: center !important; font-weight: 600; color: white; position: sticky; top: 0; z-index: 2; }}.custom-table thead tr:nth-child(2) th {{ top: 40px; }}.custom-table td {{ border: 1px solid #F1F5F9; padding: 10px 16px; text-align: center !important; }}.custom-table td:last-child {{ text-align: left !important; min-width: 450px; line-height: 1.5; }} .custom-table tr:hover {{ background-color: #FFF5F5; }}</style>{html_str}</div>"""
+    # 표 디자인: 깔끔한 그레이 배경 헤더 (지나친 빨간색 배제)
+    wrapped_html = f"""<div style='width: 100%; max-height: 500px; overflow: auto; border: 1px solid #E2E8F0; border-radius: 8px; box-shadow: 0 1px 3px 0 rgba(0,0,0,0.03); background-color: white; margin-bottom: 24px;'><style>.custom-table {{ width: 100%; border-collapse: collapse; font-size: 13px; color: #1E293B; background-color: white; }}.custom-table th {{ background-color: #F8FAFC; border: 1px solid #E2E8F0; padding: 12px 16px; text-align: center !important; font-weight: 600; color: #475569; position: sticky; top: 0; z-index: 2; }}.custom-table thead tr:nth-child(2) th {{ top: 40px; }}.custom-table td {{ border: 1px solid #F1F5F9; padding: 10px 16px; text-align: center !important; }}.custom-table td:last-child {{ text-align: left !important; min-width: 450px; line-height: 1.5; }} .custom-table tr:hover {{ background-color: #F8FAFC; }}</style>{html_str}</div>"""
     if is_multi:
         wrapped_html = re.sub(r'<th class=\"col_heading level0 col10\".*?>OPEN ISSUE</th>', r'<th class=\"col_heading level0 col10\" rowspan=\"2\" style=\"vertical-align: middle;\">OPEN ISSUE</th>', wrapped_html)
         wrapped_html = re.sub(r'<th class=\"col_heading level1 col10\".*?>OPEN ISSUE</th>', '', wrapped_html)
@@ -248,7 +268,7 @@ if data_to_process:
             except: clean_date = raw_date; month_str = "분류 안됨"; sort_key = raw_date
         else: clean_date = file_name.split('.')[0]; month_str = "분류 안됨"; sort_key = clean_date
         
-        # 합계(TOTAL) 행 딥 스캐닝
+        # 원본 파일 합계(Total) 행 딥 스캐닝 로직 (100% 유지)
         d_total_oee = 0.0
         for _, row in temp_df.iterrows():
             row_str = "".join([str(v).replace(' ', '').upper() for v in row.values])
@@ -291,8 +311,7 @@ if data_to_process:
 
     df['OPEN ISSUE'] = df['OPEN ISSUE'].apply(format_issue)
 
-    # 사이드바 필터
-    st.sidebar.markdown("<h2 style='font-weight: 800; color: #D91B1B; font-size: 18px;'>🎯 정밀 필터링</h2>", unsafe_allow_html=True)
+    st.sidebar.markdown("<h2 style='font-weight: 800; color: #1E293B; font-size: 18px;'>🎯 정밀 필터링</h2>", unsafe_allow_html=True)
     all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
     sel_m_side = st.sidebar.multiselect("📅 생산월 선택", all_months, default=[all_months[-1]] if all_months else [])
     m_f_df = df[df['생산월'].isin(sel_m_side)].copy() if sel_m_side else df.copy()
@@ -425,23 +444,7 @@ if data_to_process:
                 active_count = active_day['설비명'].nunique()
                 total_count = day_df['설비명'].nunique()
                 
-                # 🌟 [복구] 총 OO대 중 OO대 가동 중 문구
-                st.markdown(f"""
-                <div class='dashboard-header'>
-                    <div style='font-size: 16px; opacity: 0.9; margin-bottom: 5px; font-weight: 500;'>💡 {sd3} 생산 요약</div>
-                    <div style='font-size: 32px; font-weight: 900; margin-bottom: 25px; letter-spacing: -1.5px;'>총 <span style='color: #E2E8F0;'>{total_count}</span>대 중 <span style='color: #FBBF24;'>{active_count}</span>대 가동 중</div>
-                    <div style='display: flex; gap: 20px;'>
-                        <div style='flex: 1; background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px;'>
-                            <div style='color: #4ADE80; font-weight: 800; font-size: 16px; margin-bottom: 15px;'>🏆 종합효율 BEST 5</div>
-                            {best_html}
-                        </div>
-                        <div style='flex: 1; background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px;'>
-                            <div style='color: #FFAAAA; font-weight: 800; font-size: 16px; margin-bottom: 15px;'>🚨 종합효율 WORST 5</div>
-                            {worst_html}
-                        </div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(f"""<div class='dashboard-header'><div style='font-size: 16px; opacity: 0.9; margin-bottom: 5px; font-weight: 500;'>💡 {sd3} 생산 요약</div><div style='font-size: 32px; font-weight: 900; margin-bottom: 25px; letter-spacing: -1.5px;'>총 <span style='color: #E2E8F0;'>{total_count}</span>대 중 <span style='color: #FBBF24;'>{active_count}</span>대 가동 중</div><div style='display: flex; gap: 20px;'><div style='flex: 1; background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px;'><div style='color: #4ADE80; font-weight: 800; font-size: 16px; margin-bottom: 15px;'>🏆 종합효율 BEST 5</div>{best_html}</div><div style='flex: 1; background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px;'><div style='color: #FFAAAA; font-weight: 800; font-size: 16px; margin-bottom: 15px;'>🚨 종합효율 WORST 5</div>{worst_html}</div></div></div>""", unsafe_allow_html=True)
                 
                 st.markdown(f"#### 📊 {sd3} 설비별 종합효율 비교")
                 bar_clrs = ['#3B82F6' if safe_float(row['종합효율']) >= 0.86 else '#D91B1B' for _, row in active_day.iterrows()]
