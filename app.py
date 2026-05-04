@@ -316,7 +316,6 @@ if data_to_process:
     header_col, filter_col = st.columns([1, 2.5])
     
     with header_col:
-        # 메인 타이틀 변경
         st.markdown("<h1 style='margin-top: 15px; margin-bottom: 10px; color: #1E293B; font-weight: 900; font-size: 30px;' class='notranslate'>사출생산팀 생산성 및 OPEN ISSUE 분석 리포트</h1>", unsafe_allow_html=True)
 
     with filter_col:
@@ -324,7 +323,6 @@ if data_to_process:
         f1, f2, f3, f4 = st.columns(4)
         
         all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
-        # 멀티셀렉트 Placeholder 통일 (전체 생산월 등)
         with f1: sel_m_side = st.multiselect("📅 생산월", all_months, default=[all_months[-1]] if all_months else [], placeholder="전체 생산월")
         m_f_df = df[df['생산월'].isin(sel_m_side)].copy() if sel_m_side else df.copy()
         
@@ -343,13 +341,13 @@ if data_to_process:
 
     st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
     
-    # 🌟 탭 명칭 완벽 적용
+    # 🌟 탭 명칭 
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "📈 사출생산팀 종합효율 추이", 
         "📝 OPEN ISSUE 현황", 
         "📅 설비 가동 현황 및 생산성, 비가동 분석", 
         "🏆 종합효율 BEST&WORST", 
-        "🛑 비가동 BEST", 
+        "🛑 비가동 WORST",  # 🌟 요청사항 반영: 비가동 WORST로 변경
         "🤖 사출생산팀 생산성 AI 챗봇"
     ])
 
@@ -448,7 +446,7 @@ if data_to_process:
                 w_issue_sum = get_natural_issue_summary(worst_r['OPEN ISSUE'])
                 
                 c_text3 = f"<b>{sd3}</b> 전체 설비 <b>합계 종합효율은 {day_total_val:.1%}</b>입니다.<br>효율이 가장 저조한 <b>{str(worst_r['설비명']).split(' - ')[0]} ({worst_r['품명']}, {worst_r['종합효율']:.1%})</b>는 <b><span style='color:#D91B1B;'>[{w_issue_sum}]</span></b> 문제가 핵심 원인입니다."
-                render_tab_insight(f"📊 {sd3} 일일 가동 총평", c_text3)
+                render_tab_insight(f"📊 {sd3} 종합 분석", c_text3)
 
                 best_html = "".join([f"<div style='margin-bottom:10px;'><b>{i+1}. {str(r['설비명']).split(' - ')[0]}</b> <span style='float:right; font-weight:bold;'>{r['종합효율']:.1%}</span><br><span style='font-size:12px; opacity:0.8;'>{r['품명']}</span></div>" for i, (_, r) in enumerate(active_day.head(5).iterrows())])
                 worst_html = "".join([f"<div style='margin-bottom:10px;'><b>{i+1}. {str(r['설비명']).split(' - ')[0]}</b> <span style='float:right; font-weight:bold;'>{r['종합효율']:.1%}</span><br><span style='font-size:12px; opacity:0.8;'>{r['품명']}</span></div>" for i, (_, r) in enumerate(active_day.tail(5).sort_values(by='종합효율').iterrows())])
@@ -506,7 +504,6 @@ if data_to_process:
     # TAB 4: BEST & WORST
     # =========================================================
     with tab4:
-        # 🌟 수식어 제거 및 타이틀 간소화
         render_section_title("종합효율 BEST 5 & WORST 5")
         mons4 = list(dict.fromkeys(f_df['생산월'].tolist()))
         sel_m4 = st.multiselect("📅 조회할 월 선택", mons4, default=[mons4[-1]] if mons4 else [], key='t4_m', placeholder="전체 생산월")
@@ -533,7 +530,6 @@ if data_to_process:
     # TAB 5: 비가동 정밀 분석
     # =========================================================
     with tab5:
-        # 🌟 수식어 제거 및 타이틀 간소화
         render_section_title("비가동시간 WORST 현황")
         mons5 = list(dict.fromkeys(f_df['생산월'].tolist()))
         sel_m5 = st.multiselect("📅 조회할 월 선택", mons5, default=[mons5[-1]] if mons5 else [], key='t5_m', placeholder="전체 생산월")
@@ -543,7 +539,6 @@ if data_to_process:
             w_dt_details = "".join([f"🛑 <b>{rw['생산일']}</b> - <b>{str(rw['설비명']).split(' - ')[0]}</b> ({rw['품명']}, {rw['비가동시간']:.1f}h) ➔ <span style='color:#D91B1B;'>{get_natural_issue_summary(rw['OPEN ISSUE'])}</span><br>" for _, rw in w_dt.head(3).iterrows()])
             render_tab_insight("🛑 핵심 비가동 원인", f"최장 비가동 상위 설비 및 원인입니다:<br><div style='background-color:rgba(217,27,27,0.03); padding:15px; border-radius:8px; margin-top:10px; border-left:4px solid #D91B1B; line-height: 1.7;'>{w_dt_details}</div>")
             
-            # 🌟 괄호 제거 및 간소화
             st.markdown("<h4 style='font-weight: 800; color: #1E293B;'>🚨 WORST 10</h4>", unsafe_allow_html=True)
             res_disp = w_dt[['생산일', '설비명', '품명', '비가동시간', 'OPEN ISSUE']].copy()
             for idx, row in res_disp.iterrows():
