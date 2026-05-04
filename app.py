@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components  # 🌟 [추가] 구글 번역기 강제 차단용 도구
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -11,7 +12,7 @@ from collections import Counter
 from datetime import datetime
 
 # ==========================================
-# 🌟 [트렌디 레드 에디션] 테마 설정 (디자인만 변경)
+# 🌟 [프리미엄 레드 에디션] 테마 설정
 # ==========================================
 st.set_page_config(
     page_title="사출생산팀 일일 생산성 정밀 분석", 
@@ -19,12 +20,33 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# 🌟 [오류 완벽 차단] 크롬 자동 번역 강제 중지 스크립트
+# 브라우저가 페이지를 '영어'로 오해하여 기괴한 한국어로 억지 번역하는 현상을 원천 차단합니다.
+components.html(
+    """
+    <script>
+        const parent = window.parent.document;
+        // 1. 페이지 언어를 한국어(ko)로 강제 고정
+        parent.documentElement.lang = 'ko';
+        // 2. 구글 번역기 동작 강제 차단 속성 부여
+        parent.documentElement.setAttribute('translate', 'no');
+        parent.body.classList.add('notranslate');
+        
+        // 3. 메타 태그에도 확실하게 번역 금지 못 박기
+        const meta = parent.createElement('meta');
+        meta.name = "google";
+        meta.content = "notranslate";
+        parent.head.appendChild(meta);
+    </script>
+    """,
+    width=0, height=0
+)
+
 st.markdown("""
 <meta name="google" content="notranslate">
 <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/static/pretendard.css');
     
-    /* 기본 배경 및 폰트: 흰색 바탕의 미학 */
     html, body, [class*="css"] {
         font-family: 'Pretendard', sans-serif !important;
         background-color: #FFFFFF; 
@@ -41,7 +63,6 @@ st.markdown("""
         color: #1E293B !important;
     }
 
-    /* 섹션 타이틀: 빨간색 바(Bar) 포인트 Accent */
     .section-banner {
         background-color: #ffffff;
         border: 1px solid #F1F5F9;
@@ -59,7 +80,6 @@ st.markdown("""
         font-size: 19px;
     }
 
-    /* AI 진단 리포트 카드: 은은한 빨간색 배경 */
     .analysis-report-card {
         background-color: #FFF5F5; 
         border: 1px solid #FEE2E2; 
@@ -69,7 +89,6 @@ st.markdown("""
         box-shadow: 0 2px 4px rgba(217, 27, 27, 0.05);
     }
 
-    /* 트렌디 메트릭 카드: 흰색 배경에 그림자 효과 */
     .trendy-card {
         background-color: #FFFFFF;
         border-radius: 12px;
@@ -108,7 +127,6 @@ st.markdown("""
         font-size: 18px;
     }
 
-    /* 전광판 헤더: 딥 레드로 강력한 아이덴티티 부여 */
     .dashboard-header {
         background: linear-gradient(135deg, #9F1239, #D91B1B); 
         color: #FFFFFF;
@@ -121,7 +139,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 🌟 [함수 사전 정의 구역] - 모든 로직 100% 보존
+# 🌟 [함수 사전 정의 구역] 
 # ==========================================
 def safe_float(val):
     try:
@@ -208,7 +226,6 @@ def render_styler_to_html(styler, is_multi=False):
     try: html_str = styler.to_html(escape=False)
     except: html_str = styler.to_html()
     html_str = html_str.replace('<table', '<table class="custom-table notranslate"')
-    # 표 디자인: 깔끔한 그레이 배경 헤더 (지나친 빨간색 배제)
     wrapped_html = f"""<div style='width: 100%; max-height: 500px; overflow: auto; border: 1px solid #E2E8F0; border-radius: 8px; box-shadow: 0 1px 3px 0 rgba(0,0,0,0.03); background-color: white; margin-bottom: 24px;'><style>.custom-table {{ width: 100%; border-collapse: collapse; font-size: 13px; color: #1E293B; background-color: white; }}.custom-table th {{ background-color: #F8FAFC; border: 1px solid #E2E8F0; padding: 12px 16px; text-align: center !important; font-weight: 600; color: #475569; position: sticky; top: 0; z-index: 2; }}.custom-table thead tr:nth-child(2) th {{ top: 40px; }}.custom-table td {{ border: 1px solid #F1F5F9; padding: 10px 16px; text-align: center !important; }}.custom-table td:last-child {{ text-align: left !important; min-width: 450px; line-height: 1.5; }} .custom-table tr:hover {{ background-color: #F8FAFC; }}</style>{html_str}</div>"""
     if is_multi:
         wrapped_html = re.sub(r'<th class=\"col_heading level0 col10\".*?>OPEN ISSUE</th>', r'<th class=\"col_heading level0 col10\" rowspan=\"2\" style=\"vertical-align: middle;\">OPEN ISSUE</th>', wrapped_html)
@@ -268,7 +285,6 @@ if data_to_process:
             except: clean_date = raw_date; month_str = "분류 안됨"; sort_key = raw_date
         else: clean_date = file_name.split('.')[0]; month_str = "분류 안됨"; sort_key = clean_date
         
-        # 원본 파일 합계(Total) 행 딥 스캐닝 로직 (100% 유지)
         d_total_oee = 0.0
         for _, row in temp_df.iterrows():
             row_str = "".join([str(v).replace(' ', '').upper() for v in row.values])
@@ -350,7 +366,7 @@ if data_to_process:
             p_df = act_oee.groupby(['sort_key', '생산월', '생산일'])[['종합효율']].mean(numeric_only=True).reset_index().sort_values('sort_key')
             y_v = '종합효율'
             
-        render_section_title("최근 5일 종합효율 요약")
+        render_section_title("최근 5일 종합효율 요약 (TRENDY-WHITE DESIGN)")
         if not p_df.empty:
             r5 = p_df.sort_values('sort_key').tail(5)
             r_cols = st.columns(5)
@@ -494,7 +510,7 @@ if data_to_process:
     # TAB 4: BEST & WORST
     # =========================================================
     with tab4:
-        render_section_title("종합효율 BEST 5 & WORST 5")
+        render_section_title("종합효율 BEST 5 & WORST 5 요약 진단 (TRENDY-WHITE)")
         mons4 = list(dict.fromkeys(f_df['생산월'].tolist()))
         sel_m4 = st.multiselect("📅 월 선택", mons4, default=[mons4[-1]] if mons4 else [], key='t4_m')
         t4_df = f_df[(f_df['생산월'].isin(sel_m4)) & (f_df['종합효율'] > 0)].copy()
@@ -520,14 +536,14 @@ if data_to_process:
     # TAB 5: 비가동 정밀 분석
     # =========================================================
     with tab5:
-        render_section_title("비가동시간 요인 정밀 분석")
+        render_section_title("비가동시간 요인 정밀 분석 (TRENDY-WHITE)")
         mons5 = list(dict.fromkeys(f_df['생산월'].tolist()))
         sel_m5 = st.multiselect("📅 월 선택", mons5, default=[mons5[-1]] if mons5 else [], key='t5_m')
         t5_df = f_df[f_df['생산월'].isin(sel_m5)].copy()
         if not t5_df.empty:
             w_dt = t5_df.sort_values(by='비가동시간', ascending=False).head(10)
             w_dt_details = "".join([f"🛑 <b>{rw['생산일']}</b> - <b>{str(rw['설비명']).split(' - ')[0]}</b> ({rw['품명']}, {rw['비가동시간']:.1f}h) ➔ <span style='color:#D91B1B;'>{get_natural_issue_summary(rw['OPEN ISSUE'])}</span><br>" for _, rw in w_dt.head(3).iterrows()])
-            render_tab_insight("🛑 비가동 손실 타격 정밀 진단", f"최장 비가동이 발생한 핵심 설비 및 원인 분석입니다:<br><div style='background-color:rgba(217,27,27,0.03); padding:15px; border-radius:8px; margin-top:10px; border-left:4px solid #D91B1B; line-height: 1.7;'>{w_dt_details}</div>")
+            render_tab_insight("🛑 최장 비가동 시간 발생 설비 (TOP 3)", f"가동 손실이 가장 컸던 핵심 설비군 및 원인입니다:<br><div style='background-color:rgba(217,27,27,0.03); padding:15px; border-radius:8px; margin-top:10px; border-left:4px solid #D91B1B; line-height: 1.7;'>{w_dt_details}</div>")
             
             st.markdown("<h4 style='font-weight: 800; color: #1E293B;'>🚨 WORST 10 (비가동 최장 설비)</h4>", unsafe_allow_html=True)
             res_disp = w_dt[['생산일', '설비명', '품명', '비가동시간', 'OPEN ISSUE']].copy()
