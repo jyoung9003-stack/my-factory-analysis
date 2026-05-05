@@ -311,17 +311,18 @@ if data_to_process:
     df['OPEN ISSUE'] = df['OPEN ISSUE'].apply(format_issue)
 
     # =========================================================
-    # 🌟 우측 상단 배치 필터 레이아웃
+    # 🌟 [수정] 우측 상단 배치 필터 레이아웃 (2줄 배치 적용)
     # =========================================================
-    header_col, filter_col = st.columns([1, 2.5])
+    # 타이틀 영역 비율을 키워서(1.3:1.7) 한 줄로 길게 출력되도록 보장합니다.
+    header_col, filter_col = st.columns([1.3, 1.7])
     
     with header_col:
-        st.markdown("<h1 style='margin-top: 15px; margin-bottom: 10px; color: #1E293B; font-weight: 900; font-size: 30px;' class='notranslate'>사출생산팀 생산성 및 OPEN ISSUE 분석 리포트</h1>", unsafe_allow_html=True)
+        # 타이틀 높이 마진을 조정하여 우측 2단 필터와 시각적 균형을 맞춥니다.
+        st.markdown("<h1 style='margin-top: 30px; margin-bottom: 10px; color: #1E293B; font-weight: 900; font-size: 30px; white-space: nowrap;' class='notranslate'>사출생산팀 생산성 및 OPEN ISSUE 분석 리포트</h1>", unsafe_allow_html=True)
 
     with filter_col:
-        st.markdown("<div style='margin-top: 25px;'></div>", unsafe_allow_html=True) 
-        f1, f2, f3, f4 = st.columns(4)
-        
+        # 1행: 생산월, 생산일 필터
+        f1, f2 = st.columns(2)
         all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
         with f1: sel_m_side = st.multiselect("📅 생산월", all_months, default=[all_months[-1]] if all_months else [], placeholder="전체 생산월")
         m_f_df = df[df['생산월'].isin(sel_m_side)].copy() if sel_m_side else df.copy()
@@ -331,6 +332,8 @@ if data_to_process:
         with f2: sel_d_side = st.multiselect("📆 생산일", all_dates, default=[all_dates[0]] if all_dates else [], placeholder="전체 생산일")
         d_f_df = m_f_df[m_f_df['생산일'].isin(sel_d_side)].copy() if sel_d_side else m_f_df.copy()
         
+        # 2행: 설비, 품목 필터
+        f3, f4 = st.columns(2)
         all_machines = sorted([m for m in d_f_df['설비명'].unique() if m.strip() != ""])
         with f3: sel_mach_side = st.multiselect("⚙️ 설비", all_machines, placeholder="전체 설비")
         pool_df = d_f_df[d_f_df['설비명'].isin(sel_mach_side)].copy() if sel_mach_side else d_f_df.copy()
@@ -339,7 +342,7 @@ if data_to_process:
         with f4: sel_prod = st.selectbox("📦 품목", ["전체 품목"] + actual_prods)
         f_df = pool_df[pool_df['품명'].str.strip() == sel_prod].copy() if sel_prod != "전체 품목" else pool_df.copy()
 
-    st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-bottom: 10px;'></div>", unsafe_allow_html=True)
     
     # 🌟 탭 명칭 
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
@@ -347,7 +350,7 @@ if data_to_process:
         "📝 OPEN ISSUE 현황", 
         "📅 설비 가동 현황 및 생산성, 비가동 분석", 
         "🏆 종합효율 BEST&WORST", 
-        "🛑 비가동 WORST",  # 🌟 요청사항 반영: 비가동 WORST로 변경
+        "🛑 비가동 WORST", 
         "🤖 사출생산팀 생산성 AI 챗봇"
     ])
 
