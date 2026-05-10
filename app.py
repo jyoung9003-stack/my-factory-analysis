@@ -249,7 +249,7 @@ def render_styler_to_html(styler, is_multi=False):
 
 
 # ==========================================
-# 🌟 3. [속도 혁명] 데이터 캐싱 및 로드 구역
+# 🌟 3. 데이터 로드 구역 (안정적인 기존 엔진)
 # ==========================================
 target_cols = ['생산일', '설비명', '품명', '양품수량', '불량수량', '총 생산수량', '투입시간', '가동시간', '비가동시간', '정미시간', '양품율', '성능가동율', '시간가동율', '종합효율', '목표효율', 'OPEN ISSUE']
 target_order = ['생산일', '설비명', '품명', '종합효율', '양품율', '성능가동율', '시간가동율', '총 생산수량', '양품수량', '불량수량', 'OPEN ISSUE']
@@ -260,29 +260,25 @@ multi_cols = [
     ('OPEN ISSUE', 'OPEN ISSUE')
 ]
 
-@st.cache_data
-def load_and_process_data():
-    data_to_process = []
-    DATA_DIR = "data"
+data_to_process = []
+DATA_DIR = "data"
 
-    if os.path.exists(DATA_DIR):
-        for file_name in os.listdir(DATA_DIR):
-            if file_name.startswith("~$"): continue 
-            if file_name.endswith('.xlsx') or file_name.endswith('.csv'):
-                file_path = os.path.join(DATA_DIR, file_name)
-                try:
-                    if file_name.endswith('.csv'): 
-                        try: temp_df = pd.read_csv(file_path, encoding='utf-8')
-                        except UnicodeDecodeError: temp_df = pd.read_csv(file_path, encoding='cp949')
-                    else: 
-                        temp_df = pd.read_excel(file_path)
-                    data_to_process.append((file_name, temp_df))
-                except Exception as e: 
-                    pass 
+if os.path.exists(DATA_DIR):
+    for file_name in os.listdir(DATA_DIR):
+        if file_name.startswith("~$"): continue 
+        if file_name.endswith('.xlsx') or file_name.endswith('.csv'):
+            file_path = os.path.join(DATA_DIR, file_name)
+            try:
+                if file_name.endswith('.csv'): 
+                    try: temp_df = pd.read_csv(file_path, encoding='utf-8')
+                    except UnicodeDecodeError: temp_df = pd.read_csv(file_path, encoding='cp949')
+                else: 
+                    temp_df = pd.read_excel(file_path)
+                data_to_process.append((file_name, temp_df))
+            except Exception as e: 
+                st.error(f"데이터 읽기 오류: {e}")
 
-    if not data_to_process:
-        return pd.DataFrame(), pd.DataFrame(), {}
-
+if data_to_process:
     all_records = []
     daily_totals_data = {} 
     
@@ -349,13 +345,7 @@ def load_and_process_data():
             df[col] = df[col].apply(safe_float)
 
     df['OPEN ISSUE'] = df['OPEN ISSUE'].apply(format_issue)
-    
-    return df, daily_df, date_mapping
 
-df, daily_df, date_mapping = load_and_process_data()
-
-
-if not df.empty:
     # =========================================================
     # 🌟 4. [2x2 가로 배열] 우측 상단 배치 필터 레이아웃
     # =========================================================
@@ -368,13 +358,13 @@ if not df.empty:
         f1, f2 = st.columns(2)
         all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
         with f1: 
-            sel_m_side = st.multiselect("📅 생산월", all_months, default=[], placeholder="전체 생산월") # 기본값 전체로 변경
+            sel_m_side = st.multiselect("📅 생산월", all_months, default=[], placeholder="전체 생산월") 
         m_f_df = df[df['생산월'].isin(sel_m_side)].copy() if sel_m_side else df.copy()
         
         all_dates = list(m_f_df['생산일'].unique())
         all_dates.sort(key=lambda x: date_mapping.get(x, ""), reverse=True)
         with f2: 
-            sel_d_side = st.multiselect("📆 생산일", all_dates, default=[], placeholder="전체 생산일") # 기본값 전체로 변경
+            sel_d_side = st.multiselect("📆 생산일", all_dates, default=[], placeholder="전체 생산일") 
         d_f_df = m_f_df[m_f_df['생산일'].isin(sel_d_side)].copy() if sel_d_side else m_f_df.copy()
         
         f3, f4 = st.columns(2)
@@ -430,7 +420,6 @@ if not df.empty:
         
         render_section_title("월별 종합효율 추이")
         mons = list(dict.fromkeys(p_df['생산월'].tolist()))
-        # 🌟 기본값 전체 선택으로 변경
         sel_mons = st.multiselect("📅 조회할 월 선택", mons, default=[], key='t1_m', placeholder="전체 생산월")
         mons_to_show = sel_mons if sel_mons else mons
         
@@ -456,25 +445,16 @@ if not df.empty:
     with tab2:
         render_section_title("OPEN ISSUE 현황")
         mons2 = list(dict.fromkeys(f_df['생산월'].tolist()))
-        # 🌟 기본값 전체 선택으로 변경
         sel_m2 = st.multiselect("📅 조회할 월 선택", mons2, default=[], key='t2_m', placeholder="전체 생산월")
         t2_df = f_df.copy()
-        if sel_m2:
-            t2_df = t2_df[t2_df['생산월'].isin(sel_m2)]
+        if sel_m2: t2_df = t2_df[t2_df['생산월'].isin(sel_m2)]
         
         all_d2 = list(t2_df['생산일'].unique())
         all_d2.sort(key=lambda x: date_mapping.get(x, ""), reverse=True)
         
         if all_d2:
-            # 🌟 전체 일자 옵션 추가
-            sd2_opts = ["전체 일자"] + all_d2
-            sd2 = st.selectbox("📅 조회할 일자", sd2_opts, key='tab2_date')
-            
-            if sd2 == "전체 일자":
-                issue_df = t2_df.copy().sort_values(by=['생산일', '설비명'], ascending=[False, True]).reset_index(drop=True)
-            else:
-                issue_df = t2_df[t2_df['생산일'] == sd2].copy().sort_values(by='설비명').reset_index(drop=True)
-                
+            sd2 = st.selectbox("📅 조회할 일자", all_d2, key='tab2_date')
+            issue_df = t2_df[t2_df['생산일'] == sd2].copy().sort_values(by='설비명').reset_index(drop=True)
             if not issue_df.empty:
                 issue_disp = issue_df[['생산일', '설비명', '품명', '종합효율', 'OPEN ISSUE']].copy()
                 for idx, row in issue_disp.iterrows():
@@ -490,60 +470,35 @@ if not df.empty:
     # TAB 3: 일일 상세 현황
     # =========================================================
     with tab3:
-        render_section_title("설비 가동 현황 및 생산성")
+        render_section_title("일일 생산성 현황")
         
         all_d3 = list(f_df['생산일'].unique())
         all_d3.sort(key=lambda x: date_mapping.get(x, ""), reverse=True)
         
         if all_d3:
-            # 🌟 전체 일자 옵션 추가
-            sd3_opts = ["전체 일자"] + all_d3
-            sd3 = st.selectbox("📅 조회할 일자", sd3_opts, key='tab3_date')
-            
-            if sd3 == "전체 일자":
-                day_df = f_df.copy().sort_values(by=['생산일', '설비명'], ascending=[False, True]).reset_index(drop=True)
-                title_date = "전체 조회 기간"
-            else:
-                day_df = f_df[f_df['생산일'] == sd3].copy().sort_values(by='설비명').reset_index(drop=True)
-                title_date = sd3
-                
+            sd3 = st.selectbox("📅 조회할 일자", all_d3, key='tab3_date')
+            day_df = f_df[f_df['생산일'] == sd3].copy().sort_values(by='설비명').reset_index(drop=True)
             day_df['설비_짧은명'] = day_df['설비명'].apply(lambda x: str(x).split(' - ')[0].strip())
-            
-            # 🌟 전체 일자 조회 시 차트 X축이 겹치지 않도록 날짜 + 설비명으로 스마트 결합
-            if sd3 == "전체 일자":
-                short_date = lambda x: ' '.join(str(x).split(' ')[1:3]) if len(str(x).split(' ')) >= 3 else str(x)
-                day_df['차트_X'] = day_df['생산일'].apply(short_date) + " " + day_df['설비_짧은명']
-                lbl_func = lambda r: f"{short_date(r['생산일'])} {r['설비_짧은명']}"
-            else:
-                day_df['차트_X'] = day_df['설비_짧은명']
-                lbl_func = lambda r: f"{r['설비_짧은명']}"
-
             active_day = day_df[day_df['종합효율'] > 0].sort_values(by='종합효율', ascending=False)
             
             if not active_day.empty:
-                if sd3 == "전체 일자":
-                    day_total_val = active_day['종합효율'].mean()
-                else:
-                    day_total_val = daily_df[daily_df['생산일'] == sd3]['공장종합효율'].iloc[0] if not daily_df[daily_df['생산일'] == sd3].empty else active_day['종합효율'].mean()
-                
+                day_total_val = daily_df[daily_df['생산일'] == sd3]['공장종합효율'].iloc[0] if not daily_df[daily_df['생산일'] == sd3].empty else active_day['종합효율'].mean(numeric_only=True)
                 worst_r = active_day.iloc[-1]
                 w_issue_sum = get_natural_issue_summary(worst_r['OPEN ISSUE'])
                 
-                c_text3 = f"<b>{title_date}</b> 대상 설비의 <b>평균 종합효율은 {day_total_val:.1%}</b>입니다.<br>조회 기록 중 효율이 가장 저조했던 <b>{worst_r['생산일']}의 {str(worst_r['설비명']).split(' - ')[0]} ({worst_r['품명']}, {worst_r['종합효율']:.1%})</b>는 <b><span style='color:#D91B1B;'>[{w_issue_sum}]</span></b> 문제가 핵심 원인입니다."
-                render_tab_insight(f"📊 {title_date} 가동 종합 분석", c_text3)
+                c_text3 = f"<b>{sd3}</b> 전체 설비 <b>합계 종합효율은 {day_total_val:.1%}</b>입니다.<br>효율이 가장 저조한 <b>{str(worst_r['설비명']).split(' - ')[0]} ({worst_r['품명']}, {worst_r['종합효율']:.1%})</b>는 <b><span style='color:#D91B1B;'>[{w_issue_sum}]</span></b> 문제가 핵심 원인입니다."
+                render_tab_insight(f"📊 {sd3} 종합 분석", c_text3)
 
-                best_html = "".join([f"<div style='margin-bottom:10px;'><b>{i+1}. {lbl_func(r)}</b> <span style='float:right; font-weight:bold;'>{r['종합효율']:.1%}</span><br><span style='font-size:12px; opacity:0.8;'>{r['품명']}</span></div>" for i, (_, r) in enumerate(active_day.head(5).iterrows())])
-                worst_html = "".join([f"<div style='margin-bottom:10px;'><b>{i+1}. {lbl_func(r)}</b> <span style='float:right; font-weight:bold;'>{r['종합효율']:.1%}</span><br><span style='font-size:12px; opacity:0.8;'>{r['품명']}</span></div>" for i, (_, r) in enumerate(active_day.tail(5).sort_values(by='종합효율').iterrows())])
+                best_html = "".join([f"<div style='margin-bottom:10px;'><b>{i+1}. {str(r['설비_짧은명'])}</b> <span style='float:right; font-weight:bold;'>{r['종합효율']:.1%}</span><br><span style='font-size:12px; opacity:0.8;'>{r['품명']}</span></div>" for i, (_, r) in enumerate(active_day.head(5).iterrows())])
+                worst_html = "".join([f"<div style='margin-bottom:10px;'><b>{i+1}. {str(r['설비_짧은명'])}</b> <span style='float:right; font-weight:bold;'>{r['종합효율']:.1%}</span><br><span style='font-size:12px; opacity:0.8;'>{r['품명']}</span></div>" for i, (_, r) in enumerate(active_day.tail(5).sort_values(by='종합효율').iterrows())])
                 
-                # 전체 일자 조회 시에는 단순히 조회된 데이터 건수로 표기
-                active_count = active_day['설비명'].count() if sd3 == "전체 일자" else active_day['설비명'].nunique()
-                total_count = day_df['설비명'].count() if sd3 == "전체 일자" else day_df['설비명'].nunique()
-                count_lbl = f"총 {total_count}건의 데이터 중 {active_count}건 가동 기록 확인" if sd3 == "전체 일자" else f"총 {total_count}대 중 {active_count}대 가동 중"
+                active_count = active_day['설비명'].nunique()
+                total_count = day_df['설비명'].nunique()
                 
                 st.markdown(f"""
                 <div class='dashboard-header'>
-                    <div style='font-size: 16px; opacity: 0.9; margin-bottom: 5px; font-weight: 500;'>💡 {title_date} 생산 요약</div>
-                    <div style='font-size: 28px; font-weight: 900; margin-bottom: 25px; letter-spacing: -1.5px;'>{count_lbl}</div>
+                    <div style='font-size: 16px; opacity: 0.9; margin-bottom: 5px; font-weight: 500;'>💡 {sd3} 생산 요약</div>
+                    <div style='font-size: 32px; font-weight: 900; margin-bottom: 25px; letter-spacing: -1.5px;'>총 <span style='color: #E2E8F0;'>{total_count}</span>대 중 <span style='color: #FBBF24;'>{active_count}</span>대 가동 중</div>
                     <div style='display: flex; gap: 20px;'>
                         <div style='flex: 1; background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px;'>
                             <div style='color: #4ADE80; font-weight: 800; font-size: 16px; margin-bottom: 15px;'>🏆 종합효율 BEST 5</div>
@@ -557,17 +512,17 @@ if not df.empty:
                 </div>
                 """, unsafe_allow_html=True)
                 
-                st.markdown(f"#### 📊 종합효율 비교")
+                st.markdown(f"#### 📊 {sd3} 종합효율 비교")
                 bar_clrs = ['#3B82F6' if safe_float(row['종합효율']) >= 0.86 else '#D91B1B' for _, row in active_day.iterrows()]
-                fig3 = px.bar(active_day, x='차트_X', y='종합효율', text_auto='.1%')
+                fig3 = px.bar(active_day, x='설비_짧은명', y='종합효율', text_auto='.1%')
                 fig3.update_traces(marker_color=bar_clrs, textfont=dict(weight="bold", color='white'))
                 fig3.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=400, yaxis=dict(tickformat='.0%', range=[0, 1.0]), xaxis_title="")
                 st.plotly_chart(fig3, use_container_width=True)
                 
                 st.write("---")
-                st.markdown(f"#### 🛑 비가동 시간 비교")
+                st.markdown(f"#### 🛑 {sd3} 비가동 시간 비교")
                 downtime_day = active_day.sort_values(by='비가동시간', ascending=False)
-                fig_dt = px.bar(downtime_day[downtime_day['비가동시간']>0], x='차트_X', y='비가동시간', text_auto='.1f')
+                fig_dt = px.bar(downtime_day[downtime_day['비가동시간']>0], x='설비_짧은명', y='비가동시간', text_auto='.1f')
                 fig_dt.update_traces(marker_color='#EF4444')
                 fig_dt.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=350, yaxis_title="시간(h)", xaxis_title="")
                 st.plotly_chart(fig_dt, use_container_width=True)
@@ -607,11 +562,9 @@ if not df.empty:
     with tab4:
         render_section_title("종합효율 BEST 5 & WORST 5")
         mons4 = list(dict.fromkeys(f_df['생산월'].tolist()))
-        # 🌟 기본값 전체 선택으로 변경
         sel_m4 = st.multiselect("📅 조회할 월 선택", mons4, default=[], key='t4_m', placeholder="전체 생산월")
         t4_df = f_df[f_df['종합효율'] > 0].copy()
-        if sel_m4:
-            t4_df = t4_df[t4_df['생산월'].isin(sel_m4)]
+        if sel_m4: t4_df = t4_df[t4_df['생산월'].isin(sel_m4)]
             
         if not t4_df.empty:
             w5 = t4_df.sort_values(by='종합효율').head(5)
@@ -637,11 +590,9 @@ if not df.empty:
     with tab5:
         render_section_title("비가동시간 WORST 현황")
         mons5 = list(dict.fromkeys(f_df['생산월'].tolist()))
-        # 🌟 기본값 전체 선택으로 변경
         sel_m5 = st.multiselect("📅 조회할 월 선택", mons5, default=[], key='t5_m', placeholder="전체 생산월")
         t5_df = f_df.copy()
-        if sel_m5:
-            t5_df = t5_df[t5_df['생산월'].isin(sel_m5)]
+        if sel_m5: t5_df = t5_df[t5_df['생산월'].isin(sel_m5)]
             
         if not t5_df.empty:
             w_dt = t5_df.sort_values(by='비가동시간', ascending=False).head(10)
