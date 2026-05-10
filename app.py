@@ -249,7 +249,7 @@ def render_styler_to_html(styler, is_multi=False):
 
 
 # ==========================================
-# 🌟 3. 데이터 로드 구역 (안정적인 기존 엔진)
+# 🌟 3. 데이터 로드 구역 (NaN 철통 방어 적용)
 # ==========================================
 target_cols = ['생산일', '설비명', '품명', '양품수량', '불량수량', '총 생산수량', '투입시간', '가동시간', '비가동시간', '정미시간', '양품율', '성능가동율', '시간가동율', '종합효율', '목표효율', 'OPEN ISSUE']
 target_order = ['생산일', '설비명', '품명', '종합효율', '양품율', '성능가동율', '시간가동율', '총 생산수량', '양품수량', '불량수량', 'OPEN ISSUE']
@@ -325,8 +325,13 @@ if data_to_process:
             daily_totals_data[sort_key] = {'생산일': clean_date, '생산월': month_str, '공장종합효율': d_total_oee}
 
         for _, row in temp_df.iterrows():
-            m_val = str(row.get('설비명', '')).strip()
-            if m_val in ['', 'nan', '설비명'] or any(kw in m_val.upper() for kw in ['TOTAL', '합계']): 
+            raw_m_val = row.get('설비명')
+            # 🌟 [오류 차단] 설비명이 완전히 비어있거나 NaN인 줄은 쓰레기 데이터로 간주하고 무조건 버립니다.
+            if pd.isna(raw_m_val): 
+                continue
+                
+            m_val = str(raw_m_val).strip()
+            if m_val.lower() in ['', 'nan', 'none', 'null', '#n/a', '설비명'] or any(kw in m_val.upper() for kw in ['TOTAL', '합계']): 
                 continue
             
             record = {'sort_key': sort_key, '생산월': month_str, '생산일': clean_date}
@@ -420,7 +425,8 @@ if data_to_process:
         
         render_section_title("월별 종합효율 추이")
         mons = list(dict.fromkeys(p_df['생산월'].tolist()))
-        sel_mons = st.multiselect("📅 조회할 월 선택", mons, default=[], key='t1_m', placeholder="전체 생산월")
+        # 🌟 기본값 가장 최근 월 선택 (요청사항 1번)
+        sel_mons = st.multiselect("📅 조회할 월 선택", mons, default=[mons[-1]] if mons else [], key='t1_m', placeholder="전체 생산월")
         mons_to_show = sel_mons if sel_mons else mons
         
         for m in mons_to_show:
@@ -453,12 +459,20 @@ if data_to_process:
         all_d2.sort(key=lambda x: date_mapping.get(x, ""), reverse=True)
         
         if all_d2:
-            sd2 = st.selectbox("📅 조회할 일자", all_d2, key='tab2_date')
-            issue_df = t2_df[t2_df['생산일'] == sd2].copy().sort_values(by='설비명').reset_index(drop=True)
+            # 🌟 전체 일자 조회 옵션 추가 (요청사항 2번)
+            sd2_opts = ["전체 일자"] + all_d2
+            sd2 = st.selectbox("📅 조회할 일자", sd2_opts, key='tab2_date')
+            
+            if sd2 == "전체 일자":
+                issue_df = t2_df.copy().sort_values(by=['생산일', '설비명'], ascending=[False, True]).reset_index(drop=True)
+            else:
+                issue_df = t2_df[t2_df['생산일'] == sd2].copy().sort_values(by='설비명').reset_index(drop=True)
+                
             if not issue_df.empty:
                 issue_disp = issue_df[['생산일', '설비명', '품명', '종합효율', 'OPEN ISSUE']].copy()
                 for idx, row in issue_disp.iterrows():
-                    if str(row['품명']).strip() in ['', 'nan', '0', '0.0']: 
+                    # 🌟 표 생성 중 불량 데이터가 섞여 들어왔을 때 표기를 지워버리는 2차 방어선
+                    if pd.isna(row['품명']) or str(row['품명']).strip().lower() in ['', 'nan', 'none', '0', '0.0']: 
                         issue_disp.at[idx, '품명'] = ""
                         issue_disp.at[idx, '종합효율'] = ""
                     else: 
@@ -529,8 +543,8 @@ if data_to_process:
                 
                 disp_day = day_df[target_order].copy()
                 for idx, row in disp_day.iterrows():
-                    prod = str(row['품명']).strip()
-                    if prod in ['', 'nan', '0', '0.0']:
+                    # 🌟 여기서도 NaN 방어선 추가
+                    if pd.isna(row['품명']) or str(row['품명']).strip().lower() in ['', 'nan', 'none', '0', '0.0']:
                         disp_day.at[idx, '품명'] = ""
                         for c in ['종합효율', '양품율', '성능가동율', '시간가동율', '양품수량', '불량수량', '총 생산수량']: 
                             if c in disp_day.columns: disp_day.at[idx, c] = ""
@@ -563,7 +577,7 @@ if data_to_process:
         render_section_title("종합효율 BEST 5 & WORST 5")
         mons4 = list(dict.fromkeys(f_df['생산월'].tolist()))
         sel_m4 = st.multiselect("📅 조회할 월 선택", mons4, default=[], key='t4_m', placeholder="전체 생산월")
-        t4_df = f_df[f_df['종합효율'] > 0].copy()
+        t4_df = f_df[(f_df['종합효율'] > 0)].copy()
         if sel_m4: t4_df = t4_df[t4_df['생산월'].isin(sel_m4)]
             
         if not t4_df.empty:
@@ -576,7 +590,7 @@ if data_to_process:
                 res = t4_df.sort_values(by='종합효율', ascending=asc).head(5)
                 res_disp = res[['생산일', '설비명', '품명', '종합효율', 'OPEN ISSUE']].copy()
                 for idx, row in res_disp.iterrows():
-                    if str(row['품명']).strip() in ['', 'nan']: 
+                    if pd.isna(row['품명']) or str(row['품명']).strip().lower() in ['', 'nan', 'none']: 
                         res_disp.at[idx, '품명'] = ""
                         res_disp.at[idx, '종합효율'] = ""
                     else: 
@@ -602,7 +616,8 @@ if data_to_process:
             st.markdown("<h4 style='font-weight: 800; color: #1E293B;'>🚨 WORST 10</h4>", unsafe_allow_html=True)
             res_disp = w_dt[['생산일', '설비명', '품명', '비가동시간', 'OPEN ISSUE']].copy()
             for idx, row in res_disp.iterrows():
-                if str(row['품명']).strip() in ['', 'nan', '0', '0.0']: res_disp.at[idx, '품명'] = ""
+                if pd.isna(row['품명']) or str(row['품명']).strip().lower() in ['', 'nan', 'none', '0', '0.0']: 
+                    res_disp.at[idx, '품명'] = ""
             res_disp['비가동시간'] = res_disp['비가동시간'].apply(lambda x: f"{safe_float(x):.1f}h")
             res_disp['OPEN ISSUE'] = res_disp['OPEN ISSUE'].apply(split_issue_to_columns)
             render_styler_to_html(res_disp.style.hide(axis="index"))
