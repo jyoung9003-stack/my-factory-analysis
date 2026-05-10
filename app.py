@@ -75,6 +75,15 @@ st.markdown("""
         box-shadow: 0 2px 4px rgba(217, 27, 27, 0.05);
     }
 
+    .trendy-card {
+        background-color: #FFFFFF;
+        border-radius: 12px;
+        padding: 24px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        border: 1px solid #F1F5F9;
+        margin-bottom: 24px;
+    }
+    
     .metric-card-container {
         background-color: #FFFFFF;
         border-radius: 12px;
@@ -240,7 +249,7 @@ def render_styler_to_html(styler, is_multi=False):
 
 
 # ==========================================
-# 🌟 3. 데이터 로드 및 전처리 (NaN 철통 방어)
+# 🌟 3. 데이터 로드 및 전처리 (NaN 철통 방어 원본)
 # ==========================================
 target_cols = ['생산일', '설비명', '품명', '양품수량', '불량수량', '총 생산수량', '투입시간', '가동시간', '비가동시간', '정미시간', '양품율', '성능가동율', '시간가동율', '종합효율', '목표효율', 'OPEN ISSUE']
 target_order = ['생산일', '설비명', '품명', '종합효율', '양품율', '성능가동율', '시간가동율', '총 생산수량', '양품수량', '불량수량', 'OPEN ISSUE']
@@ -313,9 +322,12 @@ if data_to_process:
             daily_totals_data[sort_key] = {'생산일': clean_date, '생산월': month_str, '공장종합효율': d_total_oee}
 
         for _, row in temp_df.iterrows():
-            m_val = str(row.get('설비명', '')).strip()
-            if m_val.lower() in ['', 'nan', 'none', 'null', '설비명'] or any(kw in m_val.upper() for kw in ['TOTAL', '합계']): 
+            raw_m_val = row.get('설비명')
+            if pd.isna(raw_m_val): continue
+            m_val = str(raw_m_val).strip()
+            if m_val.lower() in ['', 'nan', 'none', 'null', '#n/a', '설비명'] or any(kw in m_val.upper() for kw in ['TOTAL', '합계']): 
                 continue
+            
             record = {'sort_key': sort_key, '생산월': month_str, '생산일': clean_date}
             for col in target_cols:
                 if col != '생산일': record[col] = row[col] if col in temp_df.columns else None
@@ -325,12 +337,17 @@ if data_to_process:
     date_mapping = dict(zip(df['생산일'], df['sort_key']))
     daily_df = pd.DataFrame([{'sort_key': k, **v} for k, v in daily_totals_data.items()]).sort_values(by='sort_key').reset_index(drop=True)
     
-    for col in ['양품수량', '불량수량', '총 생산수량', '투입시간', '가동시간', '비가동시간', '정미시간', '종합효율', '목표효율', '양품율', '성능가동율', '시간가동율']:
+    numeric_columns = ['양품수량', '불량수량', '총 생산수량', '투입시간', '가동시간', '비가동시간', '정미시간', '종합효율', '목표효율', '양품율', '성능가동율', '시간가동율']
+    for col in numeric_columns:
         if col in df.columns: df[col] = df[col].apply(safe_float)
+
     df['OPEN ISSUE'] = df['OPEN ISSUE'].apply(format_issue)
 
-    # 🌟 4. 필터 레이아웃
+    # =========================================================
+    # 🌟 4. [2x2 가로 배열] 우측 상단 배치 필터 레이아웃
+    # =========================================================
     header_col, filter_col = st.columns([1.3, 1.7])
+    
     with header_col:
         st.markdown("<h1 style='margin-top: 30px; margin-bottom: 10px; color: #1E293B; font-weight: 900; font-size: 30px; white-space: nowrap;' class='notranslate'>사출생산팀 생산성 및 OPEN ISSUE 분석 리포트</h1>", unsafe_allow_html=True)
 
@@ -356,14 +373,18 @@ if data_to_process:
 
     st.markdown("<div style='margin-bottom: 10px;'></div>", unsafe_allow_html=True)
     
+    # 🌟 5. 메인 탭 설정 
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-        "📈 사출생산팀 종합효율 추이", "📝 OPEN ISSUE 현황", 
-        "📅 설비 가동 현황 및 생산성, 비가동 분석", "🏆 종합효율 BEST&WORST", 
-        "🛑 비가동 WORST", "🤖 사출생산팀 생산성 AI 챗봇"
+        "📈 사출생산팀 종합효율 추이", 
+        "📝 OPEN ISSUE 현황", 
+        "📅 설비 가동 현황 및 생산성, 비가동 분석", 
+        "🏆 종합효율 BEST&WORST", 
+        "🛑 비가동 WORST", 
+        "🤖 사출생산팀 생산성 AI 챗봇"
     ])
 
     # =========================================================
-    # TAB 1: 종합 효율 추이
+    # TAB 1: 종합 효율 추이 (심층 분석 텍스트 강화)
     # =========================================================
     with tab1:
         tab1_df = m_f_df.copy()
@@ -380,7 +401,6 @@ if data_to_process:
             y_v = '종합효율'
             
         render_section_title("최근 5일 종합효율 요약")
-        # 🌟 오류 방어: 데이터가 비어있는지 확인
         if not p_df.empty:
             r5 = p_df.sort_values('sort_key').tail(5)
             r_cols = st.columns(5)
@@ -391,22 +411,31 @@ if data_to_process:
         
             render_section_title("월별 종합효율 추이")
             mons = list(dict.fromkeys(p_df['생산월'].tolist()))
-            # 🌟 기본값 최근 월 선택
             sel_mons = st.multiselect("📅 조회할 월 선택", mons, default=[mons[-1]] if mons else [], key='t1_m', placeholder="전체 생산월")
             mons_to_show = sel_mons if sel_mons else mons
             for m in mons_to_show:
                 m_p = p_df[p_df['생산월'] == m].copy()
                 if m_p.empty: continue
+                
+                # 🌟 [추가됨] 전문가 심층 분석 로직
                 avg_oee = m_p[y_v].mean()
-                max_row = m_p.loc[m_p[y_v].idxmax()]; min_row = m_p.loc[m_p[y_v].idxmin()]
-                render_tab_insight(f"📊 {m} 요약", f"평균 <b>{avg_oee:.1%}</b> | 최고 <b>{max_row['생산일']} ({max_row[y_v]:.1%})</b>")
-                fig_oee = go.Figure(go.Bar(x=m_p['생산일'], y=m_p[y_v], text=m_p[y_v].apply(lambda x: f"{x:.1%}"), textposition='auto', marker_color=['#3B82F6' if safe_float(row[y_v]) >= 0.86 else '#D91B1B' for _, row in m_p.iterrows()]))
+                max_row = m_p.loc[m_p[y_v].idxmax()]
+                min_row = m_p.loc[m_p[y_v].idxmin()]
+                gap = max_row[y_v] - min_row[y_v]
+                tgt_diff = avg_oee - 0.86
+                eval_text = "우수" if avg_oee >= 0.86 else "개선 요망"
+                
+                c_text = f"해당 기간 사출 공정의 평균 종합효율(OEE)은 <b>{avg_oee:.1%}</b>를 기록하여, 기준 목표치(86.0%) 대비 <b>{abs(tgt_diff):.1%}p {'초과 달성' if tgt_diff>=0 else '미달'}</b> ({eval_text}) 상태입니다.<br>최고 효율({max_row['생산일']}, {max_row[y_v]:.1%})과 최저 효율({min_row['생산일']}, {min_row[y_v]:.1%}) 간의 편차는 <b>{gap:.1%}p</b>로 확인되며, 일별 생산 산포(변동성)를 줄이고 안정적인 수율을 확보하기 위한 공정 표준화 작업이 요구됩니다."
+                render_tab_insight(f"📊 {m} 공정 종합 분석", c_text)
+                
+                text_colors = ['#3B82F6' if safe_float(row[y_v]) >= 0.86 else '#D91B1B' for _, row in m_p.iterrows()]
+                fig_oee = go.Figure(go.Bar(x=m_p['생산일'], y=m_p[y_v], text=m_p[y_v].apply(lambda x: f"{x:.1%}"), textposition='auto', marker_color=text_colors))
                 fig_oee.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=350, yaxis=dict(tickformat='.0%', range=[0, 1.0]))
                 st.plotly_chart(fig_oee, use_container_width=True)
         else: st.info("선택한 조건에 해당하는 데이터가 없습니다.")
 
     # =========================================================
-    # TAB 2: OPEN ISSUE 정밀 조회
+    # TAB 2: OPEN ISSUE 정밀 조회 (최근 생산일 1순위 적용)
     # =========================================================
     with tab2:
         render_section_title("OPEN ISSUE 현황")
@@ -419,15 +448,15 @@ if data_to_process:
         all_d2.sort(key=lambda x: date_mapping.get(x, ""), reverse=True)
         
         if all_d2:
-            # 🌟 전체 일자 옵션 추가
-            sd2_opts = ["전체 일자"] + all_d2
-            sd2 = st.selectbox("📅 조회할 일자", sd2_opts, key='tab2_date')
+            # 🌟 [수정됨] 최근 날짜가 배열의 맨 앞(0번)에 오도록 정렬 후 추가
+            sd2_opts = all_d2 + ["전체 일자"]
+            sd2 = st.selectbox("📅 조회할 일자", sd2_opts, index=0, key='tab2_date')
+            
             issue_df = t2_df.copy() if sd2 == "전체 일자" else t2_df[t2_df['생산일'] == sd2].copy()
             issue_df = issue_df.sort_values(by=['생산일', '설비명'], ascending=[False, True]).reset_index(drop=True)
             
             if not issue_df.empty:
                 issue_disp = issue_df[['생산일', '설비명', '품명', '종합효율', 'OPEN ISSUE']].copy()
-                # 🌟 NaN 방어: 품명이 없는 행은 표기에서 제외
                 issue_disp = issue_disp[issue_disp['품명'].notna()]
                 for idx, row in issue_disp.iterrows():
                     if str(row['품명']).strip() in ['', 'nan', '0', '0.0']: 
@@ -438,12 +467,13 @@ if data_to_process:
         else: st.info("조회된 날짜 데이터가 없습니다.")
 
     # =========================================================
-    # TAB 3: 일일 상세 현황
+    # TAB 3: 일일 상세 현황 (심층 분석 텍스트 강화)
     # =========================================================
     with tab3:
         render_section_title("일일 생산성 현황")
         all_d3 = list(f_df['생산일'].unique())
         all_d3.sort(key=lambda x: date_mapping.get(x, ""), reverse=True)
+        
         if all_d3:
             sd3 = st.selectbox("📅 조회할 일자", all_d3, key='tab3_date')
             day_df = f_df[f_df['생산일'] == sd3].copy().sort_values(by='설비명').reset_index(drop=True)
@@ -453,16 +483,52 @@ if data_to_process:
             if not active_day.empty:
                 day_total_val = daily_df[daily_df['생산일'] == sd3]['공장종합효율'].iloc[0] if not daily_df[daily_df['생산일'] == sd3].empty else active_day['종합효율'].mean()
                 worst_r = active_day.iloc[-1]
-                render_tab_insight(f"📊 {sd3} 분석", f"전체 효율 <b>{day_total_val:.1%}</b> | 최저 <b>{str(worst_r['설비명']).split(' - ')[0]} ({worst_r['종합효율']:.1%})</b> 원인: [{get_natural_issue_summary(worst_r['OPEN ISSUE'])}]")
+                best_r = active_day.iloc[0]
+                w_issue_sum = get_natural_issue_summary(worst_r['OPEN ISSUE'])
+                
+                # 🌟 [추가됨] 전문가 심층 분석 로직
+                c_text3 = f"해당일 사출 가동 설비의 평균 종합효율은 <b>{day_total_val:.1%}</b>를 기록했습니다.<br>최고 효율 설비는 <b>{best_r['설비_짧은명']} ({best_r['종합효율']:.1%})</b>이며, 반면 최저 효율을 기록한 <b>{worst_r['설비_짧은명']} ({worst_r['종합효율']:.1%})</b>는 <b><span style='color:#D91B1B;'>[{w_issue_sum}]</span></b> 요인이 치명적 병목(Bottleneck)으로 작용했습니다. 해당 이슈의 수평 전개 방지 및 근본 원인(Root-Cause) 제거가 시급합니다."
+                render_tab_insight(f"📊 {sd3} 가동 심층 분석", c_text3)
+                
                 best_html = "".join([f"<div style='margin-bottom:10px;'><b>{i+1}. {str(r['설비_짧은명'])}</b> <span style='float:right; font-weight:bold;'>{r['종합효율']:.1%}</span><br><span style='font-size:12px; opacity:0.8;'>{r['품명']}</span></div>" for i, (_, r) in enumerate(active_day.head(5).iterrows())])
                 worst_html = "".join([f"<div style='margin-bottom:10px;'><b>{i+1}. {str(r['설비_짧은명'])}</b> <span style='float:right; font-weight:bold;'>{r['종합효율']:.1%}</span><br><span style='font-size:12px; opacity:0.8;'>{r['품명']}</span></div>" for i, (_, r) in enumerate(active_day.tail(5).sort_values(by='종합효율').iterrows())])
-                st.markdown(f"<div class='dashboard-header'><div style='font-size: 32px; font-weight: 900; margin-bottom: 25px;'>총 {day_df['설비명'].nunique()}대 중 {active_day['설비명'].nunique()}대 가동 중</div><div style='display: flex; gap: 20px;'><div style='flex: 1; background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px;'><div style='color: #4ADE80; font-weight: 800; font-size: 16px; margin-bottom: 15px;'>🏆 BEST 5</div>{best_html}</div><div style='flex: 1; background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px;'><div style='color: #FFAAAA; font-weight: 800; font-size: 16px; margin-bottom: 15px;'>🚨 WORST 5</div>{worst_html}</div></div></div>", unsafe_allow_html=True)
+                
+                active_count = active_day['설비명'].nunique()
+                total_count = day_df['설비명'].nunique()
+                
+                st.markdown(f"""
+                <div class='dashboard-header'>
+                    <div style='font-size: 16px; opacity: 0.9; margin-bottom: 5px; font-weight: 500;'>💡 {sd3} 생산 요약</div>
+                    <div style='font-size: 32px; font-weight: 900; margin-bottom: 25px; letter-spacing: -1.5px;'>총 <span style='color: #E2E8F0;'>{total_count}</span>대 중 <span style='color: #FBBF24;'>{active_count}</span>대 가동 중</div>
+                    <div style='display: flex; gap: 20px;'>
+                        <div style='flex: 1; background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px;'>
+                            <div style='color: #4ADE80; font-weight: 800; font-size: 16px; margin-bottom: 15px;'>🏆 종합효율 BEST 5</div>
+                            {best_html}
+                        </div>
+                        <div style='flex: 1; background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px;'>
+                            <div style='color: #FFAAAA; font-weight: 800; font-size: 16px; margin-bottom: 15px;'>🚨 종합효율 WORST 5</div>
+                            {worst_html}
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                st.markdown(f"#### 📊 {sd3} 종합효율 비교")
+                bar_clrs = ['#3B82F6' if safe_float(row['종합효율']) >= 0.86 else '#D91B1B' for _, row in active_day.iterrows()]
                 fig3 = px.bar(active_day, x='설비_짧은명', y='종합효율', text_auto='.1%')
-                fig3.update_traces(marker_color=['#3B82F6' if safe_float(row['종합효율']) >= 0.86 else '#D91B1B' for _, row in active_day.iterrows()])
+                fig3.update_traces(marker_color=bar_clrs, textfont=dict(weight="bold", color='white'))
                 fig3.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=400, yaxis=dict(tickformat='.0%', range=[0, 1.0]), xaxis_title="")
                 st.plotly_chart(fig3, use_container_width=True)
+                
+                st.write("---")
+                st.markdown(f"#### 🛑 {sd3} 비가동 시간 비교")
+                downtime_day = active_day.sort_values(by='비가동시간', ascending=False)
+                fig_dt = px.bar(downtime_day[downtime_day['비가동시간']>0], x='설비_짧은명', y='비가동시간', text_auto='.1f')
+                fig_dt.update_traces(marker_color='#EF4444')
+                fig_dt.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=350, yaxis_title="시간(h)", xaxis_title="")
+                st.plotly_chart(fig_dt, use_container_width=True)
+                
                 disp_day = day_df[target_order].copy()
-                # 🌟 NaN 방어: 불필요한 데이터 제거
                 disp_day = disp_day[disp_day['품명'].notna()]
                 for idx, row in disp_day.iterrows():
                     if str(row['품명']).strip() in ['', 'nan', '0', '0.0']:
@@ -474,53 +540,80 @@ if data_to_process:
                             if c in disp_day.columns: disp_day.at[idx, c] = f"{safe_float(row[c]):.1%}"
                         for c in ['양품수량', '불량수량', '총 생산수량']: 
                             if c in disp_day.columns: disp_day.at[idx, c] = f"{int(safe_float(row[c])):,}"
+                
                 disp_day['OPEN ISSUE'] = disp_day['OPEN ISSUE'].apply(split_issue_to_columns)
                 disp_day.columns = pd.MultiIndex.from_tuples(multi_cols)
-                render_styler_to_html(disp_day.style.hide(axis="index"), is_multi=True)
+                
+                def style_day_row(row):
+                    styles = [''] * len(row)
+                    idx = row.name
+                    try:
+                        if 0 < safe_float(day_df.loc[idx, '종합효율']) < safe_float(day_df.loc[idx, '목표효율']):
+                            pos = row.index.get_loc(('생산성', '종합효율'))
+                            if isinstance(pos, np.ndarray): pos = np.where(pos)[0][0]
+                            styles[pos] = 'color: #D91B1B; font-weight: 800;' 
+                    except: pass
+                    return styles
+                
+                render_styler_to_html(disp_day.style.apply(style_day_row, axis=1).hide(axis="index"), is_multi=True)
         else: st.info("데이터가 없습니다.")
 
     # =========================================================
-    # TAB 4: BEST & WORST
+    # TAB 4: BEST & WORST (타이틀 명확화 및 심층 분석)
     # =========================================================
     with tab4:
         render_section_title("종합효율 BEST 5 & WORST 5")
         mons4 = list(dict.fromkeys(f_df['생산월'].tolist()))
-        # 🌟 요청사항 2번: 기본값 최근 월 선택
         sel_m4 = st.multiselect("📅 조회할 월 선택", mons4, default=[mons4[-1]] if mons4 else [], key='t4_m', placeholder="전체 생산월")
         t4_df = f_df[f_df['종합효율'] > 0].copy()
         if sel_m4: t4_df = t4_df[t4_df['생산월'].isin(sel_m4)]
+            
         if not t4_df.empty:
             w5 = t4_df.sort_values(by='종합효율').head(5)
-            w_details = "".join([f"📍 <b>{rw['생산일']}</b> - <b>{str(rw['설비명']).split(' - ')[0]}</b> ({rw['종합효율']:.1%}) ➔ <span style='color:#D91B1B;'>{get_natural_issue_summary(rw['OPEN ISSUE'])}</span><br>" for _, rw in w5.iterrows()])
-            render_tab_insight("📊 분석", f"<div style='background-color:rgba(217,27,27,0.03); padding:15px; border-radius:8px; border-left:4px solid #D91B1B;'>{w_details}</div>")
+            w_details = "".join([f"📍 <b>{rw['생산일']}</b> - <b>{str(rw['설비명']).split(' - ')[0]}</b> ({rw['품명']}, {rw['종합효율']:.1%}) ➔ <span style='color:#D91B1B;'>{get_natural_issue_summary(rw['OPEN ISSUE'])}</span><br>" for _, rw in w5.iterrows()])
+            
+            # 🌟 [추가됨] 전문가 심층 분석 로직
+            c_text4 = f"조회 기간 내 생산성 저하를 유발한 <b>최하위(WORST 5) 설비의 핵심 트러블 요약</b>입니다.<br>아래 나열된 고질적 불량 및 오픈 이슈에 대한 집중적인 원인 분석과 현장 개선 조치(Action Plan)가 수반되어야 전체 OEE의 상향 평준화를 견인할 수 있습니다.<br><div style='background-color:rgba(217,27,27,0.03); padding:15px; border-radius:8px; margin-top:10px; border-left:4px solid #D91B1B; line-height: 1.7;'>{w_details}</div>"
+            render_tab_insight("🚨 [WORST 5] 집중 관리 대상 심층 분석", c_text4)
+            
             for label, asc in [("🏆 BEST 5", False), ("🚨 WORST 5", True)]:
-                st.markdown(f"<h4 style='font-weight: 800; margin-top: 15px;'>{label}</h4>", unsafe_allow_html=True)
+                st.markdown(f"<h4 style='font-weight: 800; color: #1E293B; margin-top: 15px;'>{label}</h4>", unsafe_allow_html=True)
                 res = t4_df.sort_values(by='종합효율', ascending=asc).head(5)
                 res_disp = res[['생산일', '설비명', '품명', '종합효율', 'OPEN ISSUE']].copy()
-                # 🌟 NaN 방어: 불완전한 행 제거
                 res_disp = res_disp[res_disp['품명'].notna()]
                 for idx, row in res_disp.iterrows():
-                    if str(row['품명']).strip() in ['', 'nan']: res_disp.at[idx, '품명'] = ""; res_disp.at[idx, '종합효율'] = ""
-                    else: res_disp.at[idx, '종합효율'] = f"{safe_float(row['종합효율']):.1%}"
+                    if str(row['품명']).strip() in ['', 'nan']: 
+                        res_disp.at[idx, '품명'] = ""
+                        res_disp.at[idx, '종합효율'] = ""
+                    else: 
+                        res_disp.at[idx, '종합효율'] = f"{safe_float(row['종합효율']):.1%}"
                 res_disp['OPEN ISSUE'] = res_disp['OPEN ISSUE'].apply(split_issue_to_columns)
                 render_styler_to_html(res_disp.style.hide(axis="index"))
         else: st.info("조건에 맞는 데이터가 없습니다.")
 
     # =========================================================
-    # TAB 5: 비가동 정밀 분석
+    # TAB 5: 비가동 정밀 분석 (분석 현황판 복구 및 멘트 추가)
     # =========================================================
     with tab5:
         render_section_title("비가동시간 WORST 현황")
         mons5 = list(dict.fromkeys(f_df['생산월'].tolist()))
-        # 🌟 요청사항 2번: 기본값 최근 월 선택
         sel_m5 = st.multiselect("📅 조회할 월 선택", mons5, default=[mons5[-1]] if mons5 else [], key='t5_m', placeholder="전체 생산월")
         t5_df = f_df.copy()
         if sel_m5: t5_df = t5_df[t5_df['생산월'].isin(sel_m5)]
+            
         if not t5_df.empty:
             w_dt = t5_df.sort_values(by='비가동시간', ascending=False).head(10)
+            
+            # 🌟 [추가됨] 현황판 복구 및 전문가 심층 분석
+            top3_dt = w_dt.head(3)
+            total_dt_worst = top3_dt['비가동시간'].sum()
+            w_dt_details = "".join([f"🛑 <b>{rw['생산일']}</b> - <b>{str(rw['설비명']).split(' - ')[0]}</b> ({rw['비가동시간']:.1f}h) ➔ <span style='color:#D91B1B;'>{get_natural_issue_summary(rw['OPEN ISSUE'])}</span><br>" for _, rw in top3_dt.iterrows()])
+            
+            c_text5 = f"전체 가동 손실의 가장 큰 비중을 차지하는 <b>최장 비가동 상위 3건 (총 {total_dt_worst:.1f}시간 손실)</b>의 상세 내역입니다.<br>이러한 중대 비가동 요인들은 단순 처방을 넘어 사전 예방 보전(PM) 주기 단축, 부품 내구성 검토 등 시스템적 접근을 통해 원천적으로 차단해야 합니다.<br><div style='background-color:rgba(217,27,27,0.03); padding:15px; border-radius:8px; margin-top:10px; border-left:4px solid #D91B1B; line-height: 1.7;'>{w_dt_details}</div>"
+            render_tab_insight("🛑 [비가동 최다] 병목 공정 심층 분석", c_text5)
+            
             st.markdown("<h4 style='font-weight: 800;'>🚨 WORST 10</h4>", unsafe_allow_html=True)
             res_disp = w_dt[['생산일', '설비명', '품명', '비가동시간', 'OPEN ISSUE']].copy()
-            # 🌟 NaN 방어
             res_disp = res_disp[res_disp['품명'].notna()]
             for idx, row in res_disp.iterrows():
                 if str(row['품명']).strip() in ['', 'nan', '0', '0.0']: res_disp.at[idx, '품명'] = ""
