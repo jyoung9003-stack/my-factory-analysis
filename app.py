@@ -12,7 +12,7 @@ from collections import Counter
 from datetime import datetime
 
 # ==========================================
-# 🌟 [와이드 스크린 에디션] 테마 설정
+# 🌟 1. [와이드 스크린 에디션] 테마 및 기본 설정
 # ==========================================
 st.set_page_config(
     page_title="사출생산팀 일일 생산성 정밀 분석", 
@@ -124,8 +124,9 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+
 # ==========================================
-# 🌟 [함수 사전 정의 구역]
+# 🌟 2. [함수 사전 정의 구역] 
 # ==========================================
 def safe_float(val):
     try:
@@ -186,18 +187,40 @@ def get_natural_issue_summary(issue_text):
 def split_issue_to_columns(issue_text):
     lines = [line.strip() for line in str(issue_text).split('\n') if line.strip()]
     if not lines: return "<div style='font-size:12px; color:#ADB5BD; background-color:#F8FAFC; padding:8px; border-radius:4px; border:1px dashed #E9ECEF;'>📝 특이사항 없음</div>"
-    day_lines, night_lines, general_lines = [], [], []
+    day_lines = []
+    night_lines = []
+    general_lines = []
     has_shift = False
     curr = general_lines
     for line in lines:
         cl = line.replace(' ', '')
-        if '*주간' in cl or line.startswith('주간'): curr = day_lines; has_shift = True; line = re.sub(r'^\*?\s*주간\s*', '', line).strip()
-        elif '*야간' in cl or line.startswith('야간'): curr = night_lines; has_shift = True; line = re.sub(r'^\*?\s*야간\s*', '', line).strip()
+        if '*주간' in cl or line.startswith('주간'): 
+            curr = day_lines
+            has_shift = True
+            line = re.sub(r'^\*?\s*주간\s*', '', line).strip()
+        elif '*야간' in cl or line.startswith('야간'): 
+            curr = night_lines
+            has_shift = True
+            line = re.sub(r'^\*?\s*야간\s*', '', line).strip()
         if line: curr.append(line)
+    
     if not has_shift: return f"<div style='font-size:13px; color:#495057;'>{'<br>'.join(lines)}</div>"
+    
     d_h = '<br>'.join(general_lines + day_lines) if (general_lines + day_lines) else "없음"
     n_h = '<br>'.join(night_lines) if night_lines else "없음"
-    return f"<div style='display: flex; gap: 8px; margin-top: 5px;'><div style='flex: 1; background-color: #F8FAFC; border: 1px solid #E9ECEF; border-radius: 6px; padding: 10px; border-top: 3px solid #FBBF24;'><div style='font-size:11px; font-weight:bold; color:#B45309;'>☀️ 주간</div><div style='font-size:13px;'>{d_h}</div></div><div style='flex: 1; background-color: #F8FAFC; border: 1px solid #E9ECEF; border-radius: 6px; padding: 10px; border-top: 3px solid #1E293B;'><div style='font-size:11px; font-weight:bold; color:#1E293B;'>🌙 야간</div><div style='font-size:13px;'>{n_h}</div></div></div>"
+    
+    return f"""
+    <div style='display: flex; gap: 8px; margin-top: 5px;'>
+        <div style='flex: 1; background-color: #F8FAFC; border: 1px solid #E9ECEF; border-radius: 6px; padding: 10px; border-top: 3px solid #FBBF24;'>
+            <div style='font-size:11px; font-weight:bold; color:#B45309;'>☀️ 주간</div>
+            <div style='font-size:13px;'>{d_h}</div>
+        </div>
+        <div style='flex: 1; background-color: #F8FAFC; border: 1px solid #E9ECEF; border-radius: 6px; padding: 10px; border-top: 3px solid #1E293B;'>
+            <div style='font-size:11px; font-weight:bold; color:#1E293B;'>🌙 야간</div>
+            <div style='font-size:13px;'>{n_h}</div>
+        </div>
+    </div>
+    """
 
 def format_issue(text):
     val = str(text).strip()
@@ -212,7 +235,19 @@ def render_styler_to_html(styler, is_multi=False):
     try: html_str = styler.to_html(escape=False)
     except: html_str = styler.to_html()
     html_str = html_str.replace('<table', '<table class="custom-table notranslate"')
-    wrapped_html = f"""<div style='width: 100%; max-height: 500px; overflow: auto; border: 1px solid #E2E8F0; border-radius: 8px; box-shadow: 0 1px 3px 0 rgba(0,0,0,0.03); background-color: white; margin-bottom: 24px;'><style>.custom-table {{ width: 100%; border-collapse: collapse; font-size: 13px; color: #1E293B; background-color: white; }}.custom-table th {{ background-color: #F8FAFC; border: 1px solid #E2E8F0; padding: 12px 16px; text-align: center !important; font-weight: 600; color: #475569; position: sticky; top: 0; z-index: 2; }}.custom-table thead tr:nth-child(2) th {{ top: 40px; }}.custom-table td {{ border: 1px solid #F1F5F9; padding: 10px 16px; text-align: center !important; }}.custom-table td:last-child {{ text-align: left !important; min-width: 450px; line-height: 1.5; }} .custom-table tr:hover {{ background-color: #F8FAFC; }}</style>{html_str}</div>"""
+    wrapped_html = f"""
+    <div style='width: 100%; max-height: 500px; overflow: auto; border: 1px solid #E2E8F0; border-radius: 8px; box-shadow: 0 1px 3px 0 rgba(0,0,0,0.03); background-color: white; margin-bottom: 24px;'>
+        <style>
+            .custom-table {{ width: 100%; border-collapse: collapse; font-size: 13px; color: #1E293B; background-color: white; }}
+            .custom-table th {{ background-color: #F8FAFC; border: 1px solid #E2E8F0; padding: 12px 16px; text-align: center !important; font-weight: 600; color: #475569; position: sticky; top: 0; z-index: 2; }}
+            .custom-table thead tr:nth-child(2) th {{ top: 40px; }}
+            .custom-table td {{ border: 1px solid #F1F5F9; padding: 10px 16px; text-align: center !important; }}
+            .custom-table td:last-child {{ text-align: left !important; min-width: 450px; line-height: 1.5; }} 
+            .custom-table tr:hover {{ background-color: #F8FAFC; }}
+        </style>
+        {html_str}
+    </div>
+    """
     if is_multi:
         wrapped_html = re.sub(r'<th class=\"col_heading level0 col10\".*?>OPEN ISSUE</th>', r'<th class=\"col_heading level0 col10\" rowspan=\"2\" style=\"vertical-align: middle;\">OPEN ISSUE</th>', wrapped_html)
         wrapped_html = re.sub(r'<th class=\"col_heading level1 col10\".*?>OPEN ISSUE</th>', '', wrapped_html)
@@ -220,7 +255,7 @@ def render_styler_to_html(styler, is_multi=False):
 
 
 # ==========================================
-# 🌟 데이터 로드 구역
+# 🌟 3. [속도 혁명] 데이터 캐싱 및 로드 구역
 # ==========================================
 target_cols = ['생산일', '설비명', '품명', '양품수량', '불량수량', '총 생산수량', '투입시간', '가동시간', '비가동시간', '정미시간', '양품율', '성능가동율', '시간가동율', '종합효율', '목표효율', 'OPEN ISSUE']
 target_order = ['생산일', '설비명', '품명', '종합효율', '양품율', '성능가동율', '시간가동율', '총 생산수량', '양품수량', '불량수량', 'OPEN ISSUE']
@@ -231,32 +266,45 @@ multi_cols = [
     ('OPEN ISSUE', 'OPEN ISSUE')
 ]
 
-data_to_process = []
-DATA_DIR = "data"
-if os.path.exists(DATA_DIR):
-    for file_name in os.listdir(DATA_DIR):
-        if file_name.startswith("~$"): continue 
-        if file_name.endswith('.xlsx') or file_name.endswith('.csv'):
-            file_path = os.path.join(DATA_DIR, file_name)
-            try:
-                if file_name.endswith('.csv'): 
-                    try: df = pd.read_csv(file_path, encoding='utf-8')
-                    except UnicodeDecodeError: df = pd.read_csv(file_path, encoding='cp949')
-                else: df = pd.read_excel(file_path)
-                data_to_process.append((file_name, df))
-            except Exception as e: st.error(f"데이터 읽기 오류: {e}")
+# 👇 이 마법의 한 줄이 엑셀 로딩 시간을 없애줍니다.
+@st.cache_data
+def load_and_process_data():
+    data_to_process = []
+    DATA_DIR = "data"
 
-if data_to_process:
+    if os.path.exists(DATA_DIR):
+        for file_name in os.listdir(DATA_DIR):
+            if file_name.startswith("~$"): continue 
+            if file_name.endswith('.xlsx') or file_name.endswith('.csv'):
+                file_path = os.path.join(DATA_DIR, file_name)
+                try:
+                    if file_name.endswith('.csv'): 
+                        try: temp_df = pd.read_csv(file_path, encoding='utf-8')
+                        except UnicodeDecodeError: temp_df = pd.read_csv(file_path, encoding='cp949')
+                    else: 
+                        temp_df = pd.read_excel(file_path)
+                    data_to_process.append((file_name, temp_df))
+                except Exception as e: 
+                    pass # 오류 무시
+
+    if not data_to_process:
+        return pd.DataFrame(), pd.DataFrame(), {}
+
     all_records = []
     daily_totals_data = {} 
     
     for file_name, temp_df in data_to_process:
+        # 컬럼명 정리
         temp_df.columns = [str(c).replace('\n', '').replace('\r', '').strip() for c in temp_df.columns]
         name_map = {'작업장 [설비]': '설비명', '작업장[설비]': '설비명', '품목명': '품명', '합계': '총 생산수량', '합게수량': '총 생산수량', '종합 효율': '종합효율', '목표 효율': '목표효율'}
         temp_df = temp_df.rename(columns=name_map)
-        for col in temp_df.columns:
-            if 'Unnamed' in col or 'ISSUE' in col.upper(): temp_df = temp_df.rename(columns={col: 'OPEN ISSUE'}); break
         
+        for col in temp_df.columns:
+            if 'Unnamed' in col or 'ISSUE' in col.upper(): 
+                temp_df = temp_df.rename(columns={col: 'OPEN ISSUE'})
+                break
+        
+        # 파일명에서 날짜 추출
         date_match = re.search(r'\d{8}', file_name)
         if date_match:
             raw_date = date_match.group()[2:]
@@ -266,85 +314,98 @@ if data_to_process:
                 clean_date = f"{dt.strftime('%y')}년 {dt.month}월 {dt.day}일 ({week_arr[dt.weekday()]})"
                 month_str = f"{dt.strftime('%y')}년 {dt.month}월"
                 sort_key = raw_date 
-            except: clean_date = raw_date; month_str = "분류 안됨"; sort_key = raw_date
-        else: clean_date = file_name.split('.')[0]; month_str = "분류 안됨"; sort_key = clean_date
+            except: 
+                clean_date = raw_date; month_str = "분류 안됨"; sort_key = raw_date
+        else: 
+            clean_date = file_name.split('.')[0]; month_str = "분류 안됨"; sort_key = clean_date
         
+        # 스마트 합계 추적 엔진
         d_total_oee = 0.0
         for _, row in temp_df.iterrows():
             row_str = "".join([str(v).replace(' ', '').upper() for v in row.values])
-            if any(kw in row_str for kw in ['TOTAL', '합계', '총합', '전체', '총계', '평균']):
+            if any(kw in row_str for kw in ['TOTAL', '합계', '총합', '전체', '총계']):
                 val = row.get('종합효율', 0.0)
                 if pd.notna(val) and str(val).strip() != '':
                     d_total_oee = safe_float(val)
-                    if d_total_oee > 0: break
+                    if d_total_oee > 0: 
+                        break
         
         if d_total_oee == 0.0:
-            try: 
-                last_val = safe_float(temp_df['종합효율'].iloc[-1])
-                if last_val > 0: d_total_oee = last_val
-            except: pass
+            valid_oees = [safe_float(x) for x in temp_df['종합효율'] if safe_float(x) > 0]
+            if valid_oees: 
+                d_total_oee = valid_oees[-1]
             
-        if d_total_oee == 0.0:
-            try:
-                valid_oees = [safe_float(x) for x in temp_df['종합효율'] if safe_float(x) > 0]
-                if valid_oees: d_total_oee = sum(valid_oees) / len(valid_oees)
-            except: pass
-
         if sort_key not in daily_totals_data:
             daily_totals_data[sort_key] = {'생산일': clean_date, '생산월': month_str, '공장종합효율': d_total_oee}
 
         for _, row in temp_df.iterrows():
             m_val = str(row.get('설비명', '')).strip()
-            if m_val in ['', 'nan', '설비명'] or 'TOTAL' in m_val.upper() or '합계' in m_val: continue
+            if m_val in ['', 'nan', '설비명'] or any(kw in m_val.upper() for kw in ['TOTAL', '합계']): 
+                continue
+            
             record = {'sort_key': sort_key, '생산월': month_str, '생산일': clean_date}
             for col in target_cols:
-                if col != '생산일': record[col] = row[col] if col in temp_df.columns else None
+                if col != '생산일': 
+                    record[col] = row[col] if col in temp_df.columns else None
             all_records.append(record)
 
+    # 데이터 프레임 변환 및 정렬
     df = pd.DataFrame(all_records).sort_values(by='sort_key').reset_index(drop=True)
     date_mapping = dict(zip(df['생산일'], df['sort_key']))
     daily_df = pd.DataFrame([{'sort_key': k, **v} for k, v in daily_totals_data.items()]).sort_values(by='sort_key').reset_index(drop=True)
     
-    for col in ['양품수량', '불량수량', '총 생산수량', '투입시간', '가동시간', '비가동시간', '정미시간', '종합효율', '목표효율', '양품율', '성능가동율', '시간가동율']:
-        if col in df.columns: df[col] = df[col].apply(safe_float)
+    # 숫자형 변환
+    numeric_columns = ['양품수량', '불량수량', '총 생산수량', '투입시간', '가동시간', '비가동시간', '정미시간', '종합효율', '목표효율', '양품율', '성능가동율', '시간가동율']
+    for col in numeric_columns:
+        if col in df.columns: 
+            df[col] = df[col].apply(safe_float)
 
+    # 이슈 포맷팅
     df['OPEN ISSUE'] = df['OPEN ISSUE'].apply(format_issue)
+    
+    return df, daily_df, date_mapping
 
+# 캐싱된 함수를 호출하여 데이터를 빛의 속도로 가져옵니다.
+df, daily_df, date_mapping = load_and_process_data()
+
+
+# 데이터가 있을 때만 메인 로직 실행
+if not df.empty:
     # =========================================================
-    # 🌟 [수정] 우측 상단 배치 필터 레이아웃 (2줄 배치 적용)
+    # 🌟 4. [2x2 가로 배열] 우측 상단 배치 필터 레이아웃
     # =========================================================
-    # 타이틀 영역 비율을 키워서(1.3:1.7) 한 줄로 길게 출력되도록 보장합니다.
     header_col, filter_col = st.columns([1.3, 1.7])
     
     with header_col:
-        # 타이틀 높이 마진을 조정하여 우측 2단 필터와 시각적 균형을 맞춥니다.
         st.markdown("<h1 style='margin-top: 30px; margin-bottom: 10px; color: #1E293B; font-weight: 900; font-size: 30px; white-space: nowrap;' class='notranslate'>사출생산팀 생산성 및 OPEN ISSUE 분석 리포트</h1>", unsafe_allow_html=True)
 
     with filter_col:
-        # 1행: 생산월, 생산일 필터
         f1, f2 = st.columns(2)
         all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
-        with f1: sel_m_side = st.multiselect("📅 생산월", all_months, default=[all_months[-1]] if all_months else [], placeholder="전체 생산월")
+        with f1: 
+            sel_m_side = st.multiselect("📅 생산월", all_months, default=[all_months[-1]] if all_months else [], placeholder="전체 생산월")
         m_f_df = df[df['생산월'].isin(sel_m_side)].copy() if sel_m_side else df.copy()
         
         all_dates = list(m_f_df['생산일'].unique())
         all_dates.sort(key=lambda x: date_mapping.get(x, ""), reverse=True)
-        with f2: sel_d_side = st.multiselect("📆 생산일", all_dates, default=[all_dates[0]] if all_dates else [], placeholder="전체 생산일")
+        with f2: 
+            sel_d_side = st.multiselect("📆 생산일", all_dates, default=[all_dates[0]] if all_dates else [], placeholder="전체 생산일")
         d_f_df = m_f_df[m_f_df['생산일'].isin(sel_d_side)].copy() if sel_d_side else m_f_df.copy()
         
-        # 2행: 설비, 품목 필터
         f3, f4 = st.columns(2)
         all_machines = sorted([m for m in d_f_df['설비명'].unique() if m.strip() != ""])
-        with f3: sel_mach_side = st.multiselect("⚙️ 설비", all_machines, placeholder="전체 설비")
+        with f3: 
+            sel_mach_side = st.multiselect("⚙️ 설비", all_machines, placeholder="전체 설비")
         pool_df = d_f_df[d_f_df['설비명'].isin(sel_mach_side)].copy() if sel_mach_side else d_f_df.copy()
         
         actual_prods = sorted([p for p in pool_df['품명'].fillna("").astype(str).str.strip().unique() if p not in ["", "0", "0.0", "nan", "NaN", "None"]])
-        with f4: sel_prod = st.selectbox("📦 품목", ["전체 품목"] + actual_prods)
+        with f4: 
+            sel_prod = st.selectbox("📦 품목", ["전체 품목"] + actual_prods)
         f_df = pool_df[pool_df['품명'].str.strip() == sel_prod].copy() if sel_prod != "전체 품목" else pool_df.copy()
 
     st.markdown("<div style='margin-bottom: 10px;'></div>", unsafe_allow_html=True)
     
-    # 🌟 탭 명칭 
+    # 🌟 5. 메인 탭 설정 
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "📈 사출생산팀 종합효율 추이", 
         "📝 OPEN ISSUE 현황", 
@@ -425,7 +486,7 @@ if data_to_process:
                         issue_disp.at[idx, '종합효율'] = ""
                     else: 
                         issue_disp.at[idx, '종합효율'] = f"{safe_float(row['종합효율']):.1%}"
-                issue_disp['OPEN ISSUE'] = issue_disp['OPEN ISSUE'].apply(lambda x: split_issue_to_columns(x))
+                issue_disp['OPEN ISSUE'] = issue_disp['OPEN ISSUE'].apply(split_issue_to_columns)
                 render_styler_to_html(issue_disp.style.hide(axis="index"))
 
     # =========================================================
@@ -451,13 +512,28 @@ if data_to_process:
                 c_text3 = f"<b>{sd3}</b> 전체 설비 <b>합계 종합효율은 {day_total_val:.1%}</b>입니다.<br>효율이 가장 저조한 <b>{str(worst_r['설비명']).split(' - ')[0]} ({worst_r['품명']}, {worst_r['종합효율']:.1%})</b>는 <b><span style='color:#D91B1B;'>[{w_issue_sum}]</span></b> 문제가 핵심 원인입니다."
                 render_tab_insight(f"📊 {sd3} 종합 분석", c_text3)
 
-                best_html = "".join([f"<div style='margin-bottom:10px;'><b>{i+1}. {str(r['설비명']).split(' - ')[0]}</b> <span style='float:right; font-weight:bold;'>{r['종합효율']:.1%}</span><br><span style='font-size:12px; opacity:0.8;'>{r['품명']}</span></div>" for i, (_, r) in enumerate(active_day.head(5).iterrows())])
-                worst_html = "".join([f"<div style='margin-bottom:10px;'><b>{i+1}. {str(r['설비명']).split(' - ')[0]}</b> <span style='float:right; font-weight:bold;'>{r['종합효율']:.1%}</span><br><span style='font-size:12px; opacity:0.8;'>{r['품명']}</span></div>" for i, (_, r) in enumerate(active_day.tail(5).sort_values(by='종합효율').iterrows())])
+                best_html = "".join([f"<div style='margin-bottom:10px;'><b>{i+1}. {str(r['설비_짧은명'])}</b> <span style='float:right; font-weight:bold;'>{r['종합효율']:.1%}</span><br><span style='font-size:12px; opacity:0.8;'>{r['품명']}</span></div>" for i, (_, r) in enumerate(active_day.head(5).iterrows())])
+                worst_html = "".join([f"<div style='margin-bottom:10px;'><b>{i+1}. {str(r['설비_짧은명'])}</b> <span style='float:right; font-weight:bold;'>{r['종합효율']:.1%}</span><br><span style='font-size:12px; opacity:0.8;'>{r['품명']}</span></div>" for i, (_, r) in enumerate(active_day.tail(5).sort_values(by='종합효율').iterrows())])
                 
                 active_count = active_day['설비명'].nunique()
                 total_count = day_df['설비명'].nunique()
                 
-                st.markdown(f"""<div class='dashboard-header'><div style='font-size: 16px; opacity: 0.9; margin-bottom: 5px; font-weight: 500;'>💡 {sd3} 생산 요약</div><div style='font-size: 32px; font-weight: 900; margin-bottom: 25px; letter-spacing: -1.5px;'>총 <span style='color: #E2E8F0;'>{total_count}</span>대 중 <span style='color: #FBBF24;'>{active_count}</span>대 가동 중</div><div style='display: flex; gap: 20px;'><div style='flex: 1; background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px;'><div style='color: #4ADE80; font-weight: 800; font-size: 16px; margin-bottom: 15px;'>🏆 종합효율 BEST 5</div>{best_html}</div><div style='flex: 1; background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px;'><div style='color: #FFAAAA; font-weight: 800; font-size: 16px; margin-bottom: 15px;'>🚨 종합효율 WORST 5</div>{worst_html}</div></div></div>""", unsafe_allow_html=True)
+                st.markdown(f"""
+                <div class='dashboard-header'>
+                    <div style='font-size: 16px; opacity: 0.9; margin-bottom: 5px; font-weight: 500;'>💡 {sd3} 생산 요약</div>
+                    <div style='font-size: 32px; font-weight: 900; margin-bottom: 25px; letter-spacing: -1.5px;'>총 <span style='color: #E2E8F0;'>{total_count}</span>대 중 <span style='color: #FBBF24;'>{active_count}</span>대 가동 중</div>
+                    <div style='display: flex; gap: 20px;'>
+                        <div style='flex: 1; background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px;'>
+                            <div style='color: #4ADE80; font-weight: 800; font-size: 16px; margin-bottom: 15px;'>🏆 종합효율 BEST 5</div>
+                            {best_html}
+                        </div>
+                        <div style='flex: 1; background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px;'>
+                            <div style='color: #FFAAAA; font-weight: 800; font-size: 16px; margin-bottom: 15px;'>🚨 종합효율 WORST 5</div>
+                            {worst_html}
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
                 
                 st.markdown(f"#### 📊 {sd3} 종합효율 비교")
                 bar_clrs = ['#3B82F6' if safe_float(row['종합효율']) >= 0.86 else '#D91B1B' for _, row in active_day.iterrows()]
@@ -487,7 +563,7 @@ if data_to_process:
                         for c in ['양품수량', '불량수량', '총 생산수량']: 
                             if c in disp_day.columns: disp_day.at[idx, c] = f"{int(safe_float(row[c])):,}"
                 
-                disp_day['OPEN ISSUE'] = disp_day['OPEN ISSUE'].apply(lambda x: split_issue_to_columns(x))
+                disp_day['OPEN ISSUE'] = disp_day['OPEN ISSUE'].apply(split_issue_to_columns)
                 disp_day.columns = pd.MultiIndex.from_tuples(multi_cols)
                 
                 def style_day_row(row):
@@ -526,7 +602,7 @@ if data_to_process:
                         res_disp.at[idx, '종합효율'] = ""
                     else: 
                         res_disp.at[idx, '종합효율'] = f"{safe_float(row['종합효율']):.1%}"
-                res_disp['OPEN ISSUE'] = res_disp['OPEN ISSUE'].apply(lambda x: split_issue_to_columns(x))
+                res_disp['OPEN ISSUE'] = res_disp['OPEN ISSUE'].apply(split_issue_to_columns)
                 render_styler_to_html(res_disp.style.hide(axis="index"))
 
     # =========================================================
@@ -547,7 +623,7 @@ if data_to_process:
             for idx, row in res_disp.iterrows():
                 if str(row['품명']).strip() in ['', 'nan', '0', '0.0']: res_disp.at[idx, '품명'] = ""
             res_disp['비가동시간'] = res_disp['비가동시간'].apply(lambda x: f"{safe_float(x):.1f}h")
-            res_disp['OPEN ISSUE'] = res_disp['OPEN ISSUE'].apply(lambda x: split_issue_to_columns(x))
+            res_disp['OPEN ISSUE'] = res_disp['OPEN ISSUE'].apply(split_issue_to_columns)
             render_styler_to_html(res_disp.style.hide(axis="index"))
 
     # =========================================================
@@ -556,11 +632,17 @@ if data_to_process:
     with tab6:
         render_section_title("🤖 AI 생산 데이터 챗봇")
         ak = st.text_input("🔑 OpenAI API Key 입력", type="password")
-        if "msgs" not in st.session_state: st.session_state.msgs = [{"role": "assistant", "content": "사출생산팀 데이터 분석을 도와드리는 AI 챗봇입니다."}]
-        for m in st.session_state.msgs: st.chat_message(m["role"]).write(m["content"])
+        if "msgs" not in st.session_state: 
+            st.session_state.msgs = [{"role": "assistant", "content": "사출생산팀 데이터 분석을 도와드리는 AI 챗봇입니다."}]
+        for m in st.session_state.msgs: 
+            st.chat_message(m["role"]).write(m["content"])
         if pr := st.chat_input("데이터에 관해 질문하세요"):
-            st.session_state.msgs.append({"role": "user", "content": pr}); st.chat_message("user").write(pr)
-            if not ak: st.chat_message("assistant").write("💡 API 키를 입력해 주세요.")
-            else: st.chat_message("assistant").write("데이터를 분석 중입니다...")
+            st.session_state.msgs.append({"role": "user", "content": pr})
+            st.chat_message("user").write(pr)
+            if not ak: 
+                st.chat_message("assistant").write("💡 API 키를 입력해 주세요.")
+            else: 
+                st.chat_message("assistant").write("데이터를 분석 중입니다...")
 
-else: st.info("GitHub data 폴더에 CSV 파일을 넣어주세요.")
+else: 
+    st.info("GitHub data 폴더에 CSV 파일을 넣어주세요.")
