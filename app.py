@@ -249,7 +249,7 @@ def render_styler_to_html(styler, is_multi=False):
 
 
 # ==========================================
-# 🌟 3. 데이터 로드 및 전처리 (NaN 철통 방어 원본)
+# 🌟 3. 데이터 로드 및 전처리
 # ==========================================
 target_cols = ['생산일', '설비명', '품명', '양품수량', '불량수량', '총 생산수량', '투입시간', '가동시간', '비가동시간', '정미시간', '양품율', '성능가동율', '시간가동율', '종합효율', '목표효율', 'OPEN ISSUE']
 target_order = ['생산일', '설비명', '품명', '종합효율', '양품율', '성능가동율', '시간가동율', '총 생산수량', '양품수량', '불량수량', 'OPEN ISSUE']
@@ -328,6 +328,7 @@ if data_to_process:
             if m_val.lower() in ['', 'nan', 'none', 'null', '#n/a', '설비명'] or any(kw in m_val.upper() for kw in ['TOTAL', '합계']): 
                 continue
             
+            # sort_key를 레코드에 포함시켜 나중에 정확한 날짜 정렬에 사용합니다.
             record = {'sort_key': sort_key, '생산월': month_str, '생산일': clean_date}
             for col in target_cols:
                 if col != '생산일': record[col] = row[col] if col in temp_df.columns else None
@@ -384,7 +385,7 @@ if data_to_process:
     ])
 
     # =========================================================
-    # TAB 1: 종합 효율 추이 (심층 분석 텍스트 강화)
+    # TAB 1: 종합 효율 추이 (데이터 기반 팩트 분석 텍스트)
     # =========================================================
     with tab1:
         tab1_df = m_f_df.copy()
@@ -417,15 +418,15 @@ if data_to_process:
                 m_p = p_df[p_df['생산월'] == m].copy()
                 if m_p.empty: continue
                 
-                # 🌟 [추가됨] 전문가 심층 분석 로직
+                # 🌟 [수정됨] 팩트 기반 데이터 분석
                 avg_oee = m_p[y_v].mean()
                 max_row = m_p.loc[m_p[y_v].idxmax()]
                 min_row = m_p.loc[m_p[y_v].idxmin()]
                 gap = max_row[y_v] - min_row[y_v]
                 tgt_diff = avg_oee - 0.86
-                eval_text = "우수" if avg_oee >= 0.86 else "개선 요망"
+                eval_text = "우수" if avg_oee >= 0.86 else "미달"
                 
-                c_text = f"해당 기간 사출 공정의 평균 종합효율(OEE)은 <b>{avg_oee:.1%}</b>를 기록하여, 기준 목표치(86.0%) 대비 <b>{abs(tgt_diff):.1%}p {'초과 달성' if tgt_diff>=0 else '미달'}</b> ({eval_text}) 상태입니다.<br>최고 효율({max_row['생산일']}, {max_row[y_v]:.1%})과 최저 효율({min_row['생산일']}, {min_row[y_v]:.1%}) 간의 편차는 <b>{gap:.1%}p</b>로 확인되며, 일별 생산 산포(변동성)를 줄이고 안정적인 수율을 확보하기 위한 공정 표준화 작업이 요구됩니다."
+                c_text = f"해당 기간 사출 공정의 평균 종합효율(OEE)은 <b>{avg_oee:.1%}</b>를 기록하여, 기준 목표치(86.0%) 대비 <b>{abs(tgt_diff):.1%}p {'초과' if tgt_diff>=0 else '미달'}</b> ({eval_text}) 상태입니다.<br>최고 효율({max_row['생산일']}, {max_row[y_v]:.1%})과 최저 효율({min_row['생산일']}, {min_row[y_v]:.1%}) 간의 효율 편차는 <b>{gap:.1%}p</b>로 확인되었습니다."
                 render_tab_insight(f"📊 {m} 공정 종합 분석", c_text)
                 
                 text_colors = ['#3B82F6' if safe_float(row[y_v]) >= 0.86 else '#D91B1B' for _, row in m_p.iterrows()]
@@ -435,7 +436,7 @@ if data_to_process:
         else: st.info("선택한 조건에 해당하는 데이터가 없습니다.")
 
     # =========================================================
-    # TAB 2: OPEN ISSUE 정밀 조회 (최근 생산일 1순위 적용)
+    # TAB 2: OPEN ISSUE 정밀 조회 ('전체 일자' 리스트 최상단 및 sort_key 정렬)
     # =========================================================
     with tab2:
         render_section_title("OPEN ISSUE 현황")
@@ -448,12 +449,14 @@ if data_to_process:
         all_d2.sort(key=lambda x: date_mapping.get(x, ""), reverse=True)
         
         if all_d2:
-            # 🌟 [수정됨] 최근 날짜가 배열의 맨 앞(0번)에 오도록 정렬 후 추가
-            sd2_opts = all_d2 + ["전체 일자"]
-            sd2 = st.selectbox("📅 조회할 일자", sd2_opts, index=0, key='tab2_date')
+            # 🌟 [수정됨] '전체 일자'를 옵션 리스트의 0번째(맨 위)에 배치
+            sd2_opts = ["전체 일자"] + all_d2
+            # 🌟 [수정됨] 하지만 기본 선택값(index)은 가장 최근 일자인 1번 인덱스로 지정
+            sd2 = st.selectbox("📅 조회할 일자", sd2_opts, index=1 if len(all_d2) > 0 else 0, key='tab2_date')
             
             issue_df = t2_df.copy() if sd2 == "전체 일자" else t2_df[t2_df['생산일'] == sd2].copy()
-            issue_df = issue_df.sort_values(by=['생산일', '설비명'], ascending=[False, True]).reset_index(drop=True)
+            # 🌟 [수정됨] 텍스트인 '생산일' 대신 'sort_key'(날짜 고유번호)로 내림차순 정렬하여 4월 9일이 먼저 뜨지 않게 차단
+            issue_df = issue_df.sort_values(by=['sort_key', '설비명'], ascending=[False, True]).reset_index(drop=True)
             
             if not issue_df.empty:
                 issue_disp = issue_df[['생산일', '설비명', '품명', '종합효율', 'OPEN ISSUE']].copy()
@@ -467,7 +470,7 @@ if data_to_process:
         else: st.info("조회된 날짜 데이터가 없습니다.")
 
     # =========================================================
-    # TAB 3: 일일 상세 현황 (심층 분석 텍스트 강화)
+    # TAB 3: 일일 상세 현황 (팩트 기반 텍스트)
     # =========================================================
     with tab3:
         render_section_title("일일 생산성 현황")
@@ -486,8 +489,8 @@ if data_to_process:
                 best_r = active_day.iloc[0]
                 w_issue_sum = get_natural_issue_summary(worst_r['OPEN ISSUE'])
                 
-                # 🌟 [추가됨] 전문가 심층 분석 로직
-                c_text3 = f"해당일 사출 가동 설비의 평균 종합효율은 <b>{day_total_val:.1%}</b>를 기록했습니다.<br>최고 효율 설비는 <b>{best_r['설비_짧은명']} ({best_r['종합효율']:.1%})</b>이며, 반면 최저 효율을 기록한 <b>{worst_r['설비_짧은명']} ({worst_r['종합효율']:.1%})</b>는 <b><span style='color:#D91B1B;'>[{w_issue_sum}]</span></b> 요인이 치명적 병목(Bottleneck)으로 작용했습니다. 해당 이슈의 수평 전개 방지 및 근본 원인(Root-Cause) 제거가 시급합니다."
+                # 🌟 [수정됨] 팩트 기반 데이터 분석
+                c_text3 = f"해당일 사출 가동 설비의 평균 종합효율은 <b>{day_total_val:.1%}</b>를 기록했습니다.<br>최고 효율 설비는 <b>{best_r['설비_짧은명']} ({best_r['종합효율']:.1%})</b>이며, 반면 최저 효율을 기록한 <b>{worst_r['설비_짧은명']} ({worst_r['종합효율']:.1%})</b>는 <b><span style='color:#D91B1B;'>[{w_issue_sum}]</span></b> 기록이 주요 비가동 및 효율 저하 원인으로 확인되었습니다."
                 render_tab_insight(f"📊 {sd3} 가동 심층 분석", c_text3)
                 
                 best_html = "".join([f"<div style='margin-bottom:10px;'><b>{i+1}. {str(r['설비_짧은명'])}</b> <span style='float:right; font-weight:bold;'>{r['종합효율']:.1%}</span><br><span style='font-size:12px; opacity:0.8;'>{r['품명']}</span></div>" for i, (_, r) in enumerate(active_day.head(5).iterrows())])
@@ -559,7 +562,7 @@ if data_to_process:
         else: st.info("데이터가 없습니다.")
 
     # =========================================================
-    # TAB 4: BEST & WORST (타이틀 명확화 및 심층 분석)
+    # TAB 4: BEST & WORST (타이틀 명확화 및 팩트 기반 데이터 요약)
     # =========================================================
     with tab4:
         render_section_title("종합효율 BEST 5 & WORST 5")
@@ -572,8 +575,8 @@ if data_to_process:
             w5 = t4_df.sort_values(by='종합효율').head(5)
             w_details = "".join([f"📍 <b>{rw['생산일']}</b> - <b>{str(rw['설비명']).split(' - ')[0]}</b> ({rw['품명']}, {rw['종합효율']:.1%}) ➔ <span style='color:#D91B1B;'>{get_natural_issue_summary(rw['OPEN ISSUE'])}</span><br>" for _, rw in w5.iterrows()])
             
-            # 🌟 [추가됨] 전문가 심층 분석 로직
-            c_text4 = f"조회 기간 내 생산성 저하를 유발한 <b>최하위(WORST 5) 설비의 핵심 트러블 요약</b>입니다.<br>아래 나열된 고질적 불량 및 오픈 이슈에 대한 집중적인 원인 분석과 현장 개선 조치(Action Plan)가 수반되어야 전체 OEE의 상향 평준화를 견인할 수 있습니다.<br><div style='background-color:rgba(217,27,27,0.03); padding:15px; border-radius:8px; margin-top:10px; border-left:4px solid #D91B1B; line-height: 1.7;'>{w_details}</div>"
+            # 🌟 [수정됨] 팩트 기반 요약 멘트 적용
+            c_text4 = f"조회 기간 내 가장 낮은 종합효율을 기록한 <b>하위 5개(WORST 5) 설비의 수치 및 발생한 핵심 트러블(OPEN ISSUE) 요약 데이터</b>입니다.<br><div style='background-color:rgba(217,27,27,0.03); padding:15px; border-radius:8px; margin-top:10px; border-left:4px solid #D91B1B; line-height: 1.7;'>{w_details}</div>"
             render_tab_insight("🚨 [WORST 5] 집중 관리 대상 심층 분석", c_text4)
             
             for label, asc in [("🏆 BEST 5", False), ("🚨 WORST 5", True)]:
@@ -592,7 +595,7 @@ if data_to_process:
         else: st.info("조건에 맞는 데이터가 없습니다.")
 
     # =========================================================
-    # TAB 5: 비가동 정밀 분석 (분석 현황판 복구 및 멘트 추가)
+    # TAB 5: 비가동 정밀 분석 (분석 현황판 복구 및 팩트 기반 텍스트)
     # =========================================================
     with tab5:
         render_section_title("비가동시간 WORST 현황")
@@ -604,12 +607,12 @@ if data_to_process:
         if not t5_df.empty:
             w_dt = t5_df.sort_values(by='비가동시간', ascending=False).head(10)
             
-            # 🌟 [추가됨] 현황판 복구 및 전문가 심층 분석
             top3_dt = w_dt.head(3)
             total_dt_worst = top3_dt['비가동시간'].sum()
             w_dt_details = "".join([f"🛑 <b>{rw['생산일']}</b> - <b>{str(rw['설비명']).split(' - ')[0]}</b> ({rw['비가동시간']:.1f}h) ➔ <span style='color:#D91B1B;'>{get_natural_issue_summary(rw['OPEN ISSUE'])}</span><br>" for _, rw in top3_dt.iterrows()])
             
-            c_text5 = f"전체 가동 손실의 가장 큰 비중을 차지하는 <b>최장 비가동 상위 3건 (총 {total_dt_worst:.1f}시간 손실)</b>의 상세 내역입니다.<br>이러한 중대 비가동 요인들은 단순 처방을 넘어 사전 예방 보전(PM) 주기 단축, 부품 내구성 검토 등 시스템적 접근을 통해 원천적으로 차단해야 합니다.<br><div style='background-color:rgba(217,27,27,0.03); padding:15px; border-radius:8px; margin-top:10px; border-left:4px solid #D91B1B; line-height: 1.7;'>{w_dt_details}</div>"
+            # 🌟 [수정됨] 해결 방안 배제 및 팩트 기반 요약 멘트 적용
+            c_text5 = f"조회 기간 내 발생한 비가동 시간 중 가장 큰 비중을 차지하는 <b>최장 비가동 상위 3건(총 {total_dt_worst:.1f}시간 손실)의 상세 발생 내역 및 오픈 이슈</b>입니다.<br><div style='background-color:rgba(217,27,27,0.03); padding:15px; border-radius:8px; margin-top:10px; border-left:4px solid #D91B1B; line-height: 1.7;'>{w_dt_details}</div>"
             render_tab_insight("🛑 [비가동 최다] 병목 공정 심층 분석", c_text5)
             
             st.markdown("<h4 style='font-weight: 800;'>🚨 WORST 10</h4>", unsafe_allow_html=True)
