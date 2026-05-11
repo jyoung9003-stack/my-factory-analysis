@@ -344,35 +344,48 @@ if data_to_process:
 
     df['OPEN ISSUE'] = df['OPEN ISSUE'].apply(format_issue)
 
+# =========================================================
+    # 🌟 4. [디자인 개선] 로고 삽입 및 1열 4단 필터 레이아웃
     # =========================================================
-    # 🌟 4. [2x2 가로 배열] 우측 상단 배치 필터 레이아웃
-    # =========================================================
-    header_col, filter_col = st.columns([1.3, 1.7])
+    # 상단 1층: 회사 로고와 메인 타이틀 배치
+    title_col1, title_col2 = st.columns([0.6, 9.4])
     
-    with header_col:
-        st.markdown("<h1 style='margin-top: 30px; margin-bottom: 10px; color: #1E293B; font-weight: 900; font-size: 30px; white-space: nowrap;' class='notranslate'>사출생산팀 생산성 및 OPEN ISSUE 분석 리포트</h1>", unsafe_allow_html=True)
+    with title_col1:
+        # 💡 [로고 삽입] 깃허브에 logo.png 파일을 올리셨다면 아래 코드가 로고를 띄워줍니다!
+        try:
+            st.image("logo.png", width=80) 
+        except:
+            # 로고 파일이 아직 없을 때 임시로 띄워두는 빌딩 아이콘
+            st.markdown("<div style='font-size: 50px; margin-top: 10px;'>🏢</div>", unsafe_allow_html=True)
 
-    with filter_col:
-        f1, f2 = st.columns(2)
-        all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
-        with f1: sel_m_side = st.multiselect("📅 생산월", all_months, default=[], placeholder="전체 생산월") 
-        m_f_df = df[df['생산월'].isin(sel_m_side)].copy() if sel_m_side else df.copy()
-        
-        all_dates = list(m_f_df['생산일'].unique())
-        all_dates.sort(key=lambda x: date_mapping.get(x, ""), reverse=True)
-        with f2: sel_d_side = st.multiselect("📆 생산일", all_dates, default=[], placeholder="전체 생산일") 
-        d_f_df = m_f_df[m_f_df['생산일'].isin(sel_d_side)].copy() if sel_d_side else m_f_df.copy()
-        
-        f3, f4 = st.columns(2)
-        all_machines = sorted([m for m in d_f_df['설비명'].unique() if m.strip() != ""])
-        with f3: sel_mach_side = st.multiselect("⚙️ 설비", all_machines, placeholder="전체 설비")
-        pool_df = d_f_df[d_f_df['설비명'].isin(sel_mach_side)].copy() if sel_mach_side else d_f_df.copy()
-        
-        actual_prods = sorted([p for p in pool_df['품명'].fillna("").astype(str).str.strip().unique() if p not in ["", "0", "0.0", "nan", "NaN", "None"]])
-        with f4: sel_prod = st.selectbox("📦 품목", ["전체 품목"] + actual_prods)
-        f_df = pool_df[pool_df['품명'].str.strip() == sel_prod].copy() if sel_prod != "전체 품목" else pool_df.copy()
+    with title_col2:
+        st.markdown("<h1 style='margin-top: 20px; margin-bottom: 20px; color: #1E293B; font-weight: 900; font-size: 32px; white-space: nowrap;' class='notranslate'>사출생산팀 생산성 및 OPEN ISSUE 분석 리포트</h1>", unsafe_allow_html=True)
 
-    st.markdown("<div style='margin-bottom: 10px;'></div>", unsafe_allow_html=True)
+    # 상단 2층: 여백을 없애는 4단 가로 필터 쫙 펴기
+    f1, f2, f3, f4 = st.columns(4)
+    
+    all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
+    with f1: 
+        sel_m_side = st.multiselect("📅 생산월", all_months, default=[], placeholder="전체 생산월") 
+    m_f_df = df[df['생산월'].isin(sel_m_side)].copy() if sel_m_side else df.copy()
+    
+    all_dates = list(m_f_df['생산일'].unique())
+    all_dates.sort(key=lambda x: date_mapping.get(x, ""), reverse=True)
+    with f2: 
+        sel_d_side = st.multiselect("📆 생산일", all_dates, default=[], placeholder="전체 생산일") 
+    d_f_df = m_f_df[m_f_df['생산일'].isin(sel_d_side)].copy() if sel_d_side else m_f_df.copy()
+    
+    all_machines = sorted([m for m in d_f_df['설비명'].unique() if m.strip() != ""])
+    with f3: 
+        sel_mach_side = st.multiselect("⚙️ 설비", all_machines, placeholder="전체 설비")
+    pool_df = d_f_df[d_f_df['설비명'].isin(sel_mach_side)].copy() if sel_mach_side else d_f_df.copy()
+    
+    actual_prods = sorted([p for p in pool_df['품명'].fillna("").astype(str).str.strip().unique() if p not in ["", "0", "0.0", "nan", "NaN", "None"]])
+    with f4: 
+        sel_prod = st.selectbox("📦 품목", ["전체 품목"] + actual_prods)
+    f_df = pool_df[pool_df['품명'].str.strip() == sel_prod].copy() if sel_prod != "전체 품목" else pool_df.copy()
+
+    st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
     
     # 🌟 5. 메인 탭 설정 
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
