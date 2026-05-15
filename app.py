@@ -249,7 +249,7 @@ def render_styler_to_html(styler, is_multi=False):
 
 
 # ==========================================
-# 🌟 3. 데이터 로드 및 전처리
+# 🌟 3. 데이터 로드 및 전처리 (M열 48행 100% 추적 엔진)
 # ==========================================
 target_cols = ['생산일', '설비명', '품명', '양품수량', '불량수량', '총 생산수량', '투입시간', '가동시간', '비가동시간', '정미시간', '양품율', '성능가동율', '시간가동율', '종합효율', '목표효율', 'OPEN ISSUE']
 target_order = ['생산일', '설비명', '품명', '종합효율', '양품율', '성능가동율', '시간가동율', '총 생산수량', '양품수량', '불량수량', 'OPEN ISSUE']
@@ -305,18 +305,24 @@ if data_to_process:
         else: 
             clean_date = file_name.split('.')[0]; month_str = "분류 안됨"; sort_key = clean_date
         
+        # 🚨 [오류 완벽 수정] 중간 소계에 멈추지 않고 끝까지 스캔!
         d_total_oee = 0.0
         for _, row in temp_df.iterrows():
             row_str = "".join([str(v).replace(' ', '').upper() for v in row.values])
             if any(kw in row_str for kw in ['TOTAL', '합계', '총합', '전체', '총계']):
                 val = row.get('종합효율', 0.0)
                 if pd.notna(val) and str(val).strip() != '':
-                    d_total_oee = safe_float(val)
-                    if d_total_oee > 0: break
+                    parsed_val = safe_float(val)
+                    if parsed_val > 0:
+                        # break를 완전히 제거했습니다. 
+                        # 주간합계, 야간합계가 나와도 무시하고 맨 마지막에 적힌 '진짜 총합계'를 덮어씁니다.
+                        d_total_oee = parsed_val 
         
+        # 만약 엑셀에 '합계'라는 글자조차 없다면, 종합효율(M열)의 가장 밑바닥에 적힌 유효 숫자를 가져옵니다.
         if d_total_oee == 0.0:
             valid_oees = [safe_float(x) for x in temp_df['종합효율'] if safe_float(x) > 0]
-            if valid_oees: d_total_oee = valid_oees[-1]
+            if valid_oees: 
+                d_total_oee = valid_oees[-1]
             
         if sort_key not in daily_totals_data:
             daily_totals_data[sort_key] = {'생산일': clean_date, '생산월': month_str, '공장종합효율': d_total_oee}
@@ -328,7 +334,6 @@ if data_to_process:
             if m_val.lower() in ['', 'nan', 'none', 'null', '#n/a', '설비명'] or any(kw in m_val.upper() for kw in ['TOTAL', '합계']): 
                 continue
             
-            # sort_key를 레코드에 포함시켜 나중에 정확한 날짜 정렬에 사용합니다.
             record = {'sort_key': sort_key, '생산월': month_str, '생산일': clean_date}
             for col in target_cols:
                 if col != '생산일': record[col] = row[col] if col in temp_df.columns else None
@@ -344,45 +349,37 @@ if data_to_process:
 
     df['OPEN ISSUE'] = df['OPEN ISSUE'].apply(format_issue)
 
-# =========================================================
+    # =========================================================
     # 🌟 4. [디자인 개선] 로고 삽입 및 1열 4단 필터 레이아웃
     # =========================================================
-    # 상단 1층: 회사 로고와 메인 타이틀 배치
     title_col1, title_col2 = st.columns([0.6, 9.4])
     
     with title_col1:
-        # 💡 [로고 삽입] 깃허브에 logo.png 파일을 올리셨다면 아래 코드가 로고를 띄워줍니다!
         try:
             st.image("logo.png", width=80) 
         except:
-            # 로고 파일이 아직 없을 때 임시로 띄워두는 빌딩 아이콘
             st.markdown("<div style='font-size: 50px; margin-top: 10px;'>🏢</div>", unsafe_allow_html=True)
 
     with title_col2:
         st.markdown("<h1 style='margin-top: 20px; margin-bottom: 20px; color: #1E293B; font-weight: 900; font-size: 32px; white-space: nowrap;' class='notranslate'>사출생산팀 생산성 및 OPEN ISSUE 분석 리포트</h1>", unsafe_allow_html=True)
 
-    # 상단 2층: 여백을 없애는 4단 가로 필터 쫙 펴기
     f1, f2, f3, f4 = st.columns(4)
     
     all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
-    with f1: 
-        sel_m_side = st.multiselect("📅 생산월", all_months, default=[], placeholder="전체 생산월") 
+    with f1: sel_m_side = st.multiselect("📅 생산월", all_months, default=[], placeholder="전체 생산월") 
     m_f_df = df[df['생산월'].isin(sel_m_side)].copy() if sel_m_side else df.copy()
     
     all_dates = list(m_f_df['생산일'].unique())
     all_dates.sort(key=lambda x: date_mapping.get(x, ""), reverse=True)
-    with f2: 
-        sel_d_side = st.multiselect("📆 생산일", all_dates, default=[], placeholder="전체 생산일") 
+    with f2: sel_d_side = st.multiselect("📆 생산일", all_dates, default=[], placeholder="전체 생산일") 
     d_f_df = m_f_df[m_f_df['생산일'].isin(sel_d_side)].copy() if sel_d_side else m_f_df.copy()
     
     all_machines = sorted([m for m in d_f_df['설비명'].unique() if m.strip() != ""])
-    with f3: 
-        sel_mach_side = st.multiselect("⚙️ 설비", all_machines, placeholder="전체 설비")
+    with f3: sel_mach_side = st.multiselect("⚙️ 설비", all_machines, placeholder="전체 설비")
     pool_df = d_f_df[d_f_df['설비명'].isin(sel_mach_side)].copy() if sel_mach_side else d_f_df.copy()
     
     actual_prods = sorted([p for p in pool_df['품명'].fillna("").astype(str).str.strip().unique() if p not in ["", "0", "0.0", "nan", "NaN", "None"]])
-    with f4: 
-        sel_prod = st.selectbox("📦 품목", ["전체 품목"] + actual_prods)
+    with f4: sel_prod = st.selectbox("📦 품목", ["전체 품목"] + actual_prods)
     f_df = pool_df[pool_df['품명'].str.strip() == sel_prod].copy() if sel_prod != "전체 품목" else pool_df.copy()
 
     st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
@@ -398,7 +395,7 @@ if data_to_process:
     ])
 
     # =========================================================
-    # TAB 1: 종합 효율 추이 (데이터 기반 팩트 분석 텍스트)
+    # TAB 1: 종합 효율 추이 
     # =========================================================
     with tab1:
         tab1_df = m_f_df.copy()
@@ -431,7 +428,6 @@ if data_to_process:
                 m_p = p_df[p_df['생산월'] == m].copy()
                 if m_p.empty: continue
                 
-                # 🌟 [수정됨] 팩트 기반 데이터 분석
                 avg_oee = m_p[y_v].mean()
                 max_row = m_p.loc[m_p[y_v].idxmax()]
                 min_row = m_p.loc[m_p[y_v].idxmin()]
@@ -449,7 +445,7 @@ if data_to_process:
         else: st.info("선택한 조건에 해당하는 데이터가 없습니다.")
 
     # =========================================================
-    # TAB 2: OPEN ISSUE 정밀 조회 ('전체 일자' 리스트 최상단 및 sort_key 정렬)
+    # TAB 2: OPEN ISSUE 정밀 조회 
     # =========================================================
     with tab2:
         render_section_title("OPEN ISSUE 현황")
@@ -462,13 +458,10 @@ if data_to_process:
         all_d2.sort(key=lambda x: date_mapping.get(x, ""), reverse=True)
         
         if all_d2:
-            # 🌟 [수정됨] '전체 일자'를 옵션 리스트의 0번째(맨 위)에 배치
             sd2_opts = ["전체 일자"] + all_d2
-            # 🌟 [수정됨] 하지만 기본 선택값(index)은 가장 최근 일자인 1번 인덱스로 지정
             sd2 = st.selectbox("📅 조회할 일자", sd2_opts, index=1 if len(all_d2) > 0 else 0, key='tab2_date')
             
             issue_df = t2_df.copy() if sd2 == "전체 일자" else t2_df[t2_df['생산일'] == sd2].copy()
-            # 🌟 [수정됨] 텍스트인 '생산일' 대신 'sort_key'(날짜 고유번호)로 내림차순 정렬하여 4월 9일이 먼저 뜨지 않게 차단
             issue_df = issue_df.sort_values(by=['sort_key', '설비명'], ascending=[False, True]).reset_index(drop=True)
             
             if not issue_df.empty:
@@ -483,7 +476,7 @@ if data_to_process:
         else: st.info("조회된 날짜 데이터가 없습니다.")
 
     # =========================================================
-    # TAB 3: 일일 상세 현황 (팩트 기반 텍스트)
+    # TAB 3: 일일 상세 현황
     # =========================================================
     with tab3:
         render_section_title("일일 생산성 현황")
@@ -502,7 +495,6 @@ if data_to_process:
                 best_r = active_day.iloc[0]
                 w_issue_sum = get_natural_issue_summary(worst_r['OPEN ISSUE'])
                 
-                # 🌟 [수정됨] 팩트 기반 데이터 분석
                 c_text3 = f"해당일 사출 가동 설비의 평균 종합효율은 <b>{day_total_val:.1%}</b>를 기록했습니다.<br>최고 효율 설비는 <b>{best_r['설비_짧은명']} ({best_r['종합효율']:.1%})</b>이며, 반면 최저 효율을 기록한 <b>{worst_r['설비_짧은명']} ({worst_r['종합효율']:.1%})</b>는 <b><span style='color:#D91B1B;'>[{w_issue_sum}]</span></b> 기록이 주요 비가동 및 효율 저하 원인으로 확인되었습니다."
                 render_tab_insight(f"📊 {sd3} 가동 심층 분석", c_text3)
                 
@@ -575,7 +567,7 @@ if data_to_process:
         else: st.info("데이터가 없습니다.")
 
     # =========================================================
-    # TAB 4: BEST & WORST (타이틀 명확화 및 팩트 기반 데이터 요약)
+    # TAB 4: BEST & WORST
     # =========================================================
     with tab4:
         render_section_title("종합효율 BEST 5 & WORST 5")
@@ -588,7 +580,6 @@ if data_to_process:
             w5 = t4_df.sort_values(by='종합효율').head(5)
             w_details = "".join([f"📍 <b>{rw['생산일']}</b> - <b>{str(rw['설비명']).split(' - ')[0]}</b> ({rw['품명']}, {rw['종합효율']:.1%}) ➔ <span style='color:#D91B1B;'>{get_natural_issue_summary(rw['OPEN ISSUE'])}</span><br>" for _, rw in w5.iterrows()])
             
-            # 🌟 [수정됨] 팩트 기반 요약 멘트 적용
             c_text4 = f"조회 기간 내 가장 낮은 종합효율을 기록한 <b>하위 5개(WORST 5) 설비의 수치 및 발생한 핵심 트러블(OPEN ISSUE) 요약 데이터</b>입니다.<br><div style='background-color:rgba(217,27,27,0.03); padding:15px; border-radius:8px; margin-top:10px; border-left:4px solid #D91B1B; line-height: 1.7;'>{w_details}</div>"
             render_tab_insight("🚨 [WORST 5] 집중 관리 대상 심층 분석", c_text4)
             
@@ -608,7 +599,7 @@ if data_to_process:
         else: st.info("조건에 맞는 데이터가 없습니다.")
 
     # =========================================================
-    # TAB 5: 비가동 정밀 분석 (분석 현황판 복구 및 팩트 기반 텍스트)
+    # TAB 5: 비가동 정밀 분석 
     # =========================================================
     with tab5:
         render_section_title("비가동시간 WORST 현황")
@@ -624,7 +615,6 @@ if data_to_process:
             total_dt_worst = top3_dt['비가동시간'].sum()
             w_dt_details = "".join([f"🛑 <b>{rw['생산일']}</b> - <b>{str(rw['설비명']).split(' - ')[0]}</b> ({rw['비가동시간']:.1f}h) ➔ <span style='color:#D91B1B;'>{get_natural_issue_summary(rw['OPEN ISSUE'])}</span><br>" for _, rw in top3_dt.iterrows()])
             
-            # 🌟 [수정됨] 해결 방안 배제 및 팩트 기반 요약 멘트 적용
             c_text5 = f"조회 기간 내 발생한 비가동 시간 중 가장 큰 비중을 차지하는 <b>최장 비가동 상위 3건(총 {total_dt_worst:.1f}시간 손실)의 상세 발생 내역 및 오픈 이슈</b>입니다.<br><div style='background-color:rgba(217,27,27,0.03); padding:15px; border-radius:8px; margin-top:10px; border-left:4px solid #D91B1B; line-height: 1.7;'>{w_dt_details}</div>"
             render_tab_insight("🛑 [비가동 최다] 병목 공정 심층 분석", c_text5)
             
