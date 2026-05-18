@@ -130,13 +130,18 @@ st.markdown("""
 # ==========================================
 def safe_float(val):
     try:
-        if isinstance(val, pd.Series): val = val.iloc[0]
-        if pd.isna(val) or val is None: return 0.0
+        if isinstance(val, pd.Series):
+            val = val.iloc[0]
+        if pd.isna(val) or val is None:
+            return 0.0
         v_str = str(val).strip().replace(',', '').replace(' ', '')
-        if v_str in ['', '-', '#DIV/0!', '#N/A', 'nan', 'None']: return 0.0
-        if '%' in v_str: return float(v_str.replace('%', '')) / 100.0
+        if v_str in ['', '-', '#DIV/0!', '#N/A', 'nan', 'None']:
+            return 0.0
+        if '%' in v_str:
+            return float(v_str.replace('%', '')) / 100.0
         return float(v_str)
-    except: return 0.0
+    except:
+        return 0.0
 
 def render_section_title(text):
     st.markdown(f"<div class='section-banner'><h3>{text}</h3></div>", unsafe_allow_html=True)
@@ -178,27 +183,42 @@ def get_natural_issue_summary(issue_text):
     valid_phrases = []
     for p in phrases:
         clean_p = re.sub(r'\s+', ' ', p).strip()
-        if len(clean_p) > 3: valid_phrases.append(clean_p)
-    if not valid_phrases: return "명확히 기록되지 않은 원인"
-    if len(valid_phrases) == 1: return f"{valid_phrases[0]}"
-    elif len(valid_phrases) == 2: return f"{valid_phrases[0]} 및 {valid_phrases[1]}"
-    else: return f"{valid_phrases[0]}, {valid_phrases[1]} 등 복합적 요인"
+        if len(clean_p) > 3:
+            valid_phrases.append(clean_p)
+            
+    if not valid_phrases:
+        return "명확히 기록되지 않은 원인"
+    if len(valid_phrases) == 1:
+        return f"{valid_phrases[0]}"
+    elif len(valid_phrases) == 2:
+        return f"{valid_phrases[0]} 및 {valid_phrases[1]}"
+    else:
+        return f"{valid_phrases[0]}, {valid_phrases[1]} 등 복합적 요인"
 
 def split_issue_to_columns(issue_text):
     lines = [line.strip() for line in str(issue_text).split('\n') if line.strip()]
-    if not lines: return "<div style='font-size:12px; color:#ADB5BD; background-color:#F8FAFC; padding:8px; border-radius:4px; border:1px dashed #E9ECEF;'>📝 특이사항 없음</div>"
+    if not lines:
+        return "<div style='font-size:12px; color:#ADB5BD; background-color:#F8FAFC; padding:8px; border-radius:4px; border:1px dashed #E9ECEF;'>📝 특이사항 없음</div>"
+    
     day_lines, night_lines, general_lines = [], [], []
     has_shift = False
     curr = general_lines
+    
     for line in lines:
         cl = line.replace(' ', '')
         if '*주간' in cl or line.startswith('주간'): 
-            curr = day_lines; has_shift = True; line = re.sub(r'^\*?\s*주간\s*', '', line).strip()
+            curr = day_lines
+            has_shift = True
+            line = re.sub(r'^\*?\s*주간\s*', '', line).strip()
         elif '*야간' in cl or line.startswith('야간'): 
-            curr = night_lines; has_shift = True; line = re.sub(r'^\*?\s*야간\s*', '', line).strip()
-        if line: curr.append(line)
+            curr = night_lines
+            has_shift = True
+            line = re.sub(r'^\*?\s*야간\s*', '', line).strip()
+        if line:
+            curr.append(line)
     
-    if not has_shift: return f"<div style='font-size:13px; color:#495057;'>{'<br>'.join(lines)}</div>"
+    if not has_shift:
+        return f"<div style='font-size:13px; color:#495057;'>{'<br>'.join(lines)}</div>"
     
     d_h = '<br>'.join(general_lines + day_lines) if (general_lines + day_lines) else "없음"
     n_h = '<br>'.join(night_lines) if night_lines else "없음"
@@ -218,7 +238,8 @@ def split_issue_to_columns(issue_text):
 
 def format_issue(text):
     val = str(text).strip()
-    if val in ['', '0', '0.0', 'nan', 'None']: return ""
+    if val in ['', '0', '0.0', 'nan', 'None']:
+        return ""
     val = val.replace('\r\n', '\n')
     val = re.sub(r'(?<!\n)\*', '\n*', val)
     val = re.sub(r'(?<!\n)-\.', '\n-.', val)
@@ -226,8 +247,11 @@ def format_issue(text):
     return val.strip()
 
 def render_styler_to_html(styler, is_multi=False):
-    try: html_str = styler.to_html(escape=False)
-    except: html_str = styler.to_html()
+    try:
+        html_str = styler.to_html(escape=False)
+    except:
+        html_str = styler.to_html()
+        
     html_str = html_str.replace('<table', '<table class="custom-table notranslate"')
     wrapped_html = f"""
     <div style='width: 100%; max-height: 500px; overflow: auto; border: 1px solid #E2E8F0; border-radius: 8px; box-shadow: 0 1px 3px 0 rgba(0,0,0,0.03); background-color: white; margin-bottom: 24px;'>
@@ -242,14 +266,16 @@ def render_styler_to_html(styler, is_multi=False):
         {html_str}
     </div>
     """
+    
     if is_multi:
         wrapped_html = re.sub(r'<th class=\"col_heading level0 col10\".*?>OPEN ISSUE</th>', r'<th class=\"col_heading level0 col10\" rowspan=\"2\" style=\"vertical-align: middle;\">OPEN ISSUE</th>', wrapped_html)
         wrapped_html = re.sub(r'<th class=\"col_heading level1 col10\".*?>OPEN ISSUE</th>', '', wrapped_html)
+        
     st.markdown(wrapped_html, unsafe_allow_html=True)
 
 
 # ==========================================
-# 🌟 3. 데이터 로드 및 전처리 (M열 48행 100% 추적 엔진)
+# 🌟 3. 데이터 로드 및 전처리
 # ==========================================
 target_cols = ['생산일', '설비명', '품명', '양품수량', '불량수량', '총 생산수량', '투입시간', '가동시간', '비가동시간', '정미시간', '양품율', '성능가동율', '시간가동율', '종합효율', '목표효율', 'OPEN ISSUE']
 target_order = ['생산일', '설비명', '품명', '종합효율', '양품율', '성능가동율', '시간가동율', '총 생산수량', '양품수량', '불량수량', 'OPEN ISSUE']
@@ -270,12 +296,15 @@ if os.path.exists(DATA_DIR):
             file_path = os.path.join(DATA_DIR, file_name)
             try:
                 if file_name.endswith('.csv'): 
-                    try: t_df = pd.read_csv(file_path, encoding='utf-8')
-                    except UnicodeDecodeError: t_df = pd.read_csv(file_path, encoding='cp949')
+                    try:
+                        t_df = pd.read_csv(file_path, encoding='utf-8')
+                    except UnicodeDecodeError:
+                        t_df = pd.read_csv(file_path, encoding='cp949')
                 else: 
                     t_df = pd.read_excel(file_path)
                 data_to_process.append((file_name, t_df))
-            except Exception: pass
+            except Exception:
+                pass
 
 if data_to_process:
     all_records = []
@@ -301,42 +330,63 @@ if data_to_process:
                 month_str = f"{dt.strftime('%y')}년 {dt.month}월"
                 sort_key = raw_date 
             except: 
-                clean_date = raw_date; month_str = "분류 안됨"; sort_key = raw_date
+                clean_date = raw_date
+                month_str = "분류 안됨"
+                sort_key = raw_date
         else: 
-            clean_date = file_name.split('.')[0]; month_str = "분류 안됨"; sort_key = clean_date
+            clean_date = file_name.split('.')[0]
+            month_str = "분류 안됨"
+            sort_key = clean_date
         
-        # 🚨 [오류 완벽 수정] 중간 소계에 멈추지 않고 끝까지 스캔!
+        # 🚨 [오류 완벽 수정] 3단계 철통 필터 로직 삽입 (과거 4월 및 현재 5월 양식 100% 대응)
         d_total_oee = 0.0
+        daily_val = 0.0
+        fallback_val = 0.0
+        last_valid_val = 0.0
+        
         for _, row in temp_df.iterrows():
             row_str = "".join([str(v).replace(' ', '').upper() for v in row.values])
-            if any(kw in row_str for kw in ['TOTAL', '합계', '총합', '전체', '총계']):
-                val = row.get('종합효율', 0.0)
-                if pd.notna(val) and str(val).strip() != '':
-                    parsed_val = safe_float(val)
-                    if parsed_val > 0:
-                        # break를 완전히 제거했습니다. 
-                        # 주간합계, 야간합계가 나와도 무시하고 맨 마지막에 적힌 '진짜 총합계'를 덮어씁니다.
-                        d_total_oee = parsed_val 
-        
-        # 만약 엑셀에 '합계'라는 글자조차 없다면, 종합효율(M열)의 가장 밑바닥에 적힌 유효 숫자를 가져옵니다.
-        if d_total_oee == 0.0:
-            valid_oees = [safe_float(x) for x in temp_df['종합효율'] if safe_float(x) > 0]
-            if valid_oees: 
-                d_total_oee = valid_oees[-1]
+            val = safe_float(row.get('종합효율', 0.0))
+            
+            if val > 0:
+                # 0순위: 당월, 월간, 누계가 적혀있으면 눈감고 무시 (5월 8일 이후 양식 에러 원인 제거)
+                if any(kw in row_str for kw in ['당월', '월간', '누계', 'MONTH']):
+                    continue
+                    
+                # 1순위: 금일, 당일 명시되어 있으면 최우선 저장 (5월 8일 이후 양식)
+                if any(kw in row_str for kw in ['금일', '당일', 'TODAY', 'DAILY']):
+                    daily_val = val
+                    
+                # 2순위: 금일은 없지만 합계, 총합 명시 (4월 이전 양식)
+                elif any(kw in row_str for kw in ['TOTAL', '합계', '총합', '전체', '총계']):
+                    fallback_val = val
+                    
+                # 3순위: 라벨이 아예 없어도 마지막 유효값을 보험으로 저장 (5월 6일 과도기 양식)
+                last_valid_val = val
+
+        # 🎯 우선순위에 따라 최종값을 확정합니다.
+        if daily_val > 0:
+            d_total_oee = daily_val
+        elif fallback_val > 0:
+            d_total_oee = fallback_val
+        else:
+            d_total_oee = last_valid_val
             
         if sort_key not in daily_totals_data:
             daily_totals_data[sort_key] = {'생산일': clean_date, '생산월': month_str, '공장종합효율': d_total_oee}
 
         for _, row in temp_df.iterrows():
             raw_m_val = row.get('설비명')
-            if pd.isna(raw_m_val): continue
+            if pd.isna(raw_m_val): 
+                continue
             m_val = str(raw_m_val).strip()
             if m_val.lower() in ['', 'nan', 'none', 'null', '#n/a', '설비명'] or any(kw in m_val.upper() for kw in ['TOTAL', '합계']): 
                 continue
             
             record = {'sort_key': sort_key, '생산월': month_str, '생산일': clean_date}
             for col in target_cols:
-                if col != '생산일': record[col] = row[col] if col in temp_df.columns else None
+                if col != '생산일': 
+                    record[col] = row[col] if col in temp_df.columns else None
             all_records.append(record)
 
     df = pd.DataFrame(all_records).sort_values(by='sort_key').reset_index(drop=True)
@@ -345,7 +395,8 @@ if data_to_process:
     
     numeric_columns = ['양품수량', '불량수량', '총 생산수량', '투입시간', '가동시간', '비가동시간', '정미시간', '종합효율', '목표효율', '양품율', '성능가동율', '시간가동율']
     for col in numeric_columns:
-        if col in df.columns: df[col] = df[col].apply(safe_float)
+        if col in df.columns: 
+            df[col] = df[col].apply(safe_float)
 
     df['OPEN ISSUE'] = df['OPEN ISSUE'].apply(format_issue)
 
@@ -366,20 +417,24 @@ if data_to_process:
     f1, f2, f3, f4 = st.columns(4)
     
     all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
-    with f1: sel_m_side = st.multiselect("📅 생산월", all_months, default=[], placeholder="전체 생산월") 
+    with f1: 
+        sel_m_side = st.multiselect("📅 생산월", all_months, default=[], placeholder="전체 생산월") 
     m_f_df = df[df['생산월'].isin(sel_m_side)].copy() if sel_m_side else df.copy()
     
     all_dates = list(m_f_df['생산일'].unique())
     all_dates.sort(key=lambda x: date_mapping.get(x, ""), reverse=True)
-    with f2: sel_d_side = st.multiselect("📆 생산일", all_dates, default=[], placeholder="전체 생산일") 
+    with f2: 
+        sel_d_side = st.multiselect("📆 생산일", all_dates, default=[], placeholder="전체 생산일") 
     d_f_df = m_f_df[m_f_df['생산일'].isin(sel_d_side)].copy() if sel_d_side else m_f_df.copy()
     
     all_machines = sorted([m for m in d_f_df['설비명'].unique() if m.strip() != ""])
-    with f3: sel_mach_side = st.multiselect("⚙️ 설비", all_machines, placeholder="전체 설비")
+    with f3: 
+        sel_mach_side = st.multiselect("⚙️ 설비", all_machines, placeholder="전체 설비")
     pool_df = d_f_df[d_f_df['설비명'].isin(sel_mach_side)].copy() if sel_mach_side else d_f_df.copy()
     
     actual_prods = sorted([p for p in pool_df['품명'].fillna("").astype(str).str.strip().unique() if p not in ["", "0", "0.0", "nan", "NaN", "None"]])
-    with f4: sel_prod = st.selectbox("📦 품목", ["전체 품목"] + actual_prods)
+    with f4: 
+        sel_prod = st.selectbox("📦 품목", ["전체 품목"] + actual_prods)
     f_df = pool_df[pool_df['품명'].str.strip() == sel_prod].copy() if sel_prod != "전체 품목" else pool_df.copy()
 
     st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
@@ -395,12 +450,14 @@ if data_to_process:
     ])
 
     # =========================================================
-    # TAB 1: 종합 효율 추이 
+    # TAB 1: 종합 효율 추이 (데이터 기반 팩트 분석 텍스트)
     # =========================================================
     with tab1:
         tab1_df = m_f_df.copy()
-        if sel_mach_side: tab1_df = tab1_df[tab1_df['설비명'].isin(sel_mach_side)]
-        if sel_prod != "전체 품목": tab1_df = tab1_df[tab1_df['품명'].str.strip() == sel_prod]
+        if sel_mach_side: 
+            tab1_df = tab1_df[tab1_df['설비명'].isin(sel_mach_side)]
+        if sel_prod != "전체 품목": 
+            tab1_df = tab1_df[tab1_df['품명'].str.strip() == sel_prod]
 
         is_fac = (not sel_mach_side and sel_prod == "전체 품목")
         if is_fac: 
@@ -418,15 +475,18 @@ if data_to_process:
             for i, (_, r) in enumerate(r5.iterrows()):
                 oee = safe_float(r[y_v])
                 clr, _, icn = get_status_color(oee, 0.86)
-                with r_cols[i]: render_trendy_metric(r['생산일'], f"{oee:.1%}", clr, icn)
+                with r_cols[i]: 
+                    render_trendy_metric(r['생산일'], f"{oee:.1%}", clr, icn)
         
             render_section_title("월별 종합효율 추이")
             mons = list(dict.fromkeys(p_df['생산월'].tolist()))
             sel_mons = st.multiselect("📅 조회할 월 선택", mons, default=[mons[-1]] if mons else [], key='t1_m', placeholder="전체 생산월")
             mons_to_show = sel_mons if sel_mons else mons
+            
             for m in mons_to_show:
                 m_p = p_df[p_df['생산월'] == m].copy()
-                if m_p.empty: continue
+                if m_p.empty: 
+                    continue
                 
                 avg_oee = m_p[y_v].mean()
                 max_row = m_p.loc[m_p[y_v].idxmax()]
@@ -442,17 +502,19 @@ if data_to_process:
                 fig_oee = go.Figure(go.Bar(x=m_p['생산일'], y=m_p[y_v], text=m_p[y_v].apply(lambda x: f"{x:.1%}"), textposition='auto', marker_color=text_colors))
                 fig_oee.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=350, yaxis=dict(tickformat='.0%', range=[0, 1.0]))
                 st.plotly_chart(fig_oee, use_container_width=True)
-        else: st.info("선택한 조건에 해당하는 데이터가 없습니다.")
+        else: 
+            st.info("선택한 조건에 해당하는 데이터가 없습니다.")
 
     # =========================================================
-    # TAB 2: OPEN ISSUE 정밀 조회 
+    # TAB 2: OPEN ISSUE 정밀 조회 ('전체 일자' 리스트 최상단 및 sort_key 정렬)
     # =========================================================
     with tab2:
         render_section_title("OPEN ISSUE 현황")
         mons2 = list(dict.fromkeys(f_df['생산월'].tolist()))
         sel_m2 = st.multiselect("📅 조회할 월 선택", mons2, default=[], key='t2_m', placeholder="전체 생산월")
         t2_df = f_df.copy()
-        if sel_m2: t2_df = t2_df[t2_df['생산월'].isin(sel_m2)]
+        if sel_m2: 
+            t2_df = t2_df[t2_df['생산월'].isin(sel_m2)]
         
         all_d2 = list(t2_df['생산일'].unique())
         all_d2.sort(key=lambda x: date_mapping.get(x, ""), reverse=True)
@@ -469,14 +531,18 @@ if data_to_process:
                 issue_disp = issue_disp[issue_disp['품명'].notna()]
                 for idx, row in issue_disp.iterrows():
                     if str(row['품명']).strip() in ['', 'nan', '0', '0.0']: 
-                        issue_disp.at[idx, '품명'] = ""; issue_disp.at[idx, '종합효율'] = ""
-                    else: issue_disp.at[idx, '종합효율'] = f"{safe_float(row['종합효율']):.1%}"
+                        issue_disp.at[idx, '품명'] = ""
+                        issue_disp.at[idx, '종합효율'] = ""
+                    else: 
+                        issue_disp.at[idx, '종합효율'] = f"{safe_float(row['종합효율']):.1%}"
+                
                 issue_disp['OPEN ISSUE'] = issue_disp['OPEN ISSUE'].apply(split_issue_to_columns)
                 render_styler_to_html(issue_disp.style.hide(axis="index"))
-        else: st.info("조회된 날짜 데이터가 없습니다.")
+        else: 
+            st.info("조회된 날짜 데이터가 없습니다.")
 
     # =========================================================
-    # TAB 3: 일일 상세 현황
+    # TAB 3: 일일 상세 현황 (팩트 기반 텍스트)
     # =========================================================
     with tab3:
         render_section_title("일일 생산성 현황")
@@ -538,16 +604,20 @@ if data_to_process:
                 
                 disp_day = day_df[target_order].copy()
                 disp_day = disp_day[disp_day['품명'].notna()]
+                
                 for idx, row in disp_day.iterrows():
                     if str(row['품명']).strip() in ['', 'nan', '0', '0.0']:
                         disp_day.at[idx, '품명'] = ""
                         for c in ['종합효율', '양품율', '성능가동율', '시간가동율', '양품수량', '불량수량', '총 생산수량']: 
-                            if c in disp_day.columns: disp_day.at[idx, c] = ""
+                            if c in disp_day.columns: 
+                                disp_day.at[idx, c] = ""
                     else:
                         for c in ['종합효율', '양품율', '성능가동율', '시간가동율']: 
-                            if c in disp_day.columns: disp_day.at[idx, c] = f"{safe_float(row[c]):.1%}"
+                            if c in disp_day.columns: 
+                                disp_day.at[idx, c] = f"{safe_float(row[c]):.1%}"
                         for c in ['양품수량', '불량수량', '총 생산수량']: 
-                            if c in disp_day.columns: disp_day.at[idx, c] = f"{int(safe_float(row[c])):,}"
+                            if c in disp_day.columns: 
+                                disp_day.at[idx, c] = f"{int(safe_float(row[c])):,}"
                 
                 disp_day['OPEN ISSUE'] = disp_day['OPEN ISSUE'].apply(split_issue_to_columns)
                 disp_day.columns = pd.MultiIndex.from_tuples(multi_cols)
@@ -558,23 +628,27 @@ if data_to_process:
                     try:
                         if 0 < safe_float(day_df.loc[idx, '종합효율']) < safe_float(day_df.loc[idx, '목표효율']):
                             pos = row.index.get_loc(('생산성', '종합효율'))
-                            if isinstance(pos, np.ndarray): pos = np.where(pos)[0][0]
+                            if isinstance(pos, np.ndarray): 
+                                pos = np.where(pos)[0][0]
                             styles[pos] = 'color: #D91B1B; font-weight: 800;' 
-                    except: pass
+                    except: 
+                        pass
                     return styles
                 
                 render_styler_to_html(disp_day.style.apply(style_day_row, axis=1).hide(axis="index"), is_multi=True)
-        else: st.info("데이터가 없습니다.")
+        else: 
+            st.info("데이터가 없습니다.")
 
     # =========================================================
-    # TAB 4: BEST & WORST
+    # TAB 4: BEST & WORST (타이틀 명확화 및 팩트 기반 데이터 요약)
     # =========================================================
     with tab4:
         render_section_title("종합효율 BEST 5 & WORST 5")
         mons4 = list(dict.fromkeys(f_df['생산월'].tolist()))
         sel_m4 = st.multiselect("📅 조회할 월 선택", mons4, default=[mons4[-1]] if mons4 else [], key='t4_m', placeholder="전체 생산월")
         t4_df = f_df[f_df['종합효율'] > 0].copy()
-        if sel_m4: t4_df = t4_df[t4_df['생산월'].isin(sel_m4)]
+        if sel_m4: 
+            t4_df = t4_df[t4_df['생산월'].isin(sel_m4)]
             
         if not t4_df.empty:
             w5 = t4_df.sort_values(by='종합효율').head(5)
@@ -588,25 +662,29 @@ if data_to_process:
                 res = t4_df.sort_values(by='종합효율', ascending=asc).head(5)
                 res_disp = res[['생산일', '설비명', '품명', '종합효율', 'OPEN ISSUE']].copy()
                 res_disp = res_disp[res_disp['품명'].notna()]
+                
                 for idx, row in res_disp.iterrows():
                     if str(row['품명']).strip() in ['', 'nan']: 
                         res_disp.at[idx, '품명'] = ""
                         res_disp.at[idx, '종합효율'] = ""
                     else: 
                         res_disp.at[idx, '종합효율'] = f"{safe_float(row['종합효율']):.1%}"
+                        
                 res_disp['OPEN ISSUE'] = res_disp['OPEN ISSUE'].apply(split_issue_to_columns)
                 render_styler_to_html(res_disp.style.hide(axis="index"))
-        else: st.info("조건에 맞는 데이터가 없습니다.")
+        else: 
+            st.info("조건에 맞는 데이터가 없습니다.")
 
     # =========================================================
-    # TAB 5: 비가동 정밀 분석 
+    # TAB 5: 비가동 정밀 분석 (분석 현황판 복구 및 팩트 기반 텍스트)
     # =========================================================
     with tab5:
         render_section_title("비가동시간 WORST 현황")
         mons5 = list(dict.fromkeys(f_df['생산월'].tolist()))
         sel_m5 = st.multiselect("📅 조회할 월 선택", mons5, default=[mons5[-1]] if mons5 else [], key='t5_m', placeholder="전체 생산월")
         t5_df = f_df.copy()
-        if sel_m5: t5_df = t5_df[t5_df['생산월'].isin(sel_m5)]
+        if sel_m5: 
+            t5_df = t5_df[t5_df['생산월'].isin(sel_m5)]
             
         if not t5_df.empty:
             w_dt = t5_df.sort_values(by='비가동시간', ascending=False).head(10)
@@ -621,12 +699,16 @@ if data_to_process:
             st.markdown("<h4 style='font-weight: 800;'>🚨 WORST 10</h4>", unsafe_allow_html=True)
             res_disp = w_dt[['생산일', '설비명', '품명', '비가동시간', 'OPEN ISSUE']].copy()
             res_disp = res_disp[res_disp['품명'].notna()]
+            
             for idx, row in res_disp.iterrows():
-                if str(row['품명']).strip() in ['', 'nan', '0', '0.0']: res_disp.at[idx, '품명'] = ""
+                if str(row['품명']).strip() in ['', 'nan', '0', '0.0']: 
+                    res_disp.at[idx, '품명'] = ""
             res_disp['비가동시간'] = res_disp['비가동시간'].apply(lambda x: f"{safe_float(x):.1f}h")
             res_disp['OPEN ISSUE'] = res_disp['OPEN ISSUE'].apply(split_issue_to_columns)
+            
             render_styler_to_html(res_disp.style.hide(axis="index"))
-        else: st.info("데이터가 없습니다.")
+        else: 
+            st.info("데이터가 없습니다.")
 
     # =========================================================
     # TAB 6: AI 챗봇
@@ -634,15 +716,31 @@ if data_to_process:
     with tab6:
         render_section_title("🤖 사출생산팀 전문 AI 챗봇")
         ak = st.text_input("🔑 API Key 입력", type="password")
-        if "msgs" not in st.session_state: st.session_state.msgs = [{"role": "assistant", "content": "도와드릴까요?"}]
-        for m in st.session_state.msgs: st.chat_message(m["role"]).write(m["content"])
+        
+        if "msgs" not in st.session_state: 
+            st.session_state.msgs = [{"role": "assistant", "content": "도와드릴까요?"}]
+            
+        for m in st.session_state.msgs: 
+            st.chat_message(m["role"]).write(m["content"])
+            
         if pr := st.chat_input("질문하세요..."):
-            st.session_state.msgs.append({"role": "user", "content": pr}); st.chat_message("user").write(pr)
-            if not ak: st.chat_message("assistant").write("🔑 API 키를 입력해 주세요.")
+            st.session_state.msgs.append({"role": "user", "content": pr})
+            st.chat_message("user").write(pr)
+            
+            if not ak: 
+                st.chat_message("assistant").write("🔑 API 키를 입력해 주세요.")
             else:
                 with st.chat_message("assistant"):
-                    m_p = st.empty(); m_p.write("🧠 분석 중..."); from openai import OpenAI
+                    m_p = st.empty()
+                    m_p.write("🧠 분석 중...")
+                    from openai import OpenAI
                     client = OpenAI(api_key=ak)
-                    res = client.chat.completions.create(model="gpt-3.5-turbo", messages=[{"role": "system", "content": "사출전문 분석가"}] + st.session_state.msgs)
-                    ans = res.choices[0].message.content; m_p.write(ans); st.session_state.msgs.append({"role": "assistant", "content": ans})
-else: st.info("GitHub data 폴더에 CSV/Excel 파일을 넣어주세요.")
+                    res = client.chat.completions.create(
+                        model="gpt-3.5-turbo", 
+                        messages=[{"role": "system", "content": "사출전문 분석가"}] + st.session_state.msgs
+                    )
+                    ans = res.choices[0].message.content
+                    m_p.write(ans)
+                    st.session_state.msgs.append({"role": "assistant", "content": ans})
+else: 
+    st.info("GitHub data 폴더에 CSV/Excel 파일을 넣어주세요.")
