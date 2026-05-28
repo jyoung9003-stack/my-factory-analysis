@@ -8,7 +8,7 @@ import os
 from datetime import datetime
 
 # ==========================================
-# 🌟 1. 기본 설정 및 테마
+# 🌟 1. 기본 설정 및 테마 (현장 가시성 극대화)
 # ==========================================
 st.set_page_config(page_title="설비별 정밀 분석 대시보드", layout="wide", initial_sidebar_state="collapsed")
 
@@ -28,36 +28,38 @@ st.markdown("""
 <meta name="google" content="notranslate">
 <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/static/pretendard.css');
-    html, body, [class*="css"] { font-family: 'Pretendard', sans-serif !important; background-color: #FFFFFF; color: #1E293B; translate: no; }
-    .section-banner { background-color: #ffffff; border: 1px solid #F1F5F9; border-left: 6px solid #D91B1B; padding: 16px 22px; border-radius: 10px; margin-top: 30px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
-    .section-banner h3 { margin: 0; font-weight: 800; color: #1E293B; font-size: 19px; }
-    .analysis-report-card { background-color: #FFF5F5; border: 1px solid #FEE2E2; border-radius: 12px; padding: 20px 25px; margin-bottom: 25px; box-shadow: 0 2px 4px rgba(217, 27, 27, 0.05); }
-    .metric-card-container { background-color: #FFFFFF; border-radius: 12px; padding: 20px; text-align: center; border: 1px solid #F1F5F9; box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.03); }
-    .metric-title { font-size: 13px; color: #64748B; margin-bottom: 10px; font-weight: 500; }
-    .metric-value-box { display: flex; align-items: center; justify-content: center; gap: 6px; }
-    .metric-value { font-size: 32px; font-weight: 800; letter-spacing: -1px; }
-    .metric-icon { font-size: 18px; }
+    html, body, [class*="css"] { font-family: 'Pretendard', sans-serif !important; background-color: #F8FAFC; color: #0F172A; translate: no; }
     
-    /* 설비 선택 버튼 디자인 커스텀 */
+    /* 섹션 배너 디자인 (더 진하게) */
+    .section-banner { background-color: #ffffff; border: 1px solid #E2E8F0; border-left: 8px solid #D91B1B; padding: 18px 24px; border-radius: 12px; margin-top: 35px; margin-bottom: 25px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+    .section-banner h3 { margin: 0; font-weight: 900; color: #0F172A; font-size: 22px; letter-spacing: -0.5px; }
+    
+    /* 인포그래픽 요약 카드 */
+    .analysis-report-card { background-color: #F1F5F9; border-left: 5px solid #3B82F6; border-radius: 8px; padding: 20px 25px; margin-bottom: 25px; }
+    
+    /* 핵심 지표 (Metric) 카드 디자인 강화 */
+    .metric-card-container { background-color: #FFFFFF; border-radius: 16px; padding: 25px 20px; text-align: center; border: 1px solid #E2E8F0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); transition: transform 0.2s; }
+    .metric-card-container:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+    .metric-title { font-size: 16px; color: #475569; margin-bottom: 12px; font-weight: 700; }
+    .metric-value-box { display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .metric-value { font-size: 42px; font-weight: 900; letter-spacing: -1.5px; line-height: 1; }
+    .metric-icon { font-size: 24px; }
+    
+    /* 터치 친화적 큼직한 설비 선택 버튼 */
     div.stButton > button {
         width: 100%;
-        height: 60px;
-        background-color: #F8FAFC;
-        border: 1px solid #CBD5E1;
-        color: #334155;
-        font-weight: 700;
-        border-radius: 8px;
-        transition: all 0.3s;
+        height: 75px;
+        background-color: #FFFFFF;
+        border: 2px solid #CBD5E1;
+        color: #1E293B;
+        font-size: 20px !important;
+        font-weight: 800 !important;
+        border-radius: 12px;
+        transition: all 0.2s ease-in-out;
+        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
     }
-    div.stButton > button:hover {
-        border-color: #3B82F6;
-        color: #3B82F6;
-        background-color: #EFF6FF;
-    }
-    div.stButton > button:active {
-        background-color: #3B82F6 !important;
-        color: white !important;
-    }
+    div.stButton > button:hover { border-color: #3B82F6; color: #1D4ED8; background-color: #EFF6FF; transform: scale(1.02); }
+    div.stButton > button:active { background-color: #2563EB !important; color: white !important; border-color: #2563EB; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -75,22 +77,21 @@ def safe_float(val):
     except: return 0.0
 
 def render_section_title(text): st.markdown(f"<div class='section-banner'><h3>{text}</h3></div>", unsafe_allow_html=True)
-def render_tab_insight(title, content): st.markdown(f"<div class='analysis-report-card'><h4 style='margin-top:0; color:#9F1239; font-weight:800; font-size:16px; margin-bottom:12px;'>{title}</h4><div style='line-height:1.7; font-size:14.5px; color:#334155; margin-bottom:0;'>{content}</div></div>", unsafe_allow_html=True)
-def get_status_color(oee, tgt=0.86): return ("#3B82F6", "#EBF5FF", "✓") if oee >= tgt else ("#D91B1B", "#FFF5F5", "⚠")
+def render_tab_insight(title, content): st.markdown(f"<div class='analysis-report-card'><h4 style='margin-top:0; color:#1E293B; font-weight:800; font-size:17px; margin-bottom:10px;'>{title}</h4><div style='line-height:1.6; font-size:15px; color:#334155; margin-bottom:0;'>{content}</div></div>", unsafe_allow_html=True)
 def render_trendy_metric(title, value_str, color, icon): st.markdown(f"<div class='metric-card-container'><div class='metric-title'>{title}</div><div class='metric-value-box'><span class='metric-value' style='color: {color};'>{value_str}</span><span class='metric-icon' style='color: {color};'>{icon}</span></div></div>", unsafe_allow_html=True)
 
 def split_issue_to_columns(issue_text):
     lines = [line.strip() for line in str(issue_text).split('\n') if line.strip()]
-    if not lines or str(issue_text).strip() in ['nan', '0', '0.0', 'None']: return "<div style='font-size:12px; color:#ADB5BD; padding:8px;'>📝 특이사항 없음</div>"
+    if not lines or str(issue_text).strip() in ['nan', '0', '0.0', 'None']: return "<div style='font-size:13px; color:#94A3B8; padding:8px; font-weight: 500;'>✔ 특이사항 없음</div>"
     d_l, n_l, g_l = [], [], []; has_s = False; curr = g_l
     for line in lines:
         cl = line.replace(' ', '')
         if '*주간' in cl or line.startswith('주간'): curr = d_l; has_s = True; line = re.sub(r'^\*?\s*주간\s*', '', line).strip()
         elif '*야간' in cl or line.startswith('야간'): curr = n_l; has_s = True; line = re.sub(r'^\*?\s*야간\s*', '', line).strip()
         if line: curr.append(line)
-    if not has_s: return f"<div style='font-size:13px;'>{'<br>'.join(lines)}</div>"
-    d_h = '<br>'.join(g_l + d_l) if (g_l + d_l) else "없음"; n_h = '<br>'.join(n_l) if n_l else "없음"
-    return f"<div style='display: flex; gap: 8px;'><div style='flex: 1; background-color: #F8FAFC; padding: 10px; border-top: 3px solid #FBBF24;'><div style='font-size:11px; font-weight:bold; color:#B45309;'>☀️ 주간</div><div style='font-size:13px;'>{d_h}</div></div><div style='flex: 1; background-color: #F8FAFC; padding: 10px; border-top: 3px solid #1E293B;'><div style='font-size:11px; font-weight:bold; color:#1E293B;'>🌙 야간</div><div style='font-size:13px;'>{n_h}</div></div></div>"
+    if not has_s: return f"<div style='font-size:14px; font-weight: 600; color:#334155;'>{'<br>'.join(lines)}</div>"
+    d_h = '<br>'.join(g_l + d_l) if (g_l + d_l) else "-"; n_h = '<br>'.join(n_l) if n_l else "-"
+    return f"<div style='display: flex; gap: 8px;'><div style='flex: 1; background-color: #FFFBEB; padding: 10px; border-radius: 6px; border-top: 3px solid #F59E0B;'><div style='font-size:12px; font-weight:900; color:#B45309; margin-bottom:4px;'>☀️ 주간</div><div style='font-size:13px; font-weight:600;'>{d_h}</div></div><div style='flex: 1; background-color: #F1F5F9; padding: 10px; border-radius: 6px; border-top: 3px solid #334155;'><div style='font-size:12px; font-weight:900; color:#1E293B; margin-bottom:4px;'>🌙 야간</div><div style='font-size:13px; font-weight:600;'>{n_h}</div></div></div>"
 
 def format_issue(text):
     val = str(text).strip()
@@ -101,13 +102,14 @@ def format_issue(text):
 def render_styler_to_html(styler):
     try: html_str = styler.to_html(escape=False)
     except: html_str = styler.to_html()
-    html_str = html_str.replace('<table', '<table style="width: 100%; border-collapse: collapse; font-size: 13px; text-align: center;"')
-    html_str = html_str.replace('<th', '<th style="background-color: #F8FAFC; border: 1px solid #E2E8F0; padding: 12px; font-weight: 600;"')
-    html_str = html_str.replace('<td', '<td style="border: 1px solid #F1F5F9; padding: 10px;"')
-    st.markdown(f"<div style='width:100%; overflow-x:auto; border:1px solid #E2E8F0; border-radius:8px; margin-bottom:20px;'>{html_str}</div>", unsafe_allow_html=True)
+    # 인포그래픽 스타일의 깔끔하고 대비가 강한 표 디자인 적용
+    html_str = html_str.replace('<table', '<table style="width: 100%; border-collapse: collapse; font-size: 14px; text-align: center; background-color: white;"')
+    html_str = html_str.replace('<th', '<th style="background-color: #1E293B; color: #FFFFFF; border: 1px solid #334155; padding: 14px; font-weight: 700; font-size: 15px;"')
+    html_str = html_str.replace('<td', '<td style="border: 1px solid #E2E8F0; padding: 12px; font-weight: 500; color: #334155;"')
+    st.markdown(f"<div style='width:100%; overflow-x:auto; border:1px solid #CBD5E1; border-radius:10px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); margin-bottom:25px;'>{html_str}</div>", unsafe_allow_html=True)
 
 # ==========================================
-# 🌟 3. 데이터 로드 (철통 필터 엔진 유지)
+# 🌟 3. 데이터 로드 
 # ==========================================
 target_cols = ['생산일', '설비명', '품명', '양품수량', '불량수량', '총 생산수량', '투입시간', '가동시간', '비가동시간', '종합효율', '양품율', 'OPEN ISSUE']
 data_to_process = []
@@ -129,6 +131,7 @@ if os.path.exists(DATA_DIR):
 if data_to_process:
     all_records = []
     daily_totals_data = {} 
+    week_arr = ['월', '화', '수', '목', '금', '토', '일']
     
     for file_name, temp_df in data_to_process:
         temp_df.columns = [str(c).replace('\n', '').replace('\r', '').strip() for c in temp_df.columns]
@@ -141,7 +144,7 @@ if data_to_process:
             raw_date = date_match.group()[2:]
             try:
                 dt = datetime.strptime(raw_date, '%y%m%d')
-                clean_date = f"{dt.strftime('%y')}년 {dt.month}월 {dt.day}일 ({['월','화','수','목','금','토','일'][dt.weekday()]})"
+                clean_date = f"{dt.strftime('%y')}년 {dt.month}월 {dt.day}일 ({week_arr[dt.weekday()]})"
                 month_str = f"{dt.strftime('%y')}년 {dt.month}월"; sort_key = raw_date 
             except: clean_date = raw_date; month_str = "분류 안됨"; sort_key = raw_date
         else: clean_date = file_name.split('.')[0]; month_str = "분류 안됨"; sort_key = clean_date
@@ -182,8 +185,8 @@ if data_to_process:
     title_col1, title_col2 = st.columns([0.6, 9.4])
     with title_col1:
         try: st.image("logo.png", width=80) 
-        except: st.markdown("<div style='font-size: 50px; margin-top: 10px;'>🏢</div>", unsafe_allow_html=True)
-    with title_col2: st.markdown("<h1 style='margin-top: 20px; margin-bottom: 20px; font-weight: 900; font-size: 30px;'>사출생산팀 설비 모니터링 시스템</h1>", unsafe_allow_html=True)
+        except: st.markdown("<div style='font-size: 50px; margin-top: 5px;'>🏭</div>", unsafe_allow_html=True)
+    with title_col2: st.markdown("<h1 style='margin-top: 15px; margin-bottom: 25px; font-weight: 900; font-size: 34px; color: #0F172A;'>사출생산팀 현장 설비 모니터링</h1>", unsafe_allow_html=True)
 
     f1, f2 = st.columns(2)
     all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
@@ -192,13 +195,13 @@ if data_to_process:
     m_f_df = df[df['생산월'].isin(sel_m_side)].copy() if sel_m_side else df.copy()
     all_dates = list(m_f_df['생산일'].unique())
     all_dates.sort(key=lambda x: date_mapping.get(x, ""), reverse=True)
-    with f2: sel_d_side = st.multiselect("📆 특정 일자만 선택 (선택 안하면 월 전체)", all_dates, default=[])
+    with f2: sel_d_side = st.multiselect("📆 특정 일자만 집중 분석 (선택 안하면 월 전체)", all_dates, default=[])
     f_df = m_f_df[m_f_df['생산일'].isin(sel_d_side)].copy() if sel_d_side else m_f_df.copy()
 
-    st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-bottom: 25px;'></div>", unsafe_allow_html=True)
     
-    # 🌟 5. 탭 설정 (딱 2개만!)
-    tab1, tab2 = st.tabs(["📈 사출생산팀 종합효율 추이", "⚙️ 설비별 정밀 분석 (버튼 선택)"])
+    # 🌟 5. 메인 탭 설정 
+    tab1, tab2 = st.tabs(["📈 사출생산팀 종합효율 추이", "🎯 설비별 정밀 분석 (버튼 터치)"])
 
     # -----------------------------------------------------
     # TAB 1: 종합 효율 추이 
@@ -210,74 +213,63 @@ if data_to_process:
         render_section_title("공장 전체 종합효율(OEE) 추이")
         if not p_df.empty:
             avg_oee = p_df['공장종합효율'].mean()
-            render_tab_insight("📊 종합 요약", f"조회 기간의 사출 공정 평균 OEE는 <b>{avg_oee:.1%}</b> 입니다.")
+            render_tab_insight("💡 현장 운영 가이드", f"조회하신 기간 동안 사출 공정의 평균 OEE는 <b><span style='color:#3B82F6; font-size:18px;'>{avg_oee:.1%}</span></b>를 기록했습니다. 86.0% 목표 달성을 위해 아래 설비별 정밀 분석 탭에서 취약 설비의 비가동 요인을 점검해 주십시오.")
             
-            bar_colors = ['#3B82F6' if safe_float(row['공장종합효율']) >= 0.86 else '#D91B1B' for _, row in p_df.iterrows()]
-            fig_oee = go.Figure(go.Bar(x=p_df['생산일'], y=p_df['공장종합효율'], text=p_df['공장종합효율'].apply(lambda x: f"{x:.1%}"), textposition='auto', marker_color=bar_colors))
-            fig_oee.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=400, yaxis=dict(tickformat='.0%', range=[0, 1.0]))
+            bar_colors = ['#3B82F6' if safe_float(row['공장종합효율']) >= 0.86 else '#EF4444' for _, row in p_df.iterrows()]
+            fig_oee = go.Figure(go.Bar(x=p_df['생산일'], y=p_df['공장종합효율'], text=p_df['공장종합효율'].apply(lambda x: f"{x:.1%}"), textposition='auto', marker_color=bar_colors, textfont=dict(size=14, weight='bold', color='white')))
+            fig_oee.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=450, yaxis=dict(tickformat='.0%', range=[0, 1.0]), margin=dict(t=20))
             st.plotly_chart(fig_oee, use_container_width=True)
         else: st.info("조건에 해당하는 데이터가 없습니다.")
 
     # -----------------------------------------------------
-    # TAB 2: 설비별 정밀 분석 (버튼 배열 구조)
+    # TAB 2: 설비별 정밀 분석 (인포그래픽 스타일)
     # -----------------------------------------------------
     with tab2:
-        render_section_title("🎯 설비를 클릭하여 정밀 분석을 확인하세요")
+        render_section_title("👆 분석할 설비 번호를 터치하세요")
         
         machine_list = sorted([m for m in f_df['설비명'].unique() if m and str(m).strip() != 'nan'])
         
         if machine_list:
-            # 세션 스테이트(기억장치)에 선택된 설비를 저장
             if 'selected_mach' not in st.session_state:
                 st.session_state.selected_mach = machine_list[0]
                 
-            # 설비 버튼을 6칸 가로 배열로 쫙 깔아주기
             cols = st.columns(6)
             for i, mach in enumerate(machine_list):
-                # 버튼에 표시될 이름 (예: '51호기')
                 short_name = mach.split(' - ')[0].strip()
-                
-                # 버튼을 클릭하면 세션에 해당 설비 이름을 저장함
                 if cols[i % 6].button(short_name, key=f"btn_{mach}"):
                     st.session_state.selected_mach = mach
 
-            st.markdown("<hr style='border: 1px dashed #E2E8F0; margin: 25px 0;'>", unsafe_allow_html=True)
-            
-            # 선택된 설비 데이터만 뽑아오기
             tgt_mach = st.session_state.selected_mach
-            st.markdown(f"<h3 style='color:#1E293B; font-weight:900;'>💻 {tgt_mach} 집중 분석</h3>", unsafe_allow_html=True)
+            st.markdown(f"<div style='background-color:#1E293B; color:white; padding:20px; border-radius:12px; margin-top:30px; margin-bottom:20px; text-align:center;'><h2 style='margin:0; font-weight:900;'>💻 {tgt_mach} 집중 분석 리포트</h2></div>", unsafe_allow_html=True)
             
             t7_df = f_df[f_df['설비명'] == tgt_mach].copy().sort_values('sort_key')
             
             if not t7_df.empty:
-                # 지표 계산
                 avg_oee = t7_df['종합효율'].apply(safe_float).mean()
                 total_down = t7_df['비가동시간'].apply(safe_float).sum()
                 issue_count = t7_df['OPEN ISSUE'].apply(lambda x: 0 if str(x).strip() in ['', 'nan', '0', '0.0'] else 1).sum()
                 
-                # 3단 요약 카드
                 c1, c2, c3 = st.columns(3)
-                with c1: render_trendy_metric("해당 기간 평균 OEE", f"{avg_oee:.1%}", "#3B82F6" if avg_oee >= 0.86 else "#D91B1B", "📊")
-                with c2: render_trendy_metric("누적 비가동시간", f"{total_down:.1f}h", "#EF4444" if total_down > 0 else "#10B981", "🛑")
-                with c3: render_trendy_metric("이슈 발생 일수", f"{issue_count}일", "#F59E0B" if issue_count > 0 else "#10B981", "📝")
+                with c1: render_trendy_metric("기간 내 평균 OEE", f"{avg_oee:.1%}", "#2563EB" if avg_oee >= 0.86 else "#DC2626", "📈")
+                with c2: render_trendy_metric("누적 비가동 손실", f"{total_down:.1f}h", "#DC2626" if total_down > 0 else "#059669", "🛑")
+                with c3: render_trendy_metric("이슈 발생 일수", f"{issue_count}일", "#D97706" if issue_count > 0 else "#059669", "📝")
                 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
-                # 차트와 표를 좌우로 배치 (모니터링 최적화)
-                chart_col, table_col = st.columns([1, 1.2])
+                chart_col, table_col = st.columns([1, 1.3])
                 
                 with chart_col:
-                    st.markdown("#### 📈 효율(OEE) 추이")
+                    st.markdown("<h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📊 일자별 OEE 흐름도</h4>", unsafe_allow_html=True)
                     fig7 = go.Figure(go.Scatter(
                         x=t7_df['생산일'], y=t7_df['종합효율'], mode='lines+markers+text',
                         text=t7_df['종합효율'].apply(lambda x: f"{x:.1%}"), textposition="top center",
-                        line=dict(color='#3B82F6', width=3), marker=dict(size=10, color='#1E293B')
+                        line=dict(color='#2563EB', width=4), marker=dict(size=12, color='#0F172A'), textfont=dict(size=14, weight='bold')
                     ))
-                    fig7.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=350, yaxis=dict(tickformat='.0%', range=[0, 1.0]), margin=dict(l=0, r=0, t=30, b=0))
+                    fig7.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=400, yaxis=dict(tickformat='.0%', range=[0, 1.0]), margin=dict(l=0, r=0, t=10, b=0))
                     st.plotly_chart(fig7, use_container_width=True)
                 
                 with table_col:
-                    st.markdown("#### 📋 생산 실적 및 OPEN ISSUE 이력")
+                    st.markdown("<h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📋 세부 조업 실적 및 이슈 이력</h4>", unsafe_allow_html=True)
                     disp_t7 = t7_df[['생산일', '품명', '종합효율', '비가동시간', '총 생산수량', 'OPEN ISSUE']].copy()
                     
                     for idx, row in disp_t7.iterrows():
