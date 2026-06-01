@@ -88,8 +88,6 @@ def split_issue_to_columns(issue_text):
         if line: curr.append(line)
     if not has_s: return f"<div style='font-size:14px; font-weight: 600; color:#334155; text-align:left;'>{'<br>'.join(lines)}</div>"
     d_h = '<br>'.join(g_l + d_l) if (g_l + d_l) else "-"; n_h = '<br>'.join(n_l) if n_l else "-"
-    
-    # 텍스트 좌측 정렬 적용
     return f"<div style='display: flex; gap: 8px; text-align:left;'><div style='flex: 1; background-color: #FFFBEB; padding: 10px; border-radius: 6px; border-top: 3px solid #F59E0B;'><div style='font-size:12px; font-weight:900; color:#B45309; margin-bottom:4px;'>☀️ 주간</div><div style='font-size:13px; font-weight:600;'>{d_h}</div></div><div style='flex: 1; background-color: #F1F5F9; padding: 10px; border-radius: 6px; border-top: 3px solid #334155;'><div style='font-size:12px; font-weight:900; color:#1E293B; margin-bottom:4px;'>🌙 야간</div><div style='font-size:13px; font-weight:600;'>{n_h}</div></div></div>"
 
 def format_issue(text):
@@ -98,17 +96,15 @@ def format_issue(text):
     val = val.replace('\r\n', '\n'); val = re.sub(r'(?<!\n)\*', '\n*', val); val = re.sub(r'(?<!\n)-\.', '\n-.', val); val = re.sub(r'(?<!\n)→', '\n→ ', val)
     return val.strip()
 
-# 표 내의 오픈이슈 데이터만 '좌측 정렬' 적용
 def render_styler_to_html(styler):
     try: html_str = styler.to_html(escape=False)
     except: html_str = styler.to_html()
-    
     custom_css = """
     <style>
         .custom-table { width: 100% !important; border-collapse: collapse !important; font-size: 14px !important; background-color: white !important; }
         .custom-table th { background-color: #1E293B !important; color: #FFFFFF !important; border: 1px solid #334155 !important; padding: 14px !important; font-weight: 700 !important; font-size: 15px !important; text-align: center !important; }
         .custom-table td { border: 1px solid #E2E8F0 !important; padding: 12px !important; font-weight: 500 !important; color: #334155 !important; text-align: center !important; vertical-align: middle !important; }
-        .custom-table td:last-child { text-align: left !important; padding-left: 20px !important; } /* 마지막 열(OPEN ISSUE)만 강제 좌측 정렬 */
+        .custom-table td:last-child { text-align: left !important; padding-left: 20px !important; } /* 오픈이슈 좌측 정렬 */
     </style>
     """
     html_str = html_str.replace('<table', '<table class="custom-table"')
@@ -125,7 +121,7 @@ def get_building_group(mach_name):
         else: return "기타 구역"
     except: return "기타 구역"
 
-# 🚨 요청 1번 완벽 반영: 날짜 클릭 시 나타나는 '일일 가동 상세 현황' 팝업 (데이터 무결성 확보)
+# 탭 1 그래프 클릭 팝업
 @st.dialog("📅 일일 가동 상세 현황", width="large")
 def show_daily_summary_popup(clicked_date, f_df, daily_df):
     st.markdown(f"<h3 style='text-align:center; color:#0F172A; font-weight:900;'>{clicked_date} 생산 요약</h3><hr>", unsafe_allow_html=True)
@@ -137,12 +133,9 @@ def show_daily_summary_popup(clicked_date, f_df, daily_df):
         active_count = len(active_day)
         total_down = active_day['비가동시간'].apply(safe_float).sum()
         
-        # 🌟 팩트 체크: 단순 평균이 아닌, daily_df에 저장된 '진짜 해당일 공장 종합효율'을 매칭하여 출력
         matching_daily = daily_df[daily_df['생산일'] == clicked_date]
-        if not matching_daily.empty:
-            day_total_val = matching_daily['공장종합효율'].iloc[0]
-        else:
-            day_total_val = active_day['종합효율'].apply(safe_float).mean() # 예외 발생 시에만 평균 사용
+        if not matching_daily.empty: day_total_val = matching_daily['공장종합효율'].iloc[0]
+        else: day_total_val = active_day['종합효율'].apply(safe_float).mean() 
         
         c1, c2, c3 = st.columns(3)
         with c1: render_trendy_metric("실가동 설비", f"{active_count}대", "#10B981", "🏭")
@@ -151,24 +144,31 @@ def show_daily_summary_popup(clicked_date, f_df, daily_df):
         
         st.markdown("<br><h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📋 설비별 상세 가동 내역</h4>", unsafe_allow_html=True)
         
-        disp_day = active_day[['설비명', '품명', '종합효율', '비가동시간', 'OPEN ISSUE']].copy()
+        # 🚨 에러 방지용 안전한 컬럼 추출
+        req_cols = ['설비명', '품명', '종합효율', '비가동시간', 'OPEN ISSUE']
+        safe_cols = [c for c in req_cols if c in active_day.columns]
+        disp_day = active_day[safe_cols].copy()
+        
         for idx, row in disp_day.iterrows():
-            disp_day.at[idx, '종합효율'] = f"{safe_float(row['종합효율']):.1%}"
-            disp_day.at[idx, '비가동시간'] = f"{safe_float(row['비가동시간']):.1f}h"
-        disp_day['OPEN ISSUE'] = disp_day['OPEN ISSUE'].apply(split_issue_to_columns)
+            if '종합효율' in disp_day.columns: disp_day.at[idx, '종합효율'] = f"{safe_float(row['종합효율']):.1%}"
+            if '비가동시간' in disp_day.columns: disp_day.at[idx, '비가동시간'] = f"{safe_float(row['비가동시간']):.1f}h"
+        if 'OPEN ISSUE' in disp_day.columns: disp_day['OPEN ISSUE'] = disp_day['OPEN ISSUE'].apply(split_issue_to_columns)
         
         render_styler_to_html(disp_day.style.hide(axis="index"))
     else:
         st.info("해당 일자의 설비 가동 데이터가 존재하지 않습니다.")
         
-    if st.button("창 닫기", use_container_width=True):
+    if st.button("창 닫기", key="close_daily_popup", use_container_width=True):
         st.rerun()
 
-# 기존 설비 클릭 팝업창
+# 탭 2 설비 클릭 팝업 (🚨 WORST 5 기능 탑재 완료)
 @st.dialog("💻 설비 집중 분석 리포트", width="large")
 def show_machine_popup(tgt_mach, t7_df):
     st.markdown(f"<h3 style='text-align:center; color:#0F172A; font-weight:900;'>{tgt_mach}</h3><hr>", unsafe_allow_html=True)
-    avg_oee = t7_df['종합효율'].apply(safe_float).mean()
+    
+    valid_t7 = t7_df[t7_df['종합효율'] > 0].copy()
+    
+    avg_oee = valid_t7['종합효율'].apply(safe_float).mean() if not valid_t7.empty else 0.0
     total_down = t7_df['비가동시간'].apply(safe_float).sum()
     issue_count = t7_df['OPEN ISSUE'].apply(lambda x: 0 if str(x).strip() in ['', 'nan', '0', '0.0'] else 1).sum()
     
@@ -187,20 +187,33 @@ def show_machine_popup(tgt_mach, t7_df):
     fig7.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=350, yaxis=dict(tickformat='.0%', range=[0, 1.1]), margin=dict(l=0, r=0, t=10, b=0))
     st.plotly_chart(fig7, use_container_width=True)
     
-    st.markdown("<br><h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📋 세부 조업 실적 및 이슈 이력</h4>", unsafe_allow_html=True)
-    disp_t7 = t7_df[['생산일', '품명', '종합효율', '비가동시간', '총 생산수량', 'OPEN ISSUE']].copy()
-    for idx, row in disp_t7.iterrows():
-        disp_t7.at[idx, '종합효율'] = f"{safe_float(row['종합효율']):.1%}"
-        disp_t7.at[idx, '총 생산수량'] = f"{int(safe_float(row['총 생산수량'])):,}"
-        disp_t7.at[idx, '비가동시간'] = f"{safe_float(row['비가동시간']):.1f}h"
-    disp_t7['OPEN ISSUE'] = disp_t7['OPEN ISSUE'].apply(split_issue_to_columns)
-    render_styler_to_html(disp_t7.style.hide(axis="index"))
+    # 🚨 요청 1번 반영: 전체 표 대신 효율 가장 낮은 WORST 5일 추려서 보여주기 (에러 방어막 포함)
+    st.markdown("<br><h4 style='font-weight:900; color:#DC2626; margin-bottom:15px;'>🚨 WORST 5 생산일 (종합효율 최하위 5건)</h4>", unsafe_allow_html=True)
     
-    if st.button("창 닫기", use_container_width=True):
+    if not valid_t7.empty:
+        worst_5 = valid_t7.sort_values(by='종합효율', ascending=True).head(5)
+        
+        req_cols = ['생산일', '품명', '종합효율', '비가동시간', '총 생산수량', 'OPEN ISSUE']
+        safe_cols = [c for c in req_cols if c in worst_5.columns]
+        disp_worst = worst_5[safe_cols].copy()
+        
+        for idx, row in disp_worst.iterrows():
+            if '종합효율' in disp_worst.columns: disp_worst.at[idx, '종합효율'] = f"{safe_float(row['종합효율']):.1%}"
+            if '총 생산수량' in disp_worst.columns: disp_worst.at[idx, '총 생산수량'] = f"{int(safe_float(row['총 생산수량'])):,}"
+            if '비가동시간' in disp_worst.columns: disp_worst.at[idx, '비가동시간'] = f"{safe_float(row['비가동시간']):.1f}h"
+            
+        if 'OPEN ISSUE' in disp_worst.columns:
+            disp_worst['OPEN ISSUE'] = disp_worst['OPEN ISSUE'].apply(split_issue_to_columns)
+            
+        render_styler_to_html(disp_worst.style.hide(axis="index"))
+    else:
+        st.info("해당 설비의 유효한 가동 데이터가 없습니다.")
+    
+    if st.button("창 닫기", key="close_mach_popup", use_container_width=True):
         st.rerun()
 
 # ==========================================
-# 🌟 3. 데이터 로드 
+# 🌟 3. 데이터 로드 (🚨 2번 에러: 공백 찌꺼기 원천 차단)
 # ==========================================
 target_cols = ['생산일', '설비명', '품명', '양품수량', '불량수량', '총 생산수량', '투입시간', '가동시간', '비가동시간', '종합효율', '양품율', 'OPEN ISSUE']
 data_to_process = []
@@ -222,8 +235,6 @@ if os.path.exists(DATA_DIR):
 if data_to_process:
     all_records = []
     daily_totals_data = {} 
-    
-    # 요일 강제 적용 패치 (사용자 지시사항)
     week_arr = ['(월)', '(화)', '(수)', '(목)', '(금)', '(토)', '(일)']
     
     for file_name, temp_df in data_to_process:
@@ -258,11 +269,16 @@ if data_to_process:
         if sort_key not in daily_totals_data: daily_totals_data[sort_key] = {'생산일': clean_date, '생산월': month_str, '공장종합효율': d_total_oee}
 
         for _, row in temp_df.iterrows():
+            # 🚨 엑셀의 설비명 글자 뒤에 숨은 띄어쓰기(공백)를 완벽하게 제거하여 충돌 원천 방어!
             m_val = str(row.get('설비명')).strip()
             if m_val.lower() in ['', 'nan', 'none', '#n/a'] or any(kw in m_val.upper() for kw in ['TOTAL', '합계']): continue
+            
             record = {'sort_key': sort_key, '생산월': month_str, '생산일': clean_date}
             for col in target_cols:
-                if col != '생산일': record[col] = row[col] if col in temp_df.columns else None
+                if col == '설비명':
+                    record[col] = m_val
+                elif col != '생산일': 
+                    record[col] = row[col] if col in temp_df.columns else None
             all_records.append(record)
 
     df = pd.DataFrame(all_records).sort_values(by='sort_key').reset_index(drop=True)
@@ -284,14 +300,12 @@ if data_to_process:
     f1, f2 = st.columns(2)
     all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
     
-    # 🚨 요청 3번 반영: 직관적이고 깔끔한 필터명 변경
     with f1: sel_m_side = st.multiselect("📅 생산월 선택", all_months, default=[all_months[-1]] if all_months else [])
     
     m_f_df = df[df['생산월'].isin(sel_m_side)].copy() if sel_m_side else df.copy()
     all_dates = list(m_f_df['생산일'].unique())
     all_dates.sort(key=lambda x: date_mapping.get(x, ""), reverse=True)
     
-    # 🚨 요청 3번 반영: 직관적이고 깔끔한 필터명 변경
     with f2: sel_d_side = st.multiselect("📆 생산일 선택", all_dates, default=[])
     f_df = m_f_df[m_f_df['생산일'].isin(sel_d_side)].copy() if sel_d_side else m_f_df.copy()
 
@@ -307,9 +321,8 @@ if data_to_process:
         p_df = daily_df[daily_df['생산월'].isin(sel_m_side)].copy() if sel_m_side else daily_df.copy()
         if sel_d_side: p_df = p_df[p_df['생산일'].isin(sel_d_side)]
             
-        # 🚨 요청 2번 반영: 선택된 월(Month)을 다이나믹하게 타이틀에 반영
         if sel_m_side:
-            title_month = ", ".join([m.split(' ')[-1] for m in sel_m_side]) # '26년 5월'에서 '5월'만 추출
+            title_month = ", ".join([m.split(' ')[-1] for m in sel_m_side])
             render_section_title(f"사출생산팀 ({title_month}) 종합효율 추이")
         else:
             render_section_title("사출생산팀 전체 종합효율 추이")
@@ -326,7 +339,6 @@ if data_to_process:
                 event = st.plotly_chart(fig_oee, use_container_width=True, on_select="rerun", selection_mode="points")
                 if event and "selection" in event and event["selection"]["points"]:
                     clicked_date = event["selection"]["points"][0]["x"]
-                    # 팝업 함수에 daily_df를 전달하여 정확한 팩트 데이터를 매칭하도록 수정됨
                     show_daily_summary_popup(clicked_date, f_df, daily_df)
             except TypeError:
                 st.plotly_chart(fig_oee, use_container_width=True)
@@ -335,12 +347,14 @@ if data_to_process:
         else: st.info("조건에 해당하는 데이터가 없습니다.")
 
     # -----------------------------------------------------
-    # TAB 2: 설비별 정밀 분석
+    # TAB 2: 설비별 정밀 분석 (버튼 중복 생성 방어막 추가)
     # -----------------------------------------------------
     with tab2:
         render_section_title("👆 점검할 설비 버튼을 터치하여 상세 리포트를 확인하세요")
         
-        machine_list = sorted([m for m in f_df['설비명'].unique() if m and str(m).strip() != 'nan'])
+        # 🚨 에러 방어: 리스트의 중복을 100% 제거
+        raw_machines = [str(m).strip() for m in f_df['설비명'].unique() if pd.notna(m) and str(m).strip() != 'nan']
+        machine_list = sorted(list(set(raw_machines)))
         
         if machine_list:
             building_dict = {"창조동 A": [], "창조동 B": [], "창조동 C": [], "혁신동": [], "미래동": [], "기타 구역": []}
@@ -357,7 +371,8 @@ if data_to_process:
                 cols = st.columns(8) 
                 for i, mach in enumerate(m_list):
                     short_name = mach.split(' - ')[0].strip()
-                    if cols[i % 8].button(short_name, key=f"btn_{mach}"):
+                    # 🚨 에러 방어: 버튼 키(Key) 값에 고유 인덱스를 부여하여 충돌 원천 차단
+                    if cols[i % 8].button(short_name, key=f"btn_{b_name}_{i}_{mach}"):
                         t7_df = f_df[f_df['설비명'] == mach].copy().sort_values('sort_key')
                         show_machine_popup(mach, t7_df)
 
