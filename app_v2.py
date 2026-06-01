@@ -98,7 +98,7 @@ def format_issue(text):
     val = val.replace('\r\n', '\n'); val = re.sub(r'(?<!\n)\*', '\n*', val); val = re.sub(r'(?<!\n)-\.', '\n-.', val); val = re.sub(r'(?<!\n)→', '\n→ ', val)
     return val.strip()
 
-# 🚨 요청 2번 반영: 표 내의 오픈이슈 데이터만 '좌측 정렬' 적용
+# 표 내의 오픈이슈 데이터만 '좌측 정렬' 적용
 def render_styler_to_html(styler):
     try: html_str = styler.to_html(escape=False)
     except: html_str = styler.to_html()
@@ -125,9 +125,9 @@ def get_building_group(mach_name):
         else: return "기타 구역"
     except: return "기타 구역"
 
-# 🚨 요청 1번 반영: 날짜 클릭 시 나타나는 '일일 가동 상세 현황' 팝업 함수
+# 🚨 요청 1번 완벽 반영: 날짜 클릭 시 나타나는 '일일 가동 상세 현황' 팝업 (데이터 무결성 확보)
 @st.dialog("📅 일일 가동 상세 현황", width="large")
-def show_daily_summary_popup(clicked_date, f_df):
+def show_daily_summary_popup(clicked_date, f_df, daily_df):
     st.markdown(f"<h3 style='text-align:center; color:#0F172A; font-weight:900;'>{clicked_date} 생산 요약</h3><hr>", unsafe_allow_html=True)
     
     day_df = f_df[f_df['생산일'] == clicked_date].copy().sort_values('설비명')
@@ -135,12 +135,18 @@ def show_daily_summary_popup(clicked_date, f_df):
     
     if not active_day.empty:
         active_count = len(active_day)
-        avg_oee = active_day['종합효율'].apply(safe_float).mean()
         total_down = active_day['비가동시간'].apply(safe_float).sum()
+        
+        # 🌟 팩트 체크: 단순 평균이 아닌, daily_df에 저장된 '진짜 해당일 공장 종합효율'을 매칭하여 출력
+        matching_daily = daily_df[daily_df['생산일'] == clicked_date]
+        if not matching_daily.empty:
+            day_total_val = matching_daily['공장종합효율'].iloc[0]
+        else:
+            day_total_val = active_day['종합효율'].apply(safe_float).mean() # 예외 발생 시에만 평균 사용
         
         c1, c2, c3 = st.columns(3)
         with c1: render_trendy_metric("실가동 설비", f"{active_count}대", "#10B981", "🏭")
-        with c2: render_trendy_metric("평균 종합효율", f"{avg_oee:.1%}", "#2563EB" if avg_oee >= 0.86 else "#DC2626", "📈")
+        with c2: render_trendy_metric("공장 종합효율", f"{day_total_val:.1%}", "#2563EB" if day_total_val >= 0.86 else "#DC2626", "📈")
         with c3: render_trendy_metric("총 비가동시간", f"{total_down:.1f}h", "#DC2626" if total_down > 0 else "#10B981", "🛑")
         
         st.markdown("<br><h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📋 설비별 상세 가동 내역</h4>", unsafe_allow_html=True)
@@ -216,7 +222,9 @@ if os.path.exists(DATA_DIR):
 if data_to_process:
     all_records = []
     daily_totals_data = {} 
-    week_arr = ['월', '화', '수', '목', '금', '토', '일']
+    
+    # 요일 강제 적용 패치 (사용자 지시사항)
+    week_arr = ['(월)', '(화)', '(수)', '(목)', '(금)', '(토)', '(일)']
     
     for file_name, temp_df in data_to_process:
         temp_df.columns = [str(c).replace('\n', '').replace('\r', '').strip() for c in temp_df.columns]
@@ -229,7 +237,7 @@ if data_to_process:
             raw_date = date_match.group()[2:]
             try:
                 dt = datetime.strptime(raw_date, '%y%m%d')
-                clean_date = f"{dt.strftime('%y')}년 {dt.month}월 {dt.day}일 ({week_arr[dt.weekday()]})"
+                clean_date = f"{dt.strftime('%y')}년 {dt.month}월 {dt.day}일 {week_arr[dt.weekday()]}"
                 month_str = f"{dt.strftime('%y')}년 {dt.month}월"; sort_key = raw_date 
             except: clean_date = raw_date; month_str = "분류 안됨"; sort_key = raw_date
         else: clean_date = file_name.split('.')[0]; month_str = "분류 안됨"; sort_key = clean_date
@@ -275,12 +283,16 @@ if data_to_process:
 
     f1, f2 = st.columns(2)
     all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
-    with f1: sel_m_side = st.multiselect("📅 조회할 월 선택", all_months, default=[all_months[-1]] if all_months else [])
+    
+    # 🚨 요청 3번 반영: 직관적이고 깔끔한 필터명 변경
+    with f1: sel_m_side = st.multiselect("📅 생산월 선택", all_months, default=[all_months[-1]] if all_months else [])
     
     m_f_df = df[df['생산월'].isin(sel_m_side)].copy() if sel_m_side else df.copy()
     all_dates = list(m_f_df['생산일'].unique())
     all_dates.sort(key=lambda x: date_mapping.get(x, ""), reverse=True)
-    with f2: sel_d_side = st.multiselect("📆 특정 일자만 집중 분석 (선택 안하면 월 전체)", all_dates, default=[])
+    
+    # 🚨 요청 3번 반영: 직관적이고 깔끔한 필터명 변경
+    with f2: sel_d_side = st.multiselect("📆 생산일 선택", all_dates, default=[])
     f_df = m_f_df[m_f_df['생산일'].isin(sel_d_side)].copy() if sel_d_side else m_f_df.copy()
 
     st.markdown("<div style='margin-bottom: 25px;'></div>", unsafe_allow_html=True)
@@ -295,30 +307,35 @@ if data_to_process:
         p_df = daily_df[daily_df['생산월'].isin(sel_m_side)].copy() if sel_m_side else daily_df.copy()
         if sel_d_side: p_df = p_df[p_df['생산일'].isin(sel_d_side)]
             
-        render_section_title("공장 전체 종합효율(OEE) 추이")
+        # 🚨 요청 2번 반영: 선택된 월(Month)을 다이나믹하게 타이틀에 반영
+        if sel_m_side:
+            title_month = ", ".join([m.split(' ')[-1] for m in sel_m_side]) # '26년 5월'에서 '5월'만 추출
+            render_section_title(f"사출생산팀 ({title_month}) 종합효율 추이")
+        else:
+            render_section_title("사출생산팀 전체 종합효율 추이")
+            
         if not p_df.empty:
             avg_oee = p_df['공장종합효율'].mean()
-            render_tab_insight("💡 현장 운영 가이드", f"조회하신 기간 동안 사출 공정의 평균 OEE는 <b><span style='color:#3B82F6; font-size:18px;'>{avg_oee:.1%}</span></b>를 기록했습니다. <b>아래 막대그래프를 클릭하시면 해당 일자의 상세 가동 현황 팝업이 나타납니다.</b>")
+            render_tab_insight("💡 현장 운영 가이드", f"조회하신 기간 동안 사출 공정의 평균 OEE는 <b><span style='color:#3B82F6; font-size:18px;'>{avg_oee:.1%}</span></b>를 기록했습니다. <b>아래 막대그래프를 클릭하시면 해당 일자의 '진짜 가동 데이터'가 상세 팝업으로 나타납니다.</b>")
             
             bar_colors = ['#3B82F6' if safe_float(row['공장종합효율']) >= 0.86 else '#EF4444' for _, row in p_df.iterrows()]
             fig_oee = go.Figure(go.Bar(x=p_df['생산일'], y=p_df['공장종합효율'], text=p_df['공장종합효율'].apply(lambda x: f"{x:.1%}"), textposition='auto', marker_color=bar_colors, textfont=dict(size=14, weight='bold', color='white')))
             fig_oee.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=450, yaxis=dict(tickformat='.0%', range=[0, 1.0]), margin=dict(t=20))
             
-            # 🚨 요청 1번 반영: 그래프 클릭 시 '일일 가동 상세 현황' 팝업 호출 (Streamlit 최신 on_select 활용)
             try:
                 event = st.plotly_chart(fig_oee, use_container_width=True, on_select="rerun", selection_mode="points")
                 if event and "selection" in event and event["selection"]["points"]:
                     clicked_date = event["selection"]["points"][0]["x"]
-                    show_daily_summary_popup(clicked_date, f_df)
+                    # 팝업 함수에 daily_df를 전달하여 정확한 팩트 데이터를 매칭하도록 수정됨
+                    show_daily_summary_popup(clicked_date, f_df, daily_df)
             except TypeError:
-                # 구버전 Streamlit 환경에 대한 예외 처리
                 st.plotly_chart(fig_oee, use_container_width=True)
                 st.info("💡 팁: 막대 그래프를 클릭하여 일일 상세 내역을 보시려면 시스템을 최신 버전으로 업데이트해주세요.")
                 
         else: st.info("조건에 해당하는 데이터가 없습니다.")
 
     # -----------------------------------------------------
-    # TAB 2: 설비별 정밀 분석 (동별 그룹화 & 팝업 호출)
+    # TAB 2: 설비별 정밀 분석
     # -----------------------------------------------------
     with tab2:
         render_section_title("👆 점검할 설비 버튼을 터치하여 상세 리포트를 확인하세요")
