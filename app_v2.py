@@ -57,16 +57,16 @@ def safe_float(val):
 def render_section_title(text): st.markdown(f"<div class='section-banner'><h3>{text}</h3></div>", unsafe_allow_html=True)
 def render_tab_insight(title, content): st.markdown(f"<div style='background-color:#F1F5F9; border-left:5px solid #3B82F6; border-radius:8px; padding:20px 25px; margin-bottom:25px;'><h4 style='margin-top:0; color:#1E293B; font-weight:800; font-size:17px; margin-bottom:10px;'>{title}</h4><div style='line-height:1.6; font-size:15px; color:#334155;'>{content}</div></div>", unsafe_allow_html=True)
 
-# 🚨 요청 2번 반영: 디지털 전광판(Scoreboard) 스타일 UI 함수
 def render_scoreboard_metric(title, value_str, glow_color):
-    st.markdown(f"""
+    html = f"""
     <div style="background-color: #000000; border: 4px solid #1E293B; border-radius: 12px; padding: 20px 10px; text-align: center; box-shadow: inset 0px 0px 20px rgba(0,0,0,1);">
         <div style="color: #94A3B8; font-size: 15px; font-weight: 800; margin-bottom: 5px;">{title}</div>
         <div style="color: {glow_color}; font-size: 42px; font-weight: 900; letter-spacing: 2px; font-family: 'Courier New', monospace; text-shadow: 0px 0px 15px {glow_color}; line-height: 1.1;">
             {value_str}
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """
+    st.markdown(html.replace('\n', ''), unsafe_allow_html=True)
 
 def split_issue_to_columns(issue_text):
     lines = [line.strip() for line in str(issue_text).split('\n') if line.strip()]
@@ -87,25 +87,23 @@ def format_issue(text):
     val = val.replace('\r\n', '\n'); val = re.sub(r'(?<!\n)\*', '\n*', val); val = re.sub(r'(?<!\n)-\.', '\n-.', val); val = re.sub(r'(?<!\n)→', '\n→ ', val)
     return val.strip()
 
-# 🚨 요청 1번 반영: Pandas HTML의 불순물(<style> 태그)을 제거하는 정규식 필터링 엔진
+# 🚨 1번, 2번 에러 완벽 차단: 줄바꿈(엔터) 압축 렌더링 엔진
 def render_styler_to_html(styler):
     try: raw_html = styler.to_html(escape=False)
     except: raw_html = styler.to_html()
     
-    # 순수 표(table)만 추출하여 글씨 깨짐(CSS Leak) 현상 원천 차단
-    table_match = re.search(r'(<table.*</table>)', raw_html, re.DOTALL | re.IGNORECASE)
-    clean_html = table_match.group(1) if table_match else raw_html
+    # 순수 표(table)만 추출하고 불순물 제거
+    clean_html = re.sub(r'<style.*?</style>', '', raw_html, flags=re.DOTALL | re.IGNORECASE)
     
-    custom_css = """
-    <style>
-        .custom-table { width: 100% !important; border-collapse: collapse !important; font-size: 14px !important; background-color: white !important; }
-        .custom-table th { background-color: #1E293B !important; color: #FFFFFF !important; border: 1px solid #334155 !important; padding: 14px !important; font-weight: 700 !important; font-size: 15px !important; text-align: center !important; }
-        .custom-table td { border: 1px solid #E2E8F0 !important; padding: 12px !important; font-weight: 500 !important; color: #334155 !important; text-align: center !important; vertical-align: middle !important; }
-        .custom-table td:last-child { text-align: left !important; padding-left: 20px !important; } 
-    </style>
-    """
+    custom_css = "<style>.custom-table { width: 100% !important; border-collapse: collapse !important; font-size: 14px !important; background-color: white !important; } .custom-table th { background-color: #1E293B !important; color: #FFFFFF !important; border: 1px solid #334155 !important; padding: 14px !important; font-weight: 700 !important; font-size: 15px !important; text-align: center !important; } .custom-table td { border: 1px solid #E2E8F0 !important; padding: 12px !important; font-weight: 500 !important; color: #334155 !important; text-align: center !important; vertical-align: middle !important; } .custom-table td:last-child { text-align: left !important; padding-left: 20px !important; }</style>"
+    
     clean_html = clean_html.replace('<table', '<table class="custom-table"')
-    st.markdown(custom_css + f"<div style='width:100%; overflow-x:auto; border:1px solid #CBD5E1; border-radius:10px; margin-bottom:25px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);'>{clean_html}</div>", unsafe_allow_html=True)
+    
+    # 🌟 핵심: HTML을 마크다운 파서가 텍스트로 착각하지 않도록 모든 줄바꿈(\n) 제거
+    final_html = custom_css + f"<div style='width:100%; overflow-x:auto; border:1px solid #CBD5E1; border-radius:10px; margin-bottom:25px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);'>{clean_html}</div>"
+    final_html = final_html.replace('\n', '').replace('\r', '')
+    
+    st.markdown(final_html, unsafe_allow_html=True)
 
 def prepare_display_table(df, desired_cols):
     safe_cols = [c for c in desired_cols if c in df.columns]
@@ -130,10 +128,8 @@ def get_building_group(mach_name):
     except: return "기타 구역"
 
 # ==========================================
-# 🌟 3. 팝업창 (전광판 UI 탑재)
+# 🌟 3. 팝업창 (전광판 UI)
 # ==========================================
-
-# 📌 [탭 1] 일자별 팝업
 @st.dialog("📅 일일 가동 상세 현황", width="large")
 def show_daily_summary_popup(clicked_date, f_df, daily_df):
     st.markdown(f"<h3 style='text-align:center; color:#0F172A; font-weight:900;'>{clicked_date} 현장 가동 모니터링</h3><hr>", unsafe_allow_html=True)
@@ -149,11 +145,10 @@ def show_daily_summary_popup(clicked_date, f_df, daily_df):
         if not matching_daily.empty: day_total_val = matching_daily['공장종합효율'].iloc[0]
         else: day_total_val = active_day['종합효율'].apply(safe_float).mean() 
         
-        # 🚨 전광판(Scoreboard) 스타일 적용
         c1, c2, c3 = st.columns(3)
-        with c1: render_scoreboard_metric("💡 가동 설비 대수", f"{active_count}대", "#32CD32") # 네온 그린
-        with c2: render_scoreboard_metric("📊 당일 공장 종합효율", f"{day_total_val:.1%}", "#3B82F6" if day_total_val >= 0.86 else "#FF3131") # 네온 블루 or 네온 레드
-        with c3: render_scoreboard_metric("🛑 총 비가동시간", f"{total_down:.1f}h", "#FF3131" if total_down > 0 else "#32CD32") # 네온 레드 or 네온 그린
+        with c1: render_scoreboard_metric("💡 가동 설비 대수", f"{active_count}대", "#32CD32")
+        with c2: render_scoreboard_metric("📊 당일 공장 종합효율", f"{day_total_val:.1%}", "#3B82F6" if day_total_val >= 0.86 else "#FF3131")
+        with c3: render_scoreboard_metric("🛑 총 비가동시간", f"{total_down:.1f}h", "#FF3131" if total_down > 0 else "#32CD32")
         
         st.markdown("<br><h4 style='font-weight:900; color:#DC2626; margin-bottom:15px;'>🚨 WORST 5 취약 설비 (종합효율 하위)</h4>", unsafe_allow_html=True)
         worst_5_mach = active_day.sort_values(by='종합효율', ascending=True).head(5)
@@ -169,7 +164,6 @@ def show_daily_summary_popup(clicked_date, f_df, daily_df):
     if st.button("창 닫기", key="close_daily_popup", use_container_width=True):
         st.rerun()
 
-# 📌 [탭 2] 설비별 팝업
 @st.dialog("💻 설비 집중 분석 리포트", width="large")
 def show_machine_popup(tgt_mach, t7_df):
     st.markdown(f"<h3 style='text-align:center; color:#0F172A; font-weight:900;'>{tgt_mach} 이력 모니터링</h3><hr>", unsafe_allow_html=True)
@@ -180,11 +174,10 @@ def show_machine_popup(tgt_mach, t7_df):
     total_down = t7_df['비가동시간'].apply(safe_float).sum()
     issue_count = t7_df['OPEN ISSUE'].apply(lambda x: 0 if str(x).strip() in ['', 'nan', '0', '0.0'] else 1).sum()
     
-    # 🚨 전광판(Scoreboard) 스타일 적용
     c1, c2, c3 = st.columns(3)
     with c1: render_scoreboard_metric("📊 누적 평균 OEE", f"{avg_oee:.1%}", "#3B82F6" if avg_oee >= 0.86 else "#FF3131")
     with c2: render_scoreboard_metric("🛑 누적 비가동 손실", f"{total_down:.1f}h", "#FF3131" if total_down > 0 else "#32CD32")
-    with c3: render_scoreboard_metric("📝 이슈 발생 일수", f"{issue_count}일", "#FF9900" if issue_count > 0 else "#32CD32") # 네온 오렌지
+    with c3: render_scoreboard_metric("📝 이슈 발생 일수", f"{issue_count}일", "#FF9900" if issue_count > 0 else "#32CD32") 
     
     st.markdown("<br><h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📊 일자별 OEE 흐름도</h4>", unsafe_allow_html=True)
     fig7 = go.Figure(go.Scatter(
