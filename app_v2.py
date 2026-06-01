@@ -8,7 +8,7 @@ import os
 from datetime import datetime
 
 # ==========================================
-# 🌟 1. 기본 설정 및 테마 (현장 가시성 극대화)
+# 🌟 1. 기본 설정 및 테마 (간격 최소화 & 팝업 최적화)
 # ==========================================
 st.set_page_config(page_title="설비별 정밀 분석 대시보드", layout="wide", initial_sidebar_state="collapsed")
 
@@ -18,9 +18,6 @@ components.html(
         parent.documentElement.lang = 'ko';
         parent.documentElement.setAttribute('translate', 'no');
         parent.body.classList.add('notranslate');
-        const meta = parent.createElement('meta');
-        meta.name = "google"; meta.content = "notranslate";
-        parent.head.appendChild(meta);
     </script>""", width=0, height=0
 )
 
@@ -30,41 +27,41 @@ st.markdown("""
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/static/pretendard.css');
     html, body, [class*="css"] { font-family: 'Pretendard', sans-serif !important; background-color: #F8FAFC; color: #0F172A; translate: no; }
     
-    /* 섹션 배너 디자인 (더 진하게) */
+    /* 섹션 배너 디자인 */
     .section-banner { background-color: #ffffff; border: 1px solid #E2E8F0; border-left: 8px solid #D91B1B; padding: 18px 24px; border-radius: 12px; margin-top: 35px; margin-bottom: 25px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
     .section-banner h3 { margin: 0; font-weight: 900; color: #0F172A; font-size: 22px; letter-spacing: -0.5px; }
     
-    /* 인포그래픽 요약 카드 */
-    .analysis-report-card { background-color: #F1F5F9; border-left: 5px solid #3B82F6; border-radius: 8px; padding: 20px 25px; margin-bottom: 25px; }
-    
-    /* 핵심 지표 (Metric) 카드 디자인 강화 */
-    .metric-card-container { background-color: #FFFFFF; border-radius: 16px; padding: 25px 20px; text-align: center; border: 1px solid #E2E8F0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); transition: transform 0.2s; }
-    .metric-card-container:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+    /* 핵심 지표 (Metric) 카드 디자인 */
+    .metric-card-container { background-color: #FFFFFF; border-radius: 16px; padding: 25px 20px; text-align: center; border: 1px solid #E2E8F0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
     .metric-title { font-size: 16px; color: #475569; margin-bottom: 12px; font-weight: 700; }
     .metric-value-box { display: flex; align-items: center; justify-content: center; gap: 8px; }
     .metric-value { font-size: 42px; font-weight: 900; letter-spacing: -1.5px; line-height: 1; }
     .metric-icon { font-size: 24px; }
     
-    /* 터치 친화적 큼직한 설비 선택 버튼 */
+    /* 동별 구분 헤더 */
+    .building-header { font-size: 18px; font-weight: 800; color: #1E293B; margin-top: 25px; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid #E2E8F0; }
+    
+    /* 🚨 컬럼 및 버튼 간격 좁히기 🚨 */
+    div[data-testid="column"] { padding: 0 4px !important; } /* 좌우 간격 축소 */
     div.stButton > button {
         width: 100%;
-        height: 75px;
+        height: 60px;
         background-color: #FFFFFF;
         border: 2px solid #CBD5E1;
         color: #1E293B;
-        font-size: 20px !important;
+        font-size: 18px !important;
         font-weight: 800 !important;
-        border-radius: 12px;
-        transition: all 0.2s ease-in-out;
-        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        border-radius: 8px;
+        margin: 0 !important;
+        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
     }
-    div.stButton > button:hover { border-color: #3B82F6; color: #1D4ED8; background-color: #EFF6FF; transform: scale(1.02); }
+    div.stButton > button:hover { border-color: #3B82F6; color: #1D4ED8; background-color: #EFF6FF; }
     div.stButton > button:active { background-color: #2563EB !important; color: white !important; border-color: #2563EB; }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 🌟 2. 함수 정의
+# 🌟 2. 팝업창(Modal) 및 기타 함수 정의
 # ==========================================
 def safe_float(val):
     try:
@@ -77,7 +74,7 @@ def safe_float(val):
     except: return 0.0
 
 def render_section_title(text): st.markdown(f"<div class='section-banner'><h3>{text}</h3></div>", unsafe_allow_html=True)
-def render_tab_insight(title, content): st.markdown(f"<div class='analysis-report-card'><h4 style='margin-top:0; color:#1E293B; font-weight:800; font-size:17px; margin-bottom:10px;'>{title}</h4><div style='line-height:1.6; font-size:15px; color:#334155; margin-bottom:0;'>{content}</div></div>", unsafe_allow_html=True)
+def render_tab_insight(title, content): st.markdown(f"<div style='background-color:#F1F5F9; border-left:5px solid #3B82F6; border-radius:8px; padding:20px 25px; margin-bottom:25px;'><h4 style='margin-top:0; color:#1E293B; font-weight:800; font-size:17px; margin-bottom:10px;'>{title}</h4><div style='line-height:1.6; font-size:15px; color:#334155;'>{content}</div></div>", unsafe_allow_html=True)
 def render_trendy_metric(title, value_str, color, icon): st.markdown(f"<div class='metric-card-container'><div class='metric-title'>{title}</div><div class='metric-value-box'><span class='metric-value' style='color: {color};'>{value_str}</span><span class='metric-icon' style='color: {color};'>{icon}</span></div></div>", unsafe_allow_html=True)
 
 def split_issue_to_columns(issue_text):
@@ -102,11 +99,64 @@ def format_issue(text):
 def render_styler_to_html(styler):
     try: html_str = styler.to_html(escape=False)
     except: html_str = styler.to_html()
-    # 인포그래픽 스타일의 깔끔하고 대비가 강한 표 디자인 적용
     html_str = html_str.replace('<table', '<table style="width: 100%; border-collapse: collapse; font-size: 14px; text-align: center; background-color: white;"')
     html_str = html_str.replace('<th', '<th style="background-color: #1E293B; color: #FFFFFF; border: 1px solid #334155; padding: 14px; font-weight: 700; font-size: 15px;"')
     html_str = html_str.replace('<td', '<td style="border: 1px solid #E2E8F0; padding: 12px; font-weight: 500; color: #334155;"')
-    st.markdown(f"<div style='width:100%; overflow-x:auto; border:1px solid #CBD5E1; border-radius:10px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); margin-bottom:25px;'>{html_str}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='width:100%; overflow-x:auto; border:1px solid #CBD5E1; border-radius:10px; margin-bottom:25px;'>{html_str}</div>", unsafe_allow_html=True)
+
+# 💡 동(Building) 분류 함수
+def get_building_group(mach_name):
+    try:
+        num = int(re.search(r'\d+', mach_name).group())
+        if 4 <= num <= 21: return "창조동 A"
+        elif 22 <= num <= 39: return "창조동 B"
+        elif 40 <= num <= 46: return "창조동 C"
+        elif 47 <= num <= 52: return "혁신동"
+        elif 53 <= num <= 58: return "미래동"
+        else: return "기타 구역"
+    except: return "기타 구역"
+
+# 💡 ✨ 팝업창(Modal) 생성 함수 (이것이 3번 요청의 핵심입니다!)
+@st.dialog("💻 설비 집중 분석 리포트", width="large")
+def show_machine_popup(tgt_mach, t7_df):
+    st.markdown(f"<h3 style='text-align:center; color:#0F172A; font-weight:900;'>{tgt_mach}</h3><hr>", unsafe_allow_html=True)
+    
+    avg_oee = t7_df['종합효율'].apply(safe_float).mean()
+    total_down = t7_df['비가동시간'].apply(safe_float).sum()
+    issue_count = t7_df['OPEN ISSUE'].apply(lambda x: 0 if str(x).strip() in ['', 'nan', '0', '0.0'] else 1).sum()
+    
+    c1, c2, c3 = st.columns(3)
+    with c1: render_trendy_metric("기간 내 평균 OEE", f"{avg_oee:.1%}", "#2563EB" if avg_oee >= 0.86 else "#DC2626", "📈")
+    with c2: render_trendy_metric("누적 비가동 손실", f"{total_down:.1f}h", "#DC2626" if total_down > 0 else "#059669", "🛑")
+    with c3: render_trendy_metric("이슈 발생 일수", f"{issue_count}일", "#D97706" if issue_count > 0 else "#059669", "📝")
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # 🚨 2번 요청 반영: 가로 100% 풀사이즈 차트
+    st.markdown("<h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📊 일자별 OEE 흐름도</h4>", unsafe_allow_html=True)
+    fig7 = go.Figure(go.Scatter(
+        x=t7_df['생산일'], y=t7_df['종합효율'], mode='lines+markers+text',
+        text=t7_df['종합효율'].apply(lambda x: f"{x:.1%}"), textposition="top center",
+        line=dict(color='#2563EB', width=4), marker=dict(size=12, color='#0F172A'), textfont=dict(size=14, weight='bold')
+    ))
+    fig7.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=350, yaxis=dict(tickformat='.0%', range=[0, 1.1]), margin=dict(l=0, r=0, t=10, b=0))
+    st.plotly_chart(fig7, use_container_width=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # 🚨 2번 요청 반영: 가로 100% 풀사이즈 데이터 표
+    st.markdown("<h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📋 세부 조업 실적 및 이슈 이력</h4>", unsafe_allow_html=True)
+    disp_t7 = t7_df[['생산일', '품명', '종합효율', '비가동시간', '총 생산수량', 'OPEN ISSUE']].copy()
+    for idx, row in disp_t7.iterrows():
+        disp_t7.at[idx, '종합효율'] = f"{safe_float(row['종합효율']):.1%}"
+        disp_t7.at[idx, '총 생산수량'] = f"{int(safe_float(row['총 생산수량'])):,}"
+        disp_t7.at[idx, '비가동시간'] = f"{safe_float(row['비가동시간']):.1f}h"
+    disp_t7['OPEN ISSUE'] = disp_t7['OPEN ISSUE'].apply(split_issue_to_columns)
+    render_styler_to_html(disp_t7.style.hide(axis="index"))
+    
+    # 팝업 닫기 버튼
+    if st.button("창 닫기", use_container_width=True):
+        st.rerun()
 
 # ==========================================
 # 🌟 3. 데이터 로드 
@@ -201,7 +251,7 @@ if data_to_process:
     st.markdown("<div style='margin-bottom: 25px;'></div>", unsafe_allow_html=True)
     
     # 🌟 5. 메인 탭 설정 
-    tab1, tab2 = st.tabs(["📈 사출생산팀 종합효율 추이", "🎯 설비별 정밀 분석 (버튼 터치)"])
+    tab1, tab2 = st.tabs(["📈 사출생산팀 종합효율 추이", "🎯 설비별 정밀 분석 (팝업 호출)"])
 
     # -----------------------------------------------------
     # TAB 1: 종합 효율 추이 
@@ -222,65 +272,37 @@ if data_to_process:
         else: st.info("조건에 해당하는 데이터가 없습니다.")
 
     # -----------------------------------------------------
-    # TAB 2: 설비별 정밀 분석 (인포그래픽 스타일)
+    # TAB 2: 설비별 정밀 분석 (동별 그룹화 & 팝업 호출)
     # -----------------------------------------------------
     with tab2:
-        render_section_title("👆 분석할 설비 번호를 터치하세요")
+        render_section_title("👆 점검할 설비 버튼을 터치하여 상세 리포트를 확인하세요")
         
         machine_list = sorted([m for m in f_df['설비명'].unique() if m and str(m).strip() != 'nan'])
         
         if machine_list:
-            if 'selected_mach' not in st.session_state:
-                st.session_state.selected_mach = machine_list[0]
+            # 🚨 1번 요청 반영: 설비들을 동(Building)별로 분류하여 딕셔너리에 담기
+            building_dict = {"창조동 A": [], "창조동 B": [], "창조동 C": [], "혁신동": [], "미래동": [], "기타 구역": []}
+            for mach in machine_list:
+                b_name = get_building_group(mach)
+                if b_name in building_dict: building_dict[b_name].append(mach)
+                else: building_dict["기타 구역"].append(mach)
                 
-            cols = st.columns(6)
-            for i, mach in enumerate(machine_list):
-                short_name = mach.split(' - ')[0].strip()
-                if cols[i % 6].button(short_name, key=f"btn_{mach}"):
-                    st.session_state.selected_mach = mach
+            # 분류된 동별로 헤더를 만들고 촘촘하게 버튼 그리기
+            for b_name, m_list in building_dict.items():
+                if not m_list: continue # 해당 동에 설비가 없으면 패스
+                
+                # 동 이름 헤더 출력
+                st.markdown(f"<div class='building-header'>🏭 {b_name}</div>", unsafe_allow_html=True)
+                
+                # 가로로 8개씩 촘촘하게 배치 (간격은 CSS로 줄여둠)
+                cols = st.columns(8) 
+                for i, mach in enumerate(m_list):
+                    short_name = mach.split(' - ')[0].strip()
+                    # 🚨 3번 요청 반영: 버튼 클릭 시 팝업창(Modal) 함수 호출!
+                    if cols[i % 8].button(short_name, key=f"btn_{mach}"):
+                        t7_df = f_df[f_df['설비명'] == mach].copy().sort_values('sort_key')
+                        show_machine_popup(mach, t7_df)
 
-            tgt_mach = st.session_state.selected_mach
-            st.markdown(f"<div style='background-color:#1E293B; color:white; padding:20px; border-radius:12px; margin-top:30px; margin-bottom:20px; text-align:center;'><h2 style='margin:0; font-weight:900;'>💻 {tgt_mach} 집중 분석 리포트</h2></div>", unsafe_allow_html=True)
-            
-            t7_df = f_df[f_df['설비명'] == tgt_mach].copy().sort_values('sort_key')
-            
-            if not t7_df.empty:
-                avg_oee = t7_df['종합효율'].apply(safe_float).mean()
-                total_down = t7_df['비가동시간'].apply(safe_float).sum()
-                issue_count = t7_df['OPEN ISSUE'].apply(lambda x: 0 if str(x).strip() in ['', 'nan', '0', '0.0'] else 1).sum()
-                
-                c1, c2, c3 = st.columns(3)
-                with c1: render_trendy_metric("기간 내 평균 OEE", f"{avg_oee:.1%}", "#2563EB" if avg_oee >= 0.86 else "#DC2626", "📈")
-                with c2: render_trendy_metric("누적 비가동 손실", f"{total_down:.1f}h", "#DC2626" if total_down > 0 else "#059669", "🛑")
-                with c3: render_trendy_metric("이슈 발생 일수", f"{issue_count}일", "#D97706" if issue_count > 0 else "#059669", "📝")
-                
-                st.markdown("<br>", unsafe_allow_html=True)
-                
-                chart_col, table_col = st.columns([1, 1.3])
-                
-                with chart_col:
-                    st.markdown("<h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📊 일자별 OEE 흐름도</h4>", unsafe_allow_html=True)
-                    fig7 = go.Figure(go.Scatter(
-                        x=t7_df['생산일'], y=t7_df['종합효율'], mode='lines+markers+text',
-                        text=t7_df['종합효율'].apply(lambda x: f"{x:.1%}"), textposition="top center",
-                        line=dict(color='#2563EB', width=4), marker=dict(size=12, color='#0F172A'), textfont=dict(size=14, weight='bold')
-                    ))
-                    fig7.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=400, yaxis=dict(tickformat='.0%', range=[0, 1.0]), margin=dict(l=0, r=0, t=10, b=0))
-                    st.plotly_chart(fig7, use_container_width=True)
-                
-                with table_col:
-                    st.markdown("<h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📋 세부 조업 실적 및 이슈 이력</h4>", unsafe_allow_html=True)
-                    disp_t7 = t7_df[['생산일', '품명', '종합효율', '비가동시간', '총 생산수량', 'OPEN ISSUE']].copy()
-                    
-                    for idx, row in disp_t7.iterrows():
-                        disp_t7.at[idx, '종합효율'] = f"{safe_float(row['종합효율']):.1%}"
-                        disp_t7.at[idx, '총 생산수량'] = f"{int(safe_float(row['총 생산수량'])):,}"
-                        disp_t7.at[idx, '비가동시간'] = f"{safe_float(row['비가동시간']):.1f}h"
-                        
-                    disp_t7['OPEN ISSUE'] = disp_t7['OPEN ISSUE'].apply(split_issue_to_columns)
-                    render_styler_to_html(disp_t7.style.hide(axis="index"))
-                    
-            else: st.warning("해당 설비는 선택한 기간 내 가동 데이터가 없습니다.")
         else: st.info("분석할 설비 데이터가 존재하지 않습니다.")
 
 else: st.info("GitHub data 폴더에 CSV/Excel 파일을 넣어주세요.")
