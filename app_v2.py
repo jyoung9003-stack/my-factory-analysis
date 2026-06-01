@@ -27,33 +27,20 @@ st.markdown("""
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/static/pretendard.css');
     html, body, [class*="css"] { font-family: 'Pretendard', sans-serif !important; background-color: #F8FAFC; color: #0F172A; translate: no; }
     
-    /* 섹션 배너 디자인 */
     .section-banner { background-color: #ffffff; border: 1px solid #E2E8F0; border-left: 8px solid #D91B1B; padding: 18px 24px; border-radius: 12px; margin-top: 35px; margin-bottom: 25px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
     .section-banner h3 { margin: 0; font-weight: 900; color: #0F172A; font-size: 22px; letter-spacing: -0.5px; }
     
-    /* 핵심 지표 (Metric) 카드 디자인 */
     .metric-card-container { background-color: #FFFFFF; border-radius: 16px; padding: 25px 20px; text-align: center; border: 1px solid #E2E8F0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
     .metric-title { font-size: 16px; color: #475569; margin-bottom: 12px; font-weight: 700; }
     .metric-value-box { display: flex; align-items: center; justify-content: center; gap: 8px; }
     .metric-value { font-size: 42px; font-weight: 900; letter-spacing: -1.5px; line-height: 1; }
     .metric-icon { font-size: 24px; }
     
-    /* 동별 구분 헤더 */
     .building-header { font-size: 18px; font-weight: 800; color: #1E293B; margin-top: 25px; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid #E2E8F0; }
     
-    /* 컬럼 및 버튼 간격 */
     div[data-testid="column"] { padding: 0 4px !important; }
     div.stButton > button {
-        width: 100%;
-        height: 60px;
-        background-color: #FFFFFF;
-        border: 2px solid #CBD5E1;
-        color: #1E293B;
-        font-size: 18px !important;
-        font-weight: 800 !important;
-        border-radius: 8px;
-        margin: 0 !important;
-        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
+        width: 100%; height: 60px; background-color: #FFFFFF; border: 2px solid #CBD5E1; color: #1E293B; font-size: 18px !important; font-weight: 800 !important; border-radius: 8px; margin: 0 !important; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
     }
     div.stButton > button:hover { border-color: #3B82F6; color: #1D4ED8; background-color: #EFF6FF; }
     div.stButton > button:active { background-color: #2563EB !important; color: white !important; border-color: #2563EB; }
@@ -61,7 +48,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 🌟 2. 팝업창(Modal) 및 렌더링 함수 정의
+# 🌟 2. 공통 함수 및 렌더링 도구
 # ==========================================
 def safe_float(val):
     try:
@@ -104,11 +91,23 @@ def render_styler_to_html(styler):
         .custom-table { width: 100% !important; border-collapse: collapse !important; font-size: 14px !important; background-color: white !important; }
         .custom-table th { background-color: #1E293B !important; color: #FFFFFF !important; border: 1px solid #334155 !important; padding: 14px !important; font-weight: 700 !important; font-size: 15px !important; text-align: center !important; }
         .custom-table td { border: 1px solid #E2E8F0 !important; padding: 12px !important; font-weight: 500 !important; color: #334155 !important; text-align: center !important; vertical-align: middle !important; }
-        .custom-table td:last-child { text-align: left !important; padding-left: 20px !important; } /* 오픈이슈 좌측 정렬 */
+        .custom-table td:last-child { text-align: left !important; padding-left: 20px !important; } 
     </style>
     """
     html_str = html_str.replace('<table', '<table class="custom-table"')
     st.markdown(custom_css + f"<div style='width:100%; overflow-x:auto; border:1px solid #CBD5E1; border-radius:10px; margin-bottom:25px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);'>{html_str}</div>", unsafe_allow_html=True)
+
+# 🚨 에러 면역: 엑셀에 특정 열이 없어도 멈추지 않고 표를 그려주는 마법의 함수
+def prepare_display_table(df, desired_cols):
+    safe_cols = [c for c in desired_cols if c in df.columns]
+    disp_df = df[safe_cols].copy()
+    for idx, row in disp_df.iterrows():
+        if '종합효율' in disp_df.columns: disp_df.at[idx, '종합효율'] = f"{safe_float(row['종합효율']):.1%}"
+        if '총 생산수량' in disp_df.columns: disp_df.at[idx, '총 생산수량'] = f"{int(safe_float(row['총 생산수량'])):,}"
+        if '비가동시간' in disp_df.columns: disp_df.at[idx, '비가동시간'] = f"{safe_float(row['비가동시간']):.1f}h"
+    if 'OPEN ISSUE' in disp_df.columns:
+        disp_df['OPEN ISSUE'] = disp_df['OPEN ISSUE'].apply(split_issue_to_columns)
+    return disp_df
 
 def get_building_group(mach_name):
     try:
@@ -121,7 +120,11 @@ def get_building_group(mach_name):
         else: return "기타 구역"
     except: return "기타 구역"
 
-# 탭 1 그래프 클릭 팝업
+# ==========================================
+# 🌟 3. 팝업창 (WORST 5 교차 분석 완벽 탑재)
+# ==========================================
+
+# 📌 [탭 1] 일자별 팝업 -> 해당 일자의 WORST 5 '설비' 추출
 @st.dialog("📅 일일 가동 상세 현황", width="large")
 def show_daily_summary_popup(clicked_date, f_df, daily_df):
     st.markdown(f"<h3 style='text-align:center; color:#0F172A; font-weight:900;'>{clicked_date} 생산 요약</h3><hr>", unsafe_allow_html=True)
@@ -142,18 +145,15 @@ def show_daily_summary_popup(clicked_date, f_df, daily_df):
         with c2: render_trendy_metric("공장 종합효율", f"{day_total_val:.1%}", "#2563EB" if day_total_val >= 0.86 else "#DC2626", "📈")
         with c3: render_trendy_metric("총 비가동시간", f"{total_down:.1f}h", "#DC2626" if total_down > 0 else "#10B981", "🛑")
         
-        st.markdown("<br><h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📋 설비별 상세 가동 내역</h4>", unsafe_allow_html=True)
-        
-        # 🚨 에러 방지용 안전한 컬럼 추출
-        req_cols = ['설비명', '품명', '종합효율', '비가동시간', 'OPEN ISSUE']
-        safe_cols = [c for c in req_cols if c in active_day.columns]
-        disp_day = active_day[safe_cols].copy()
-        
-        for idx, row in disp_day.iterrows():
-            if '종합효율' in disp_day.columns: disp_day.at[idx, '종합효율'] = f"{safe_float(row['종합효율']):.1%}"
-            if '비가동시간' in disp_day.columns: disp_day.at[idx, '비가동시간'] = f"{safe_float(row['비가동시간']):.1f}h"
-        if 'OPEN ISSUE' in disp_day.columns: disp_day['OPEN ISSUE'] = disp_day['OPEN ISSUE'].apply(split_issue_to_columns)
-        
+        # 🚨 [신규 기능] 해당 일자의 WORST 5 설비 리스트
+        st.markdown("<br><h4 style='font-weight:900; color:#DC2626; margin-bottom:15px;'>🚨 해당 일자 WORST 5 설비 (종합효율 하위)</h4>", unsafe_allow_html=True)
+        worst_5_mach = active_day.sort_values(by='종합효율', ascending=True).head(5)
+        disp_worst_mach = prepare_display_table(worst_5_mach, ['설비명', '품명', '종합효율', '비가동시간', '총 생산수량', 'OPEN ISSUE'])
+        render_styler_to_html(disp_worst_mach.style.hide(axis="index"))
+
+        # 전체 설비 내역
+        st.markdown("<br><h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📋 전체 설비 상세 가동 내역</h4>", unsafe_allow_html=True)
+        disp_day = prepare_display_table(active_day, ['설비명', '품명', '종합효율', '비가동시간', '총 생산수량', 'OPEN ISSUE'])
         render_styler_to_html(disp_day.style.hide(axis="index"))
     else:
         st.info("해당 일자의 설비 가동 데이터가 존재하지 않습니다.")
@@ -161,7 +161,7 @@ def show_daily_summary_popup(clicked_date, f_df, daily_df):
     if st.button("창 닫기", key="close_daily_popup", use_container_width=True):
         st.rerun()
 
-# 탭 2 설비 클릭 팝업 (🚨 WORST 5 기능 탑재 완료)
+# 📌 [탭 2] 설비별 팝업 -> 해당 설비의 WORST 5 '생산일' 추출
 @st.dialog("💻 설비 집중 분석 리포트", width="large")
 def show_machine_popup(tgt_mach, t7_df):
     st.markdown(f"<h3 style='text-align:center; color:#0F172A; font-weight:900;'>{tgt_mach}</h3><hr>", unsafe_allow_html=True)
@@ -187,33 +187,24 @@ def show_machine_popup(tgt_mach, t7_df):
     fig7.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=350, yaxis=dict(tickformat='.0%', range=[0, 1.1]), margin=dict(l=0, r=0, t=10, b=0))
     st.plotly_chart(fig7, use_container_width=True)
     
-    # 🚨 요청 1번 반영: 전체 표 대신 효율 가장 낮은 WORST 5일 추려서 보여주기 (에러 방어막 포함)
-    st.markdown("<br><h4 style='font-weight:900; color:#DC2626; margin-bottom:15px;'>🚨 WORST 5 생산일 (종합효율 최하위 5건)</h4>", unsafe_allow_html=True)
-    
+    # 🚨 [신규 기능] 해당 설비의 WORST 5 생산일 리스트 (Safe Extractor 적용)
+    st.markdown("<br><h4 style='font-weight:900; color:#DC2626; margin-bottom:15px;'>🚨 WORST 5 생산일 (종합효율 하위)</h4>", unsafe_allow_html=True)
     if not valid_t7.empty:
-        worst_5 = valid_t7.sort_values(by='종합효율', ascending=True).head(5)
-        
-        req_cols = ['생산일', '품명', '종합효율', '비가동시간', '총 생산수량', 'OPEN ISSUE']
-        safe_cols = [c for c in req_cols if c in worst_5.columns]
-        disp_worst = worst_5[safe_cols].copy()
-        
-        for idx, row in disp_worst.iterrows():
-            if '종합효율' in disp_worst.columns: disp_worst.at[idx, '종합효율'] = f"{safe_float(row['종합효율']):.1%}"
-            if '총 생산수량' in disp_worst.columns: disp_worst.at[idx, '총 생산수량'] = f"{int(safe_float(row['총 생산수량'])):,}"
-            if '비가동시간' in disp_worst.columns: disp_worst.at[idx, '비가동시간'] = f"{safe_float(row['비가동시간']):.1f}h"
-            
-        if 'OPEN ISSUE' in disp_worst.columns:
-            disp_worst['OPEN ISSUE'] = disp_worst['OPEN ISSUE'].apply(split_issue_to_columns)
-            
-        render_styler_to_html(disp_worst.style.hide(axis="index"))
-    else:
-        st.info("해당 설비의 유효한 가동 데이터가 없습니다.")
+        worst_5_days = valid_t7.sort_values(by='종합효율', ascending=True).head(5)
+        disp_worst_days = prepare_display_table(worst_5_days, ['생산일', '품명', '종합효율', '비가동시간', '총 생산수량', 'OPEN ISSUE'])
+        render_styler_to_html(disp_worst_days.style.hide(axis="index"))
+    else: st.info("해당 설비의 유효한 가동 데이터가 없습니다.")
+
+    # 전체 생산 내역
+    st.markdown("<br><h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📋 세부 조업 실적 및 이슈 이력 전체</h4>", unsafe_allow_html=True)
+    disp_t7 = prepare_display_table(t7_df, ['생산일', '품명', '종합효율', '비가동시간', '총 생산수량', 'OPEN ISSUE'])
+    render_styler_to_html(disp_t7.style.hide(axis="index"))
     
     if st.button("창 닫기", key="close_mach_popup", use_container_width=True):
         st.rerun()
 
 # ==========================================
-# 🌟 3. 데이터 로드 (🚨 2번 에러: 공백 찌꺼기 원천 차단)
+# 🌟 4. 데이터 로드 및 정제 
 # ==========================================
 target_cols = ['생산일', '설비명', '품명', '양품수량', '불량수량', '총 생산수량', '투입시간', '가동시간', '비가동시간', '종합효율', '양품율', 'OPEN ISSUE']
 data_to_process = []
@@ -269,16 +260,13 @@ if data_to_process:
         if sort_key not in daily_totals_data: daily_totals_data[sort_key] = {'생산일': clean_date, '생산월': month_str, '공장종합효율': d_total_oee}
 
         for _, row in temp_df.iterrows():
-            # 🚨 엑셀의 설비명 글자 뒤에 숨은 띄어쓰기(공백)를 완벽하게 제거하여 충돌 원천 방어!
             m_val = str(row.get('설비명')).strip()
             if m_val.lower() in ['', 'nan', 'none', '#n/a'] or any(kw in m_val.upper() for kw in ['TOTAL', '합계']): continue
             
             record = {'sort_key': sort_key, '생산월': month_str, '생산일': clean_date}
             for col in target_cols:
-                if col == '설비명':
-                    record[col] = m_val
-                elif col != '생산일': 
-                    record[col] = row[col] if col in temp_df.columns else None
+                if col == '설비명': record[col] = m_val
+                elif col != '생산일': record[col] = row[col] if col in temp_df.columns else None
             all_records.append(record)
 
     df = pd.DataFrame(all_records).sort_values(by='sort_key').reset_index(drop=True)
@@ -289,7 +277,7 @@ if data_to_process:
     df['OPEN ISSUE'] = df['OPEN ISSUE'].apply(format_issue)
 
     # =========================================================
-    # 🌟 4. 레이아웃 및 필터
+    # 🌟 5. 레이아웃 및 필터
     # =========================================================
     title_col1, title_col2 = st.columns([0.6, 9.4])
     with title_col1:
@@ -299,19 +287,15 @@ if data_to_process:
 
     f1, f2 = st.columns(2)
     all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
-    
     with f1: sel_m_side = st.multiselect("📅 생산월 선택", all_months, default=[all_months[-1]] if all_months else [])
     
     m_f_df = df[df['생산월'].isin(sel_m_side)].copy() if sel_m_side else df.copy()
     all_dates = list(m_f_df['생산일'].unique())
     all_dates.sort(key=lambda x: date_mapping.get(x, ""), reverse=True)
-    
     with f2: sel_d_side = st.multiselect("📆 생산일 선택", all_dates, default=[])
     f_df = m_f_df[m_f_df['생산일'].isin(sel_d_side)].copy() if sel_d_side else m_f_df.copy()
 
     st.markdown("<div style='margin-bottom: 25px;'></div>", unsafe_allow_html=True)
-    
-    # 🌟 5. 메인 탭 설정 
     tab1, tab2 = st.tabs(["📈 사출생산팀 종합효율 추이", "🎯 설비별 정밀 분석 (팝업 호출)"])
 
     # -----------------------------------------------------
@@ -324,8 +308,7 @@ if data_to_process:
         if sel_m_side:
             title_month = ", ".join([m.split(' ')[-1] for m in sel_m_side])
             render_section_title(f"사출생산팀 ({title_month}) 종합효율 추이")
-        else:
-            render_section_title("사출생산팀 전체 종합효율 추이")
+        else: render_section_title("사출생산팀 전체 종합효율 추이")
             
         if not p_df.empty:
             avg_oee = p_df['공장종합효율'].mean()
@@ -343,16 +326,14 @@ if data_to_process:
             except TypeError:
                 st.plotly_chart(fig_oee, use_container_width=True)
                 st.info("💡 팁: 막대 그래프를 클릭하여 일일 상세 내역을 보시려면 시스템을 최신 버전으로 업데이트해주세요.")
-                
         else: st.info("조건에 해당하는 데이터가 없습니다.")
 
     # -----------------------------------------------------
-    # TAB 2: 설비별 정밀 분석 (버튼 중복 생성 방어막 추가)
+    # TAB 2: 설비별 정밀 분석 
     # -----------------------------------------------------
     with tab2:
         render_section_title("👆 점검할 설비 버튼을 터치하여 상세 리포트를 확인하세요")
         
-        # 🚨 에러 방어: 리스트의 중복을 100% 제거
         raw_machines = [str(m).strip() for m in f_df['설비명'].unique() if pd.notna(m) and str(m).strip() != 'nan']
         machine_list = sorted(list(set(raw_machines)))
         
@@ -367,15 +348,12 @@ if data_to_process:
                 if not m_list: continue
                 
                 st.markdown(f"<div class='building-header'>🏭 {b_name}</div>", unsafe_allow_html=True)
-                
                 cols = st.columns(8) 
                 for i, mach in enumerate(m_list):
                     short_name = mach.split(' - ')[0].strip()
-                    # 🚨 에러 방어: 버튼 키(Key) 값에 고유 인덱스를 부여하여 충돌 원천 차단
                     if cols[i % 8].button(short_name, key=f"btn_{b_name}_{i}_{mach}"):
                         t7_df = f_df[f_df['설비명'] == mach].copy().sort_values('sort_key')
                         show_machine_popup(mach, t7_df)
-
         else: st.info("분석할 설비 데이터가 존재하지 않습니다.")
 
 else: st.info("GitHub data 폴더에 CSV/Excel 파일을 넣어주세요.")
