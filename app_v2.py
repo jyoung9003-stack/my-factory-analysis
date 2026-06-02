@@ -45,16 +45,16 @@ st.markdown("""
     div.stButton > button:hover { border-color: #3B82F6; color: #1D4ED8; background-color: #EFF6FF; }
     div.stButton > button:active { background-color: #2563EB !important; color: white !important; border-color: #2563EB; }
 
-    /* 🚨 탭2 라디오 버튼 -> 직관적인 네모 도형 버튼으로 개조 */
+    /* 🚨 탭2 라디오 버튼 -> 가로로 넓은 직사각형 버튼으로 개조 및 글씨 강제 복구 */
     div[data-testid="stRadio"] div[role="radiogroup"] {
-        gap: 15px !important; 
+        gap: 20px !important; 
         flex-wrap: wrap !important;
-        margin-top: 10px;
+        margin-top: 15px;
     }
     div[data-testid="stRadio"] label[data-baseweb="radio"] {
         background-color: #FFFFFF !important;
         border: 2px solid #CBD5E1 !important;
-        padding: 12px 25px !important;
+        padding: 16px 40px !important; /* 가로로 훨씬 넓게 여백 확보 */
         border-radius: 12px !important; 
         margin: 0 !important;
         box-shadow: 0 2px 4px rgba(0,0,0,0.02);
@@ -63,24 +63,35 @@ st.markdown("""
         display: flex;
         justify-content: center;
         align-items: center;
+        min-width: 160px !important; /* 도형의 최소 가로 너비를 강제 확장 */
     }
     div[data-testid="stRadio"] label[data-baseweb="radio"]:hover {
         border-color: #D91B1B !important;
         background-color: #FFF5F5 !important;
     }
     
-    /* 🚨 텍스트는 놔두고, 라디오 마크(동그라미)만 정밀 타격하여 숨기기 */
-    div[data-testid="stRadio"] label[data-baseweb="radio"] > div > div:first-of-type {
+    /* 기존 동그라미 아이콘 완벽 숨김 (레이아웃 간섭 차단) */
+    div[data-testid="stRadio"] label[data-baseweb="radio"] > div:first-child {
+        width: 0px !important;
+        height: 0px !important;
+        opacity: 0 !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
         display: none !important;
     }
     
-    /* 도형 안의 글씨 스타일 */
-    div[data-testid="stRadio"] label[data-baseweb="radio"] p {
-        font-size: 20px !important;
-        font-weight: 800 !important;
+    /* 숨어버린 글씨(텍스트)를 강제 노출 및 폰트 크기 확대 */
+    div[data-testid="stRadio"] label[data-baseweb="radio"] div[data-testid="stMarkdownContainer"] p {
+        display: block !important;
+        visibility: visible !important;
+        font-size: 22px !important;
+        font-weight: 900 !important;
         color: #475569 !important;
         margin: 0 !important;
-        padding-left: 0 !important;
+        padding: 0 !important;
+        text-align: center !important;
+        width: 100% !important;
     }
     
     /* 선택된 구역(동) 도형 스타일 */
@@ -88,7 +99,7 @@ st.markdown("""
         background-color: #D91B1B !important;
         border-color: #D91B1B !important;
     }
-    div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) p {
+    div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) div[data-testid="stMarkdownContainer"] p {
         color: #FFFFFF !important;
     }
 </style>
@@ -207,7 +218,7 @@ def get_building_group(mach_name):
     except: return "기타 구역"
 
 # ==========================================
-# 🌟 3. 팝업창 
+# 🌟 3. 팝업창 (UI 고도화)
 # ==========================================
 @st.dialog("📅 일일 가동 상세 현황", width="large")
 def show_daily_summary_popup(clicked_date, f_df, daily_df):
