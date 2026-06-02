@@ -36,12 +36,28 @@ st.markdown("""
     .metric-value { font-size: 42px; font-weight: 900; letter-spacing: -1.5px; line-height: 1; }
     .metric-icon { font-size: 24px; }
     
+    .building-header { font-size: 18px; font-weight: 800; color: #1E293B; margin-top: 25px; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid #E2E8F0; }
+    
     div[data-testid="column"] { padding: 0 4px !important; }
     div.stButton > button {
         width: 100%; height: 60px; background-color: #FFFFFF; border: 2px solid #CBD5E1; color: #1E293B; font-size: 18px !important; font-weight: 800 !important; border-radius: 8px; margin: 0 !important; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
     }
     div.stButton > button:hover { border-color: #3B82F6; color: #1D4ED8; background-color: #EFF6FF; }
     div.stButton > button:active { background-color: #2563EB !important; color: white !important; border-color: #2563EB; }
+
+    /* 🚨 요청 2번: 탭2 구역 선택 라디오 버튼 폰트 확대 및 간격 넓히기 */
+    div[data-testid="stRadio"] label[data-baseweb="radio"] p {
+        font-size: 22px !important;
+        font-weight: 800 !important;
+        color: #0F172A !important;
+    }
+    div[data-testid="stRadio"] div[role="radiogroup"] {
+        gap: 3rem !important; /* 버튼 간격 넓게 */
+        margin-top: 10px;
+    }
+    div[data-testid="stRadio"] label[data-baseweb="radio"] div:first-child {
+        height: 22px; width: 22px; /* 라디오 동그라미 크기 키우기 */
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -59,7 +75,7 @@ def safe_float(val):
     except: return 0.0
 
 def render_section_title(text): st.markdown(f"<div class='section-banner'><h3>{text}</h3></div>", unsafe_allow_html=True)
-def render_tab_insight(title, content): st.markdown(f"<div style='background-color:#F1F5F9; border-left:5px solid #3B82F6; border-radius:8px; padding:20px 25px; margin-bottom:25px;'><h4 style='margin-top:0; color:#1E293B; font-weight:800; font-size:17px; margin-bottom:10px;'>{title}</h4><div style='line-height:1.6; font-size:15px; color:#334155;'>{content}</div></div>", unsafe_allow_html=True)
+def render_tab_insight(title, content): st.markdown(f"<div style='background-color:#F8FAFC; border-left:6px solid #3B82F6; border-radius:8px; padding:20px 25px; margin-bottom:25px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);'><h4 style='margin-top:0; color:#1E293B; font-weight:900; font-size:18px; margin-bottom:12px;'>{title}</h4><div style='line-height:1.7; font-size:15.5px; color:#334155;'>{content}</div></div>", unsafe_allow_html=True)
 
 def render_scoreboard_metric(title, value_str, glow_color):
     html = f"""
@@ -72,9 +88,7 @@ def render_scoreboard_metric(title, value_str, glow_color):
     """
     st.markdown(html.replace('\n', ''), unsafe_allow_html=True)
 
-# 🚨 요청 2번 반영: BEST/WORST 모바일 카드형 UI 렌더링 엔진
 def render_rank_cards(df, title, is_worst, name_col):
-    bg_color = "#FEF2F2" if is_worst else "#EFF6FF"
     border_color = "#DC2626" if is_worst else "#2563EB"
     icon = "🚨" if is_worst else "🏆"
     
@@ -164,7 +178,8 @@ def get_building_group(mach_name):
 # ==========================================
 @st.dialog("📅 일일 가동 상세 현황", width="large")
 def show_daily_summary_popup(clicked_date, f_df, daily_df):
-    st.markdown(f"<h3 style='text-align:center; color:#0F172A; font-weight:900;'>{clicked_date} 현장 가동 모니터링</h3><hr>", unsafe_allow_html=True)
+    # 🚨 요청 1번: 타이틀 폰트 크기 확대 및 글씨체 강조
+    st.markdown(f"<h2 style='text-align:center; color:#0F172A; font-weight:900; font-size:36px; margin-bottom:10px;'><span style='color:#D91B1B;'>{clicked_date}</span> 현장 가동 모니터링</h2><hr style='border-top: 3px solid #E2E8F0; margin-bottom: 30px;'>", unsafe_allow_html=True)
     
     day_df = f_df[f_df['생산일'] == clicked_date].copy().sort_values('설비명')
     active_day = day_df[day_df['종합효율'] > 0]
@@ -184,27 +199,23 @@ def show_daily_summary_popup(clicked_date, f_df, daily_df):
         
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # 🚨 요청 2번 반영: BEST 5 / WORST 5 카드형 레이아웃 좌우 배치
         best_5_mach = active_day.sort_values(by='종합효율', ascending=False).head(5)
         worst_5_mach = active_day.sort_values(by='종합효율', ascending=True).head(5)
         
         col_best, col_worst = st.columns(2)
-        with col_best:
-            render_rank_cards(best_5_mach, "BEST 5 설비 (종합효율 상위)", is_worst=False, name_col="설비명")
-        with col_worst:
-            render_rank_cards(worst_5_mach, "WORST 5 설비 (종합효율 하위)", is_worst=True, name_col="설비명")
+        with col_best: render_rank_cards(best_5_mach, "BEST 5 설비 (종합효율 상위)", is_worst=False, name_col="설비명")
+        with col_worst: render_rank_cards(worst_5_mach, "WORST 5 설비 (종합효율 하위)", is_worst=True, name_col="설비명")
 
         st.markdown("<h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📋 전체 설비 상세 가동 내역</h4>", unsafe_allow_html=True)
         disp_day = prepare_display_table(active_day, ['설비명', '품명', '종합효율', '비가동시간', '총 생산수량', 'OPEN ISSUE'])
         render_styler_to_html(disp_day.style.hide(axis="index"))
     else:
         st.info("해당 일자의 설비 가동 데이터가 존재하지 않습니다.")
-    
-    # 🚨 요청 1번 반영: 문제의 "창 닫기" 버튼 원천 삭제. (사용자는 기본 'X'를 눌러서 닫음)
 
 @st.dialog("💻 설비 집중 분석 리포트", width="large")
 def show_machine_popup(tgt_mach, t7_df):
-    st.markdown(f"<h3 style='text-align:center; color:#0F172A; font-weight:900;'>{tgt_mach} 이력 모니터링</h3><hr>", unsafe_allow_html=True)
+    # 🚨 요청 1번: 타이틀 폰트 크기 확대 및 설비명 색상 강조
+    st.markdown(f"<h2 style='text-align:center; color:#0F172A; font-weight:900; font-size:36px; margin-bottom:10px;'><span style='color:#2563EB;'>{tgt_mach}</span> 이력 모니터링</h2><hr style='border-top: 3px solid #E2E8F0; margin-bottom: 30px;'>", unsafe_allow_html=True)
     
     valid_t7 = t7_df[t7_df['종합효율'] > 0].copy()
     
@@ -228,24 +239,19 @@ def show_machine_popup(tgt_mach, t7_df):
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # 🚨 요청 2번 반영: BEST 5 / WORST 5 카드형 레이아웃 좌우 배치
     if not valid_t7.empty:
         best_5_days = valid_t7.sort_values(by='종합효율', ascending=False).head(5)
         worst_5_days = valid_t7.sort_values(by='종합효율', ascending=True).head(5)
         
         col_best, col_worst = st.columns(2)
-        with col_best:
-            render_rank_cards(best_5_days, "BEST 5 생산일 (효율 최고)", is_worst=False, name_col="생산일")
-        with col_worst:
-            render_rank_cards(worst_5_days, "WORST 5 생산일 (효율 최하)", is_worst=True, name_col="생산일")
+        with col_best: render_rank_cards(best_5_days, "BEST 5 생산일 (효율 최고)", is_worst=False, name_col="생산일")
+        with col_worst: render_rank_cards(worst_5_days, "WORST 5 생산일 (효율 최하)", is_worst=True, name_col="생산일")
     else: 
         st.info("해당 설비의 유효한 가동 데이터가 없습니다.")
 
     st.markdown("<h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📋 세부 조업 실적 및 이슈 이력 전체</h4>", unsafe_allow_html=True)
     disp_t7 = prepare_display_table(t7_df, ['생산일', '품명', '종합효율', '비가동시간', '총 생산수량', 'OPEN ISSUE'])
     render_styler_to_html(disp_t7.style.hide(axis="index"))
-    
-    # 🚨 요청 1번 반영: 문제의 "창 닫기" 버튼 원천 삭제. (사용자는 기본 'X'를 눌러서 닫음)
 
 # ==========================================
 # 🌟 4. 데이터 로드 및 정제 
@@ -349,24 +355,43 @@ if data_to_process:
         p_df = daily_df[daily_df['생산월'].isin(sel_m_side)].copy() if sel_m_side else daily_df.copy()
         if sel_d_side: p_df = p_df[p_df['생산일'].isin(sel_d_side)]
             
-        if sel_m_side:
-            title_month = ", ".join([m.split(' ')[-1] for m in sel_m_side])
-            render_section_title(f"사출생산팀 ({title_month}) 종합효율 추이")
+        title_month_str = ", ".join([m.split(' ')[-1] for m in sel_m_side]) if sel_m_side else "전체"
+        
+        if sel_m_side: render_section_title(f"사출생산팀 ({title_month_str}) 종합효율 추이")
         else: render_section_title("사출생산팀 전체 종합효율 추이")
             
         if not p_df.empty:
             avg_oee = p_df['공장종합효율'].mean()
-            render_tab_insight("💡 현장 운영 가이드", f"조회하신 기간 동안 사출 공정의 평균 OEE는 <b><span style='color:#3B82F6; font-size:18px;'>{avg_oee:.1%}</span></b>를 기록했습니다. <b>아래 막대그래프를 클릭하시면 해당 일자의 '진짜 가동 데이터'가 상세 팝업으로 나타납니다.</b>")
+            
+            # 🚨 요청 3번: 스마트 브리핑 (목표 달성 여부 판단 로직)
+            is_achieved = avg_oee >= 0.86
+            status_color = "#2563EB" if is_achieved else "#DC2626"
+            status_text = "목표 효율 대비 달성 중입니다." if is_achieved else "목표 효율 대비 미달성 중입니다."
+            
+            guide_text = f"사출생산팀 ({title_month_str}) 종합 효율은 <b>{avg_oee:.1%}</b>로 <span style='color:{status_color}; font-weight:900;'>{status_text}</span> 분석할 생산일의 그래프를 선택하면 해당 일의 생산성 자료 및 오픈이슈를 확인 가능합니다. 또한 <b>탭2 (설비별 정밀 분석)</b>에서 각 설비의 생산일 별 생산성 및 오픈이슈를 확인 가능합니다."
+            
+            render_tab_insight("💡 사출생산팀 생산성 추이 분석", guide_text)
             
             bar_colors = ['#3B82F6' if safe_float(row['공장종합효율']) >= 0.86 else '#EF4444' for _, row in p_df.iterrows()]
             fig_oee = go.Figure(go.Bar(x=p_df['생산일'], y=p_df['공장종합효율'], text=p_df['공장종합효율'].apply(lambda x: f"{x:.1%}"), textposition='auto', marker_color=bar_colors, textfont=dict(size=14, weight='bold', color='white')))
             fig_oee.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=450, yaxis=dict(tickformat='.0%', range=[0, 1.0]), margin=dict(t=20))
             
+            if 'last_chart_click' not in st.session_state: st.session_state.last_chart_click = None
+            if 'trigger_daily_popup' not in st.session_state: st.session_state.trigger_daily_popup = None
+
             try:
                 event = st.plotly_chart(fig_oee, use_container_width=True, on_select="rerun", selection_mode="points")
-                if event and "selection" in event and event["selection"]["points"]:
-                    clicked_date = event["selection"]["points"][0]["x"]
-                    show_daily_summary_popup(clicked_date, f_df, daily_df)
+                curr_click = event["selection"]["points"][0]["x"] if event and "selection" in event and event["selection"]["points"] else None
+                
+                if curr_click != st.session_state.last_chart_click:
+                    st.session_state.last_chart_click = curr_click
+                    if curr_click is not None: st.session_state.trigger_daily_popup = curr_click
+                
+                if st.session_state.trigger_daily_popup:
+                    date_to_show = st.session_state.trigger_daily_popup
+                    st.session_state.trigger_daily_popup = None 
+                    show_daily_summary_popup(date_to_show, f_df, daily_df)
+                    
             except TypeError:
                 st.plotly_chart(fig_oee, use_container_width=True)
                 st.info("💡 팁: 막대 그래프를 클릭하여 일일 상세 내역을 보시려면 시스템을 최신 버전으로 업데이트해주세요.")
@@ -388,13 +413,13 @@ if data_to_process:
                 if b_name in building_dict: building_dict[b_name].append(mach)
                 else: building_dict["기타 구역"].append(mach)
             
-            # 🚨 요청 3번 반영: 활성화된 동(건물) 대분류 라디오 버튼 생성
+            # 🚨 요청 3번: 활성화된 동(건물) 대분류 라디오 버튼 생성
             active_buildings = [b for b, m in building_dict.items() if len(m) > 0]
             selected_building = st.radio("🏭 조회를 원하는 구역(동)을 선택하세요", active_buildings, horizontal=True)
             
-            st.markdown("<hr style='border: 1px dashed #CBD5E1; margin: 20px 0;'>", unsafe_allow_html=True)
+            st.markdown("<hr style='border: 2px dashed #CBD5E1; margin: 25px 0;'>", unsafe_allow_html=True)
             
-            # 선택된 동에 해당하는 설비 버튼만 출력!
+            # 선택된 동에 해당하는 설비 버튼만 출력
             m_list = building_dict[selected_building]
             if m_list:
                 cols = st.columns(8) 
