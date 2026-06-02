@@ -45,18 +45,42 @@ st.markdown("""
     div.stButton > button:hover { border-color: #3B82F6; color: #1D4ED8; background-color: #EFF6FF; }
     div.stButton > button:active { background-color: #2563EB !important; color: white !important; border-color: #2563EB; }
 
-    /* 🚨 요청 2번: 탭2 구역 선택 라디오 버튼 폰트 확대 및 간격 넓히기 */
-    div[data-testid="stRadio"] label[data-baseweb="radio"] p {
-        font-size: 22px !important;
-        font-weight: 800 !important;
-        color: #0F172A !important;
-    }
+    /* 🚨 요청 1번: 탭2 구역 선택 라디오를 '둥근 네모 도형 버튼'으로 완전 개조 */
     div[data-testid="stRadio"] div[role="radiogroup"] {
-        gap: 3rem !important; /* 버튼 간격 넓게 */
+        gap: 15px !important; 
+        flex-wrap: wrap !important;
         margin-top: 10px;
     }
+    div[data-testid="stRadio"] label[data-baseweb="radio"] {
+        background-color: #FFFFFF !important;
+        border: 2px solid #CBD5E1 !important;
+        padding: 12px 25px !important;
+        border-radius: 12px !important; /* 둥근 모서리 도형 */
+        margin: 0 !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    div[data-testid="stRadio"] label[data-baseweb="radio"]:hover {
+        border-color: #D91B1B !important;
+        background-color: #FFF5F5 !important;
+    }
     div[data-testid="stRadio"] label[data-baseweb="radio"] div:first-child {
-        height: 22px; width: 22px; /* 라디오 동그라미 크기 키우기 */
+        display: none !important; /* 기본 라디오 동그라미 삭제 */
+    }
+    div[data-testid="stRadio"] label[data-baseweb="radio"] p {
+        font-size: 20px !important;
+        font-weight: 800 !important;
+        color: #475569 !important;
+        margin: 0 !important;
+    }
+    /* 선택된 도형 스타일 (배경 빨간색, 글씨 흰색) */
+    div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) {
+        background-color: #D91B1B !important;
+        border-color: #D91B1B !important;
+    }
+    div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) p {
+        color: #FFFFFF !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -178,7 +202,6 @@ def get_building_group(mach_name):
 # ==========================================
 @st.dialog("📅 일일 가동 상세 현황", width="large")
 def show_daily_summary_popup(clicked_date, f_df, daily_df):
-    # 🚨 요청 1번: 타이틀 폰트 크기 확대 및 글씨체 강조
     st.markdown(f"<h2 style='text-align:center; color:#0F172A; font-weight:900; font-size:36px; margin-bottom:10px;'><span style='color:#D91B1B;'>{clicked_date}</span> 현장 가동 모니터링</h2><hr style='border-top: 3px solid #E2E8F0; margin-bottom: 30px;'>", unsafe_allow_html=True)
     
     day_df = f_df[f_df['생산일'] == clicked_date].copy().sort_values('설비명')
@@ -214,7 +237,6 @@ def show_daily_summary_popup(clicked_date, f_df, daily_df):
 
 @st.dialog("💻 설비 집중 분석 리포트", width="large")
 def show_machine_popup(tgt_mach, t7_df):
-    # 🚨 요청 1번: 타이틀 폰트 크기 확대 및 설비명 색상 강조
     st.markdown(f"<h2 style='text-align:center; color:#0F172A; font-weight:900; font-size:36px; margin-bottom:10px;'><span style='color:#2563EB;'>{tgt_mach}</span> 이력 모니터링</h2><hr style='border-top: 3px solid #E2E8F0; margin-bottom: 30px;'>", unsafe_allow_html=True)
     
     valid_t7 = t7_df[t7_df['종합효율'] > 0].copy()
@@ -223,12 +245,13 @@ def show_machine_popup(tgt_mach, t7_df):
     total_down = t7_df['비가동시간'].apply(safe_float).sum()
     issue_count = t7_df['OPEN ISSUE'].apply(lambda x: 0 if str(x).strip() in ['', 'nan', '0', '0.0'] else 1).sum()
     
+    # 🚨 요청 2번: OEE -> 종합효율로 용어 완전 통일
     c1, c2, c3 = st.columns(3)
-    with c1: render_scoreboard_metric("📊 누적 평균 OEE", f"{avg_oee:.1%}", "#3B82F6" if avg_oee >= 0.86 else "#FF3131")
+    with c1: render_scoreboard_metric("📊 누적 평균 종합효율", f"{avg_oee:.1%}", "#3B82F6" if avg_oee >= 0.86 else "#FF3131")
     with c2: render_scoreboard_metric("🛑 누적 비가동 손실", f"{total_down:.1f}h", "#FF3131" if total_down > 0 else "#32CD32")
     with c3: render_scoreboard_metric("📝 이슈 발생 일수", f"{issue_count}일", "#FF9900" if issue_count > 0 else "#32CD32") 
     
-    st.markdown("<br><h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📊 일자별 OEE 흐름도</h4>", unsafe_allow_html=True)
+    st.markdown("<br><h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📊 일자별 종합효율 흐름도</h4>", unsafe_allow_html=True)
     fig7 = go.Figure(go.Scatter(
         x=t7_df['생산일'], y=t7_df['종합효율'], mode='lines+markers+text',
         text=t7_df['종합효율'].apply(lambda x: f"{x:.1%}"), textposition="top center",
@@ -249,7 +272,12 @@ def show_machine_popup(tgt_mach, t7_df):
     else: 
         st.info("해당 설비의 유효한 가동 데이터가 없습니다.")
 
-    st.markdown("<h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📋 세부 조업 실적 및 이슈 이력 전체</h4>", unsafe_allow_html=True)
+    # 🚨 요청 3번: 클릭한 설비의 '품명'을 끌고 와서 스마트 타이틀 조합
+    mach_short = str(tgt_mach).split(' - ')[0].strip()
+    prod_name = valid_t7['품명'].dropna().iloc[0] if not valid_t7['품명'].dropna().empty else ""
+    title_dynamic = f"📋 {mach_short} {prod_name} 생산성 및 오픈 이슈 현황"
+    
+    st.markdown(f"<h4 style='font-weight:900; color:#0F172A; margin-bottom:15px; margin-top:20px;'>{title_dynamic}</h4>", unsafe_allow_html=True)
     disp_t7 = prepare_display_table(t7_df, ['생산일', '품명', '종합효율', '비가동시간', '총 생산수량', 'OPEN ISSUE'])
     render_styler_to_html(disp_t7.style.hide(axis="index"))
 
@@ -363,7 +391,6 @@ if data_to_process:
         if not p_df.empty:
             avg_oee = p_df['공장종합효율'].mean()
             
-            # 🚨 요청 3번: 스마트 브리핑 (목표 달성 여부 판단 로직)
             is_achieved = avg_oee >= 0.86
             status_color = "#2563EB" if is_achieved else "#DC2626"
             status_text = "목표 효율 대비 달성 중입니다." if is_achieved else "목표 효율 대비 미달성 중입니다."
@@ -413,13 +440,11 @@ if data_to_process:
                 if b_name in building_dict: building_dict[b_name].append(mach)
                 else: building_dict["기타 구역"].append(mach)
             
-            # 🚨 요청 3번: 활성화된 동(건물) 대분류 라디오 버튼 생성
             active_buildings = [b for b, m in building_dict.items() if len(m) > 0]
-            selected_building = st.radio("🏭 조회를 원하는 구역(동)을 선택하세요", active_buildings, horizontal=True)
+            selected_building = st.radio("🏭 조회를 원하는 구역(동)을 선택하세요", active_buildings, horizontal=True, label_visibility="collapsed")
             
             st.markdown("<hr style='border: 2px dashed #CBD5E1; margin: 25px 0;'>", unsafe_allow_html=True)
             
-            # 선택된 동에 해당하는 설비 버튼만 출력
             m_list = building_dict[selected_building]
             if m_list:
                 cols = st.columns(8) 
