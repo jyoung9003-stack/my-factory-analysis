@@ -27,12 +27,27 @@ st.markdown("""
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/static/pretendard.css');
     html, body, [class*="css"] { font-family: 'Pretendard', sans-serif !important; background-color: #F8FAFC; color: #0F172A; translate: no; }
     
-    .section-banner { background-color: #ffffff; border: 1px solid #E2E8F0; border-left: 8px solid #D91B1B; padding: 18px 24px; border-radius: 12px; margin-top: 35px; margin-bottom: 25px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+    /* 🚨 요청 3번: 최상단 여백 완벽 제거 및 화면 활용도 극대화 */
+    .block-container {
+        padding-top: 1.5rem !important; 
+        padding-bottom: 1rem !important;
+        max-width: 95% !important; /* 좌우 여백도 시원하게 넓힘 */
+    }
+    header[data-testid="stHeader"] {
+        display: none !important; /* 상단 빈 헤더바 제거 */
+    }
+    
+    /* 🚨 요청 1번: 가로 배치(Columns)시 모든 요소를 수직 중앙에 일치시킴 */
+    div[data-testid="stHorizontalBlock"] {
+        align-items: center !important;
+    }
+
+    .section-banner { background-color: #ffffff; border: 1px solid #E2E8F0; border-left: 8px solid #D91B1B; padding: 18px 24px; border-radius: 12px; margin-top: 30px; margin-bottom: 25px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
     .section-banner h3 { margin: 0; font-weight: 900; color: #0F172A; font-size: 22px; letter-spacing: -0.5px; }
     
     .building-header { font-size: 18px; font-weight: 800; color: #1E293B; margin-top: 25px; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid #E2E8F0; }
     
-    div[data-testid="column"] { padding: 0 4px !important; }
+    div[data-testid="column"] { padding: 0 6px !important; }
     
     div.stButton > button {
         width: 100%; min-height: 75px; height: auto !important; background-color: #FFFFFF; border: 2px solid #CBD5E1; color: #1E293B; 
@@ -344,24 +359,20 @@ if data_to_process:
     df['OPEN ISSUE'] = df['OPEN ISSUE'].apply(format_issue)
 
     # =========================================================
-    # 🌟 5. 레이아웃 및 필터
+    # 🌟 5. 레이아웃 및 필터 (요청사항 완벽 반영)
     # =========================================================
     
-    # 🚨 요청 1번: 로고, 타이틀, 전광판 완벽한 일직선 중앙 정렬
-    title_col1, title_col2, title_col3 = st.columns([1, 6, 3], gap="small")
+    # 🚨 요청 1번: 로고, 타이틀, 전광판 수직 완벽 정렬
+    title_col1, title_col2, title_col3 = st.columns([1, 5.5, 3.5], gap="small")
     
     with title_col1:
-        st.markdown("<div style='display: flex; align-items: center; justify-content: center; height: 110px;'>", unsafe_allow_html=True)
         try: st.image("logo.png", width=120) 
         except: st.markdown("<div style='font-size: 50px;'>🏭</div>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
         
     with title_col2: 
-        # 한 줄 처리 (white-space: nowrap)
-        st.markdown("<div style='display: flex; align-items: center; height: 110px;'><h1 style='margin: 0; font-weight: 900; font-size: 25px; color: #0F172A; white-space: nowrap;'>사출생산팀 생산성 및 오픈 이슈 분석 및 관리 리포트</h1></div>", unsafe_allow_html=True)
+        st.markdown("<h1 style='margin: 0; font-weight: 900; font-size: 26px; color: #0F172A; white-space: nowrap;'>사출생산팀 생산성 및 오픈 이슈 분석 및 관리 리포트</h1>", unsafe_allow_html=True)
 
     with title_col3:
-        st.markdown("<div style='display: flex; flex-direction: column; justify-content: center; height: 110px;'>", unsafe_allow_html=True)
         if not daily_df.empty:
             recent_row = daily_df.iloc[-1]
             rec_date = recent_row['생산일']
@@ -374,10 +385,11 @@ if data_to_process:
                 if diff > 0: diff_str = f"<span style='color:#2563EB;'>▲ +{diff*100:.1f}%p</span>"
                 elif diff < 0: diff_str = f"<span style='color:#DC2626;'>▼ {abs(diff)*100:.1f}%p</span>"
 
+            # 🚨 요청 2번: 괄호 이중 중첩을 막고 기존 원칙(월)을 지키기 위한 포맷 변경
             st.markdown(f"""
             <div style='background-color: #F8FAFC; border: 2px solid #E2E8F0; border-radius: 12px; padding: 12px 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);'>
                 <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid #E2E8F0; padding-bottom: 8px;'>
-                    <span style='font-size: 14px; color: #475569; font-weight: 800;'>📆 당일 ({rec_date})</span>
+                    <span style='font-size: 14px; color: #475569; font-weight: 800;'>📆 당일: {rec_date}</span>
                     <div style='font-size: 22px; font-weight: 900; color: #0F172A;'>
                         {rec_oee:.1%} <span style='font-size: 15px; margin-left: 5px;'>{diff_str}</span>
                     </div>
@@ -390,7 +402,6 @@ if data_to_process:
                 </div>
             </div>
             """, unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("<hr style='border: 1px solid #E2E8F0; margin-top: 10px; margin-bottom: 20px;'>", unsafe_allow_html=True)
 
@@ -405,7 +416,6 @@ if data_to_process:
     
     f_df = m_f_df[m_f_df['생산일'].isin(sel_d_side)].copy() if sel_d_side else m_f_df.copy()
 
-    # 🚨 요청 2번: 전광판 '당월(선택월)' 동적 업데이트 JS 로직
     title_month_str = ", ".join(sel_m_side) if sel_m_side else "전체"
     if not daily_df.empty:
         p_df_for_summary = daily_df[daily_df['생산월'].isin(sel_m_side)] if sel_m_side else daily_df
@@ -417,7 +427,7 @@ if data_to_process:
                 const avgElem = doc.getElementById('month_avg_placeholder');
                 const nameElem = doc.getElementById('month_name_placeholder');
                 if(avgElem) avgElem.innerText = '{month_oee:.1%}';
-                if(nameElem) nameElem.innerText = '📅 당월 ({title_month_str}) 평균';
+                if(nameElem) nameElem.innerText = '📅 당월: {title_month_str} 평균';
             }}, 150);
         </script>
         """, width=0, height=0)
@@ -493,6 +503,7 @@ if data_to_process:
             
             m_list = building_dict[selected_building]
             if m_list:
+                # 🚨 요청 2번: 버튼 가로폭 4열로 확장 및 데이터 결합 처리 완료
                 cols = st.columns(4) 
                 for i, mach in enumerate(m_list):
                     parts = [p.strip() for p in mach.split('-')]
