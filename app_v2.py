@@ -138,7 +138,6 @@ def render_styler_to_html(styler):
     final_html = final_html.replace('\n', '').replace('\r', '')
     st.markdown(final_html, unsafe_allow_html=True)
 
-# 🚨 요청 3번: 전일 대비 증감률 자동 계산 엔진 추가
 def prepare_daily_popup_table(df, full_df, current_date):
     safe_cols = [c for c in ['설비명', '품명', '종합효율', '비가동시간', 'OPEN ISSUE'] if c in df.columns]
     disp_df = df[safe_cols].copy()
@@ -168,7 +167,6 @@ def prepare_daily_popup_table(df, full_df, current_date):
         if '비가동시간' in disp_df.columns: disp_df.at[idx, '비가동시간'] = f"{safe_float(row['비가동시간']):.1f}h"
     if 'OPEN ISSUE' in disp_df.columns: disp_df['OPEN ISSUE'] = disp_df['OPEN ISSUE'].apply(split_issue_to_columns)
     
-    # 컬럼 순서 재배치 (제일 우측에 증감률)
     cols = [c for c in disp_df.columns if c not in ['OPEN ISSUE', '전일 대비(효율)']]
     cols.extend(['OPEN ISSUE', '전일 대비(효율)'])
     return disp_df[cols]
@@ -189,7 +187,6 @@ def get_building_group(mach_name):
 # ==========================================
 @st.dialog("📅 일일 가동 상세 현황", width="large")
 def show_daily_summary_popup(clicked_date, f_df, daily_df, full_df):
-    # 🚨 요청 1번: 팝업 타이틀 텍스트 변경 및 디자인 강화
     st.markdown(f"<h2 style='text-align:center; color:#0F172A; font-weight:900; font-size:36px; margin-bottom:10px;'><span style='color:#D91B1B;'>{clicked_date}</span> 사출생산팀 생산 실적 및 오픈이슈 현황</h2><hr style='border-top: 3px solid #E2E8F0; margin-bottom: 30px;'>", unsafe_allow_html=True)
     
     day_df = f_df[f_df['생산일'] == clicked_date].copy().sort_values('설비명')
@@ -212,13 +209,11 @@ def show_daily_summary_popup(clicked_date, f_df, daily_df, full_df):
         best_5_mach = active_day.sort_values(by='종합효율', ascending=False).head(5)
         worst_5_mach = active_day.sort_values(by='종합효율', ascending=True).head(5)
         
-        # 🚨 요청 2번: 괄호 삭제 간결한 BEST 5 / WORST 5
         col_best, col_worst = st.columns(2)
         with col_best: render_rank_cards(best_5_mach, "BEST 5", is_worst=False, name_col="설비명")
         with col_worst: render_rank_cards(worst_5_mach, "WORST 5", is_worst=True, name_col="설비명")
 
         st.markdown("<h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📋 전체 설비 상세 가동 내역</h4>", unsafe_allow_html=True)
-        # 🚨 요청 3번: 증감률 자동 계산 표 출력
         disp_day = prepare_daily_popup_table(active_day, full_df, clicked_date)
         render_styler_to_html(disp_day.style.hide(axis="index"))
     else:
@@ -264,7 +259,6 @@ def show_machine_popup(tgt_mach, t7_df):
     
     st.markdown(f"<h4 style='font-weight:900; color:#0F172A; margin-bottom:15px; margin-top:20px;'>{title_dynamic}</h4>", unsafe_allow_html=True)
     
-    # 탭2에서는 단순 표 (총 생산수량 숨김 적용)
     safe_cols = [c for c in ['생산일', '품명', '종합효율', '비가동시간', 'OPEN ISSUE'] if c in t7_df.columns]
     disp_t7 = t7_df[safe_cols].copy()
     for idx, row in disp_t7.iterrows():
@@ -347,54 +341,70 @@ if data_to_process:
     df['OPEN ISSUE'] = df['OPEN ISSUE'].apply(format_issue)
 
     # =========================================================
-    # 🌟 5. 레이아웃 및 필터 (로고 확대, 타이틀 변경, 전광판 추가)
+    # 🌟 5. 레이아웃 및 필터 (타이틀/로고 정렬 및 요약 전광판)
     # =========================================================
-    title_col1, title_col2, title_col3 = st.columns([1, 6, 3])
+    title_col1, title_col2, title_col3 = st.columns([1.2, 5.8, 3.5])
+    
     with title_col1:
-        # 🚨 요청 4번: 로고 크기 대폭 확대
-        try: st.image("logo.png", width=150) 
-        except: st.markdown("<div style='font-size: 60px; margin-top: 5px;'>🏭</div>", unsafe_allow_html=True)
+        st.markdown("<div style='display:flex; align-items:center; height: 100px;'>", unsafe_allow_html=True)
+        try: st.image("logo.png", width=120) 
+        except: st.markdown("<div style='font-size: 50px;'>🏭</div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
         
     with title_col2: 
-        # 🚨 요청 4번: 메인 타이틀 변경
-        st.markdown("<h1 style='margin-top: 25px; margin-bottom: 25px; font-weight: 900; font-size: 28px; color: #0F172A;'>듀링 사출생산팀 일일 생산성 분석 및 오픈 이슈 현황 관리 리포트</h1>", unsafe_allow_html=True)
+        # 🚨 요청 1번: 듀링 삭제 및 두 줄 타이틀 중앙 정렬
+        st.markdown("<div style='display:flex; align-items:center; height: 100px;'><h1 style='margin: 0; font-weight: 900; font-size: 28px; color: #0F172A; line-height: 1.4;'>사출생산팀 생산성 및 오픈 이슈<br>분석 및 관리 리포트</h1></div>", unsafe_allow_html=True)
 
     with title_col3:
-        # 🚨 요청 4번: 우측 상단 '최근 업데이트 전광판' (전일대비 증감률 탑재)
+        f1, f2 = st.columns(2)
+        all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
+        with f1: sel_m_side = st.multiselect("📅 생산월 선택", all_months, default=[all_months[-1]] if all_months else [], label_visibility="collapsed")
+        
+        m_f_df = df[df['생산월'].isin(sel_m_side)].copy() if sel_m_side else df.copy()
+        all_dates = list(m_f_df['생산일'].unique())
+        all_dates.sort(key=lambda x: date_mapping.get(x, ""), reverse=True)
+        with f2: sel_d_side = st.multiselect("📆 생산일 선택", all_dates, default=[], label_visibility="collapsed")
+        
+        f_df = m_f_df[m_f_df['생산일'].isin(sel_d_side)].copy() if sel_d_side else m_f_df.copy()
+
+        # 🚨 요청 4번: 우측 상단 스마트 요약 전광판 (당일/당월 듀얼 표시)
         if not daily_df.empty:
             recent_row = daily_df.iloc[-1]
             rec_date = recent_row['생산일']
             rec_oee = safe_float(recent_row['공장종합효율'])
-            diff_str = "-"
+            
+            diff_str = "<span style='color:#64748B;'>-</span>"
             if len(daily_df) > 1:
                 prev_oee = safe_float(daily_df.iloc[-2]['공장종합효율'])
                 diff = rec_oee - prev_oee
                 if diff > 0: diff_str = f"<span style='color:#2563EB;'>▲ +{diff*100:.1f}%p</span>"
-                elif diff < 0: diff_str = f"<span style='color:#DC2626;'>▼ {diff*100:.1f}%p</span>"
+                elif diff < 0: diff_str = f"<span style='color:#DC2626;'>▼ {abs(diff)*100:.1f}%p</span>"
+
+            title_month_str = ", ".join([m.split(' ')[-1] for m in sel_m_side]) if sel_m_side else "전체"
+            p_df_for_summary = daily_df[daily_df['생산월'].isin(sel_m_side)] if sel_m_side else daily_df
+            month_oee = p_df_for_summary['공장종합효율'].mean() if not p_df_for_summary.empty else 0.0
 
             st.markdown(f"""
-            <div style='background-color: #F8FAFC; border: 2px solid #E2E8F0; border-radius: 12px; padding: 12px 20px; margin-top: 15px; text-align: right; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);'>
-                <div style='font-size: 14px; color: #64748B; font-weight: 800; margin-bottom: 5px;'>⏳ 가장 최근 생산일: {rec_date}</div>
-                <div style='font-size: 24px; font-weight: 900; color: #0F172A;'>
-                    종합효율 <span style='color: #1E293B;'>{rec_oee:.1%}</span> <span style='font-size: 18px; margin-left: 10px;'>{diff_str}</span>
+            <div style='background-color: #F8FAFC; border: 2px solid #E2E8F0; border-radius: 12px; padding: 12px 20px; margin-top: 5px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);'>
+                <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid #E2E8F0; padding-bottom: 8px;'>
+                    <span style='font-size: 14px; color: #475569; font-weight: 800;'>📆 당일 ({rec_date})</span>
+                    <div style='font-size: 22px; font-weight: 900; color: #0F172A;'>
+                        {rec_oee:.1%} <span style='font-size: 15px; margin-left: 5px;'>{diff_str}</span>
+                    </div>
+                </div>
+                <div style='display: flex; justify-content: space-between; align-items: center;'>
+                    <span style='font-size: 14px; color: #475569; font-weight: 800;'>📅 당월 ({title_month_str}) 평균</span>
+                    <div style='font-size: 20px; font-weight: 800; color: #1E293B;'>
+                        {month_oee:.1%}
+                    </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
-    st.markdown("<hr style='border: 1px solid #E2E8F0; margin-top: 5px; margin-bottom: 20px;'>", unsafe_allow_html=True)
+    st.markdown("<hr style='border: 1px solid #E2E8F0; margin-top: 15px; margin-bottom: 25px;'>", unsafe_allow_html=True)
 
-    f1, f2 = st.columns(2)
-    all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
-    with f1: sel_m_side = st.multiselect("📅 생산월 선택", all_months, default=[all_months[-1]] if all_months else [])
-    
-    m_f_df = df[df['생산월'].isin(sel_m_side)].copy() if sel_m_side else df.copy()
-    all_dates = list(m_f_df['생산일'].unique())
-    all_dates.sort(key=lambda x: date_mapping.get(x, ""), reverse=True)
-    with f2: sel_d_side = st.multiselect("📆 생산일 선택", all_dates, default=[])
-    f_df = m_f_df[m_f_df['생산일'].isin(sel_d_side)].copy() if sel_d_side else m_f_df.copy()
-
-    st.markdown("<div style='margin-bottom: 25px;'></div>", unsafe_allow_html=True)
-    tab1, tab2 = st.tabs(["📈 사출생산팀 종합효율 추이", "🎯 설비별 정밀 분석 (팝업 호출)"])
+    # 🚨 요청 3번: 탭2 네이밍 직관적 변경
+    tab1, tab2 = st.tabs(["📈 사출생산팀 종합효율 추이", "🎯 설비별 생산성 및 오픈이슈 분석"])
 
     # -----------------------------------------------------
     # TAB 1: 종합 효율 추이 
@@ -403,20 +413,16 @@ if data_to_process:
         p_df = daily_df[daily_df['생산월'].isin(sel_m_side)].copy() if sel_m_side else daily_df.copy()
         if sel_d_side: p_df = p_df[p_df['생산일'].isin(sel_d_side)]
             
-        title_month_str = ", ".join([m.split(' ')[-1] for m in sel_m_side]) if sel_m_side else "전체"
-        
         if sel_m_side: render_section_title(f"사출생산팀 ({title_month_str}) 종합효율 추이")
         else: render_section_title("사출생산팀 전체 종합효율 추이")
             
         if not p_df.empty:
             avg_oee = p_df['공장종합효율'].mean()
-            
-            # 🚨 요청 3번: 목표 달성 스마트 브리핑 문구 변경
             is_achieved = avg_oee >= 0.86
             status_color = "#2563EB" if is_achieved else "#DC2626"
             status_text = "목표 효율 대비 달성 중입니다." if is_achieved else "목표 효율 대비 미달성 중입니다."
             
-            guide_text = f"사출생산팀 ({title_month_str}) 종합 효율은 <b>{avg_oee:.1%}</b>로 <span style='color:{status_color}; font-weight:900;'>{status_text}</span><br>분석할 생산일의 그래프를 선택하면 해당 일의 생산성 자료 및 오픈이슈를 확인 가능합니다. 또한 <b>탭2 (설비별 정밀 분석)</b>에서 각 설비의 생산일 별 생산성 및 오픈이슈를 확인 가능합니다."
+            guide_text = f"사출생산팀 ({title_month_str}) 종합 효율은 <b>{avg_oee:.1%}</b>로 <span style='color:{status_color}; font-weight:900;'>{status_text}</span><br>분석할 생산일의 그래프를 선택하면 해당 일의 생산성 자료 및 오픈이슈를 확인 가능합니다. 또한 <b>탭2 (설비별 생산성 및 오픈이슈 분석)</b>에서 각 설비의 생산일 별 생산성 및 오픈이슈를 확인 가능합니다."
             
             render_tab_insight("💡 사출생산팀 생산성 추이 분석", guide_text)
             
@@ -438,7 +444,6 @@ if data_to_process:
                 if st.session_state.trigger_daily_popup:
                     date_to_show = st.session_state.trigger_daily_popup
                     st.session_state.trigger_daily_popup = None 
-                    # 🚨 df 전체(df)를 넘겨 과거 데이터를 조회하게 합니다.
                     show_daily_summary_popup(date_to_show, f_df, daily_df, df)
                     
             except TypeError:
