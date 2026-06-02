@@ -87,22 +87,14 @@ def format_issue(text):
     val = val.replace('\r\n', '\n'); val = re.sub(r'(?<!\n)\*', '\n*', val); val = re.sub(r'(?<!\n)-\.', '\n-.', val); val = re.sub(r'(?<!\n)→', '\n→ ', val)
     return val.strip()
 
-# 🚨 1번, 2번 에러 완벽 차단: 줄바꿈(엔터) 압축 렌더링 엔진
 def render_styler_to_html(styler):
     try: raw_html = styler.to_html(escape=False)
     except: raw_html = styler.to_html()
-    
-    # 순수 표(table)만 추출하고 불순물 제거
     clean_html = re.sub(r'<style.*?</style>', '', raw_html, flags=re.DOTALL | re.IGNORECASE)
-    
     custom_css = "<style>.custom-table { width: 100% !important; border-collapse: collapse !important; font-size: 14px !important; background-color: white !important; } .custom-table th { background-color: #1E293B !important; color: #FFFFFF !important; border: 1px solid #334155 !important; padding: 14px !important; font-weight: 700 !important; font-size: 15px !important; text-align: center !important; } .custom-table td { border: 1px solid #E2E8F0 !important; padding: 12px !important; font-weight: 500 !important; color: #334155 !important; text-align: center !important; vertical-align: middle !important; } .custom-table td:last-child { text-align: left !important; padding-left: 20px !important; }</style>"
-    
     clean_html = clean_html.replace('<table', '<table class="custom-table"')
-    
-    # 🌟 핵심: HTML을 마크다운 파서가 텍스트로 착각하지 않도록 모든 줄바꿈(\n) 제거
     final_html = custom_css + f"<div style='width:100%; overflow-x:auto; border:1px solid #CBD5E1; border-radius:10px; margin-bottom:25px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);'>{clean_html}</div>"
     final_html = final_html.replace('\n', '').replace('\r', '')
-    
     st.markdown(final_html, unsafe_allow_html=True)
 
 def prepare_display_table(df, desired_cols):
@@ -128,7 +120,7 @@ def get_building_group(mach_name):
     except: return "기타 구역"
 
 # ==========================================
-# 🌟 3. 팝업창 (전광판 UI)
+# 🌟 3. 팝업창 
 # ==========================================
 @st.dialog("📅 일일 가동 상세 현황", width="large")
 def show_daily_summary_popup(clicked_date, f_df, daily_df):
@@ -161,7 +153,9 @@ def show_daily_summary_popup(clicked_date, f_df, daily_df):
     else:
         st.info("해당 일자의 설비 가동 데이터가 존재하지 않습니다.")
         
+    # 🚨 단발성 기억 소각 로직 추가
     if st.button("창 닫기", key="close_daily_popup", use_container_width=True):
+        st.session_state.last_chart_click = None # 클릭 기억 소각
         st.rerun()
 
 @st.dialog("💻 설비 집중 분석 리포트", width="large")
@@ -317,11 +311,31 @@ if data_to_process:
             fig_oee = go.Figure(go.Bar(x=p_df['생산일'], y=p_df['공장종합효율'], text=p_df['공장종합효율'].apply(lambda x: f"{x:.1%}"), textposition='auto', marker_color=bar_colors, textfont=dict(size=14, weight='bold', color='white')))
             fig_oee.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=450, yaxis=dict(tickformat='.0%', range=[0, 1.0]), margin=dict(t=20))
             
+            # 🚨 단발성 트리거 메모리 생성
+            if 'last_chart_click' not in st.session_state:
+                st.session_state.last_chart_click = None
+            if 'trigger_daily_popup' not in st.session_state:
+                st.session_state.trigger_daily_popup = None
+
             try:
                 event = st.plotly_chart(fig_oee, use_container_width=True, on_select="rerun", selection_mode="points")
+                
+                curr_click = None
                 if event and "selection" in event and event["selection"]["points"]:
-                    clicked_date = event["selection"]["points"][0]["x"]
-                    show_daily_summary_popup(clicked_date, f_df, daily_df)
+                    curr_click = event["selection"]["points"][0]["x"]
+                
+                # 🚨 클릭이 변했을 때만 트리거 장전
+                if curr_click != st.session_state.last_chart_click:
+                    st.session_state.last_chart_click = curr_click
+                    if curr_click is not None:
+                        st.session_state.trigger_daily_popup = curr_click
+                
+                # 🚨 트리거 발사 후 즉시 소각 (무한 팝업 방지)
+                if st.session_state.trigger_daily_popup:
+                    date_to_show = st.session_state.trigger_daily_popup
+                    st.session_state.trigger_daily_popup = None 
+                    show_daily_summary_popup(date_to_show, f_df, daily_df)
+                    
             except TypeError:
                 st.plotly_chart(fig_oee, use_container_width=True)
                 st.info("💡 팁: 막대 그래프를 클릭하여 일일 상세 내역을 보시려면 시스템을 최신 버전으로 업데이트해주세요.")
