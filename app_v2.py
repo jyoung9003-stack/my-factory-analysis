@@ -45,7 +45,7 @@ st.markdown("""
     div.stButton > button:hover { border-color: #3B82F6; color: #1D4ED8; background-color: #EFF6FF; }
     div.stButton > button:active { background-color: #2563EB !important; color: white !important; border-color: #2563EB; }
 
-    /* 🚨 요청 1번: 탭2 구역 선택 라디오를 '둥근 네모 도형 버튼'으로 완전 개조 */
+    /* 🚨 탭2 라디오 버튼 -> 직관적인 네모 도형 버튼으로 개조 */
     div[data-testid="stRadio"] div[role="radiogroup"] {
         gap: 15px !important; 
         flex-wrap: wrap !important;
@@ -55,26 +55,35 @@ st.markdown("""
         background-color: #FFFFFF !important;
         border: 2px solid #CBD5E1 !important;
         padding: 12px 25px !important;
-        border-radius: 12px !important; /* 둥근 모서리 도형 */
+        border-radius: 12px !important; 
         margin: 0 !important;
         box-shadow: 0 2px 4px rgba(0,0,0,0.02);
         cursor: pointer;
         transition: all 0.2s ease;
+        display: flex;
+        justify-content: center;
+        align-items: center;
     }
     div[data-testid="stRadio"] label[data-baseweb="radio"]:hover {
         border-color: #D91B1B !important;
         background-color: #FFF5F5 !important;
     }
-    div[data-testid="stRadio"] label[data-baseweb="radio"] div:first-child {
-        display: none !important; /* 기본 라디오 동그라미 삭제 */
+    
+    /* 🚨 텍스트는 놔두고, 라디오 마크(동그라미)만 정밀 타격하여 숨기기 */
+    div[data-testid="stRadio"] label[data-baseweb="radio"] > div > div:first-of-type {
+        display: none !important;
     }
+    
+    /* 도형 안의 글씨 스타일 */
     div[data-testid="stRadio"] label[data-baseweb="radio"] p {
         font-size: 20px !important;
         font-weight: 800 !important;
         color: #475569 !important;
         margin: 0 !important;
+        padding-left: 0 !important;
     }
-    /* 선택된 도형 스타일 (배경 빨간색, 글씨 흰색) */
+    
+    /* 선택된 구역(동) 도형 스타일 */
     div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) {
         background-color: #D91B1B !important;
         border-color: #D91B1B !important;
@@ -198,7 +207,7 @@ def get_building_group(mach_name):
     except: return "기타 구역"
 
 # ==========================================
-# 🌟 3. 팝업창 (UI 고도화)
+# 🌟 3. 팝업창 
 # ==========================================
 @st.dialog("📅 일일 가동 상세 현황", width="large")
 def show_daily_summary_popup(clicked_date, f_df, daily_df):
@@ -245,7 +254,6 @@ def show_machine_popup(tgt_mach, t7_df):
     total_down = t7_df['비가동시간'].apply(safe_float).sum()
     issue_count = t7_df['OPEN ISSUE'].apply(lambda x: 0 if str(x).strip() in ['', 'nan', '0', '0.0'] else 1).sum()
     
-    # 🚨 요청 2번: OEE -> 종합효율로 용어 완전 통일
     c1, c2, c3 = st.columns(3)
     with c1: render_scoreboard_metric("📊 누적 평균 종합효율", f"{avg_oee:.1%}", "#3B82F6" if avg_oee >= 0.86 else "#FF3131")
     with c2: render_scoreboard_metric("🛑 누적 비가동 손실", f"{total_down:.1f}h", "#FF3131" if total_down > 0 else "#32CD32")
@@ -272,7 +280,6 @@ def show_machine_popup(tgt_mach, t7_df):
     else: 
         st.info("해당 설비의 유효한 가동 데이터가 없습니다.")
 
-    # 🚨 요청 3번: 클릭한 설비의 '품명'을 끌고 와서 스마트 타이틀 조합
     mach_short = str(tgt_mach).split(' - ')[0].strip()
     prod_name = valid_t7['품명'].dropna().iloc[0] if not valid_t7['품명'].dropna().empty else ""
     title_dynamic = f"📋 {mach_short} {prod_name} 생산성 및 오픈 이슈 현황"
