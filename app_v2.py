@@ -347,25 +347,21 @@ if data_to_process:
     # 🌟 5. 레이아웃 및 필터
     # =========================================================
     
-    # 🚨 신규 배너 이미지 (CORE VALUE) 최상단 배치
-    try: 
-        st.image("core_value.png", use_container_width=True) 
-        st.markdown("<br>", unsafe_allow_html=True)
-    except: 
-        pass # 이미지가 없어도 에러 없이 통과
-
-    title_col1, title_col2, title_col3 = st.columns([1, 5.5, 3.5], gap="small")
+    # 🚨 요청 1번: 로고, 타이틀, 전광판 완벽한 일직선 중앙 정렬
+    title_col1, title_col2, title_col3 = st.columns([1, 6, 3], gap="small")
     
     with title_col1:
-        st.markdown("<div style='margin-top: 15px;'>", unsafe_allow_html=True)
+        st.markdown("<div style='display: flex; align-items: center; justify-content: center; height: 110px;'>", unsafe_allow_html=True)
         try: st.image("logo.png", width=120) 
         except: st.markdown("<div style='font-size: 50px;'>🏭</div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
         
     with title_col2: 
-        st.markdown("<div style='display:flex; align-items:center; height: 100px;'><h1 style='margin: 0; font-weight: 900; font-size: 28px; color: #0F172A; line-height: 1.4;'>사출생산팀 생산성 및 오픈 이슈<br>분석 및 관리 리포트</h1></div>", unsafe_allow_html=True)
+        # 한 줄 처리 (white-space: nowrap)
+        st.markdown("<div style='display: flex; align-items: center; height: 110px;'><h1 style='margin: 0; font-weight: 900; font-size: 25px; color: #0F172A; white-space: nowrap;'>사출생산팀 생산성 및 오픈 이슈 분석 및 관리 리포트</h1></div>", unsafe_allow_html=True)
 
     with title_col3:
+        st.markdown("<div style='display: flex; flex-direction: column; justify-content: center; height: 110px;'>", unsafe_allow_html=True)
         if not daily_df.empty:
             recent_row = daily_df.iloc[-1]
             rec_date = recent_row['생산일']
@@ -379,7 +375,7 @@ if data_to_process:
                 elif diff < 0: diff_str = f"<span style='color:#DC2626;'>▼ {abs(diff)*100:.1f}%p</span>"
 
             st.markdown(f"""
-            <div style='background-color: #F8FAFC; border: 2px solid #E2E8F0; border-radius: 12px; padding: 12px 20px; margin-top: 5px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);'>
+            <div style='background-color: #F8FAFC; border: 2px solid #E2E8F0; border-radius: 12px; padding: 12px 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);'>
                 <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid #E2E8F0; padding-bottom: 8px;'>
                     <span style='font-size: 14px; color: #475569; font-weight: 800;'>📆 당일 ({rec_date})</span>
                     <div style='font-size: 22px; font-weight: 900; color: #0F172A;'>
@@ -387,15 +383,16 @@ if data_to_process:
                     </div>
                 </div>
                 <div style='display: flex; justify-content: space-between; align-items: center;'>
-                    <span style='font-size: 14px; color: #475569; font-weight: 800;'>📅 당월 평균</span>
+                    <span style='font-size: 14px; color: #475569; font-weight: 800;' id='month_name_placeholder'>📅 당월 평균</span>
                     <div style='font-size: 20px; font-weight: 800; color: #1E293B;' id='month_avg_placeholder'>
                         {daily_df['공장종합효율'].mean():.1%}
                     </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("<hr style='border: 1px solid #E2E8F0; margin-top: 15px; margin-bottom: 20px;'>", unsafe_allow_html=True)
+    st.markdown("<hr style='border: 1px solid #E2E8F0; margin-top: 10px; margin-bottom: 20px;'>", unsafe_allow_html=True)
 
     f1, f2, f3 = st.columns([1, 1, 2])
     all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
@@ -408,10 +405,22 @@ if data_to_process:
     
     f_df = m_f_df[m_f_df['생산일'].isin(sel_d_side)].copy() if sel_d_side else m_f_df.copy()
 
-    if sel_m_side and not daily_df.empty:
-        p_df_for_summary = daily_df[daily_df['생산월'].isin(sel_m_side)]
+    # 🚨 요청 2번: 전광판 '당월(선택월)' 동적 업데이트 JS 로직
+    title_month_str = ", ".join(sel_m_side) if sel_m_side else "전체"
+    if not daily_df.empty:
+        p_df_for_summary = daily_df[daily_df['생산월'].isin(sel_m_side)] if sel_m_side else daily_df
         month_oee = p_df_for_summary['공장종합효율'].mean() if not p_df_for_summary.empty else 0.0
-        components.html(f"<script>window.parent.document.getElementById('month_avg_placeholder').innerText = '{month_oee:.1%}';</script>", width=0, height=0)
+        components.html(f"""
+        <script>
+            setTimeout(function() {{
+                const doc = window.parent.document;
+                const avgElem = doc.getElementById('month_avg_placeholder');
+                const nameElem = doc.getElementById('month_name_placeholder');
+                if(avgElem) avgElem.innerText = '{month_oee:.1%}';
+                if(nameElem) nameElem.innerText = '📅 당월 ({title_month_str}) 평균';
+            }}, 150);
+        </script>
+        """, width=0, height=0)
 
     st.markdown("<div style='margin-bottom: 25px;'></div>", unsafe_allow_html=True)
     tab1, tab2 = st.tabs(["📈 사출생산팀 종합효율 추이", "🎯 설비별 생산성 및 오픈이슈 분석"])
@@ -423,8 +432,6 @@ if data_to_process:
         p_df = daily_df[daily_df['생산월'].isin(sel_m_side)].copy() if sel_m_side else daily_df.copy()
         if sel_d_side: p_df = p_df[p_df['생산일'].isin(sel_d_side)]
             
-        title_month_str = ", ".join([m.split(' ')[-1] for m in sel_m_side]) if sel_m_side else "전체"
-        
         if sel_m_side: render_section_title(f"사출생산팀 ({title_month_str}) 종합효율 추이")
         else: render_section_title("사출생산팀 전체 종합효율 추이")
             
