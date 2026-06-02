@@ -27,20 +27,9 @@ st.markdown("""
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/static/pretendard.css');
     html, body, [class*="css"] { font-family: 'Pretendard', sans-serif !important; background-color: #F8FAFC; color: #0F172A; translate: no; }
     
-    /* 🚨 요청 3번: 최상단 여백 완벽 제거 및 화면 활용도 극대화 */
-    .block-container {
-        padding-top: 1.5rem !important; 
-        padding-bottom: 1rem !important;
-        max-width: 95% !important; /* 좌우 여백도 시원하게 넓힘 */
-    }
-    header[data-testid="stHeader"] {
-        display: none !important; /* 상단 빈 헤더바 제거 */
-    }
-    
-    /* 🚨 요청 1번: 가로 배치(Columns)시 모든 요소를 수직 중앙에 일치시킴 */
-    div[data-testid="stHorizontalBlock"] {
-        align-items: center !important;
-    }
+    .block-container { padding-top: 1.5rem !important; padding-bottom: 1rem !important; max-width: 95% !important; }
+    header[data-testid="stHeader"] { display: none !important; }
+    div[data-testid="stHorizontalBlock"] { align-items: center !important; }
 
     .section-banner { background-color: #ffffff; border: 1px solid #E2E8F0; border-left: 8px solid #D91B1B; padding: 18px 24px; border-radius: 12px; margin-top: 30px; margin-bottom: 25px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
     .section-banner h3 { margin: 0; font-weight: 900; color: #0F172A; font-size: 22px; letter-spacing: -0.5px; }
@@ -150,12 +139,13 @@ def render_styler_to_html(styler):
     try: raw_html = styler.to_html(escape=False)
     except: raw_html = styler.to_html()
     clean_html = re.sub(r'<style.*?</style>', '', raw_html, flags=re.DOTALL | re.IGNORECASE)
-    custom_css = "<style>.custom-table { width: 100% !important; border-collapse: collapse !important; font-size: 14px !important; background-color: white !important; } .custom-table th { background-color: #1E293B !important; color: #FFFFFF !important; border: 1px solid #334155 !important; padding: 14px !important; font-weight: 700 !important; font-size: 15px !important; text-align: center !important; white-space: nowrap; } .custom-table td { border: 1px solid #E2E8F0 !important; padding: 12px !important; font-weight: 500 !important; color: #334155 !important; text-align: center !important; vertical-align: middle !important; }</style>"
+    custom_css = "<style>.custom-table { width: 100% !important; border-collapse: collapse !important; font-size: 14px !important; background-color: white !important; } .custom-table th { background-color: #1E293B !important; color: #FFFFFF !important; border: 1px solid #334155 !important; padding: 14px !important; font-weight: 700 !important; font-size: 15px !important; text-align: center !important; white-space: nowrap; } .custom-table td { border: 1px solid #E2E8F0 !important; padding: 12px !important; font-weight: 500 !important; color: #334155 !important; text-align: center !important; vertical-align: middle !important; } .custom-table td:last-child { text-align: left !important; padding-left: 20px !important; white-space: normal; }</style>"
     clean_html = clean_html.replace('<table', '<table class="custom-table"')
     final_html = custom_css + f"<div style='width:100%; overflow-x:auto; border:1px solid #CBD5E1; border-radius:10px; margin-bottom:25px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);'>{clean_html}</div>"
     final_html = final_html.replace('\n', '').replace('\r', '')
     st.markdown(final_html, unsafe_allow_html=True)
 
+# 🚨 요청 3번: "최근 실제 가동일"을 찾아서 찐 증감률 계산 엔진
 def prepare_daily_popup_table(df, full_df, current_date):
     safe_cols = [c for c in ['설비명', '품명', '종합효율', '비가동시간', 'OPEN ISSUE'] if c in df.columns]
     disp_df = df[safe_cols].copy()
@@ -164,12 +154,19 @@ def prepare_daily_popup_table(df, full_df, current_date):
     for idx, row in disp_df.iterrows():
         mach_name = row['설비명']
         mach_df = full_df[full_df['설비명'] == mach_name].sort_values('sort_key')
+        
+        # OEE가 0보다 큰(실제 가동된) 데이터만 필터링하여 '과거' 추적
+        valid_mach_df = mach_df[mach_df['종합효율'].apply(safe_float) > 0]
+        
         curr_row = mach_df[mach_df['생산일'] == current_date]
-        if curr_row.empty: var_list.append("<span style='color:#94A3B8;'>-</span>")
+        if curr_row.empty: 
+            var_list.append("<span style='color:#94A3B8;'>-</span>")
         else:
             curr_sort_key = curr_row.iloc[0]['sort_key']
-            past_df = mach_df[mach_df['sort_key'] < curr_sort_key]
-            if past_df.empty: var_list.append("<span style='color:#94A3B8;'>-</span>")
+            past_df = valid_mach_df[valid_mach_df['sort_key'] < curr_sort_key]
+            
+            if past_df.empty: 
+                var_list.append("<span style='color:#94A3B8;'>-</span>")
             else:
                 prev_oee = safe_float(past_df.iloc[-1]['종합효율'])
                 curr_oee = safe_float(curr_row.iloc[0]['종합효율'])
@@ -178,16 +175,19 @@ def prepare_daily_popup_table(df, full_df, current_date):
                 elif diff < 0: var_list.append(f"<span style='color:#DC2626; font-weight:900;'>▼ {abs(diff)*100:.1f}%p</span>")
                 else: var_list.append("<span style='color:#64748B; font-weight:900;'>-</span>")
     
-    disp_df['전일 대비(효율)'] = var_list
+    disp_df['전일 대비 증감율'] = var_list
 
     for idx, row in disp_df.iterrows():
         if '종합효율' in disp_df.columns: disp_df.at[idx, '종합효율'] = f"{safe_float(row['종합효율']):.1%}"
         if '비가동시간' in disp_df.columns: disp_df.at[idx, '비가동시간'] = f"{safe_float(row['비가동시간']):.1f}h"
     if 'OPEN ISSUE' in disp_df.columns: disp_df['OPEN ISSUE'] = disp_df['OPEN ISSUE'].apply(split_issue_to_columns)
     
-    cols = [c for c in disp_df.columns if c not in ['OPEN ISSUE', '전일 대비(효율)']]
-    cols.extend(['OPEN ISSUE', '전일 대비(효율)'])
-    return disp_df[cols]
+    # 🚨 요청 2번: 컬럼 재배치 (종합효율 바로 옆에 전일 대비 증감율 배치)
+    final_cols = []
+    for c in ['설비명', '품명', '종합효율', '전일 대비 증감율', '비가동시간', 'OPEN ISSUE']:
+        if c in disp_df.columns: final_cols.append(c)
+    
+    return disp_df[final_cols]
 
 def get_building_group(mach_name):
     try:
@@ -277,13 +277,42 @@ def show_machine_popup(tgt_mach, t7_df):
     
     st.markdown(f"<h4 style='font-weight:900; color:#0F172A; margin-bottom:15px; margin-top:20px;'>{title_dynamic}</h4>", unsafe_allow_html=True)
     
-    safe_cols = [c for c in ['생산일', '품명', '종합효율', '비가동시간', 'OPEN ISSUE'] if c in t7_df.columns]
+    # 🚨 요청 4번: 탭2 리포트 표에도 '전일 대비 증감율' 삽입
+    safe_cols = [c for c in ['생산일', 'sort_key', '품명', '종합효율', '비가동시간', 'OPEN ISSUE'] if c in t7_df.columns]
     disp_t7 = t7_df[safe_cols].copy()
+    
+    var_list = []
+    valid_history = disp_t7[disp_t7['종합효율'].apply(safe_float) > 0]
+    
+    for idx, row in disp_t7.iterrows():
+        curr_oee = safe_float(row.get('종합효율', 0.0))
+        if curr_oee <= 0:
+            var_list.append("<span style='color:#94A3B8;'>-</span>")
+            continue
+        
+        curr_sk = row.get('sort_key', '')
+        past_df = valid_history[valid_history['sort_key'] < curr_sk]
+        if past_df.empty:
+            var_list.append("<span style='color:#94A3B8;'>-</span>")
+        else:
+            prev_oee = safe_float(past_df.iloc[-1]['종합효율'])
+            diff = curr_oee - prev_oee
+            if diff > 0: var_list.append(f"<span style='color:#2563EB; font-weight:900;'>▲ +{diff*100:.1f}%p</span>")
+            elif diff < 0: var_list.append(f"<span style='color:#DC2626; font-weight:900;'>▼ {abs(diff)*100:.1f}%p</span>")
+            else: var_list.append("<span style='color:#64748B; font-weight:900;'>-</span>")
+            
+    disp_t7['전일 대비 증감율'] = var_list
+    
     for idx, row in disp_t7.iterrows():
         if '종합효율' in disp_t7.columns: disp_t7.at[idx, '종합효율'] = f"{safe_float(row['종합효율']):.1%}"
         if '비가동시간' in disp_t7.columns: disp_t7.at[idx, '비가동시간'] = f"{safe_float(row['비가동시간']):.1f}h"
     if 'OPEN ISSUE' in disp_t7.columns: disp_t7['OPEN ISSUE'] = disp_t7['OPEN ISSUE'].apply(split_issue_to_columns)
-    render_styler_to_html(disp_t7.style.hide(axis="index"))
+    
+    final_cols_t7 = []
+    for c in ['생산일', '품명', '종합효율', '전일 대비 증감율', '비가동시간', 'OPEN ISSUE']:
+        if c in disp_t7.columns: final_cols_t7.append(c)
+
+    render_styler_to_html(disp_t7[final_cols_t7].style.hide(axis="index"))
 
 # ==========================================
 # 🌟 4. 데이터 로드 및 정제 
@@ -359,20 +388,21 @@ if data_to_process:
     df['OPEN ISSUE'] = df['OPEN ISSUE'].apply(format_issue)
 
     # =========================================================
-    # 🌟 5. 레이아웃 및 필터 (요청사항 완벽 반영)
+    # 🌟 5. 레이아웃 및 필터 
     # =========================================================
-    
-    # 🚨 요청 1번: 로고, 타이틀, 전광판 수직 완벽 정렬
     title_col1, title_col2, title_col3 = st.columns([1, 5.5, 3.5], gap="small")
     
     with title_col1:
+        st.markdown("<div style='display: flex; align-items: center; justify-content: center; height: 110px;'>", unsafe_allow_html=True)
         try: st.image("logo.png", width=120) 
         except: st.markdown("<div style='font-size: 50px;'>🏭</div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
         
     with title_col2: 
-        st.markdown("<h1 style='margin: 0; font-weight: 900; font-size: 26px; color: #0F172A; white-space: nowrap;'>사출생산팀 생산성 및 오픈 이슈 분석 및 관리 리포트</h1>", unsafe_allow_html=True)
+        st.markdown("<div style='display: flex; align-items: center; height: 110px;'><h1 style='margin: 0; font-weight: 900; font-size: 25px; color: #0F172A; white-space: nowrap;'>사출생산팀 생산성 및 오픈 이슈 분석 및 관리 리포트</h1></div>", unsafe_allow_html=True)
 
     with title_col3:
+        st.markdown("<div style='display: flex; flex-direction: column; justify-content: center; height: 110px;'>", unsafe_allow_html=True)
         if not daily_df.empty:
             recent_row = daily_df.iloc[-1]
             rec_date = recent_row['생산일']
@@ -385,11 +415,11 @@ if data_to_process:
                 if diff > 0: diff_str = f"<span style='color:#2563EB;'>▲ +{diff*100:.1f}%p</span>"
                 elif diff < 0: diff_str = f"<span style='color:#DC2626;'>▼ {abs(diff)*100:.1f}%p</span>"
 
-            # 🚨 요청 2번: 괄호 이중 중첩을 막고 기존 원칙(월)을 지키기 위한 포맷 변경
+            # 🚨 요청 1번: 괄호 삭제 및 간결한 전광판 네이밍
             st.markdown(f"""
             <div style='background-color: #F8FAFC; border: 2px solid #E2E8F0; border-radius: 12px; padding: 12px 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);'>
                 <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid #E2E8F0; padding-bottom: 8px;'>
-                    <span style='font-size: 14px; color: #475569; font-weight: 800;'>📆 당일: {rec_date}</span>
+                    <span style='font-size: 14px; color: #475569; font-weight: 800;'>📆 {rec_date}</span>
                     <div style='font-size: 22px; font-weight: 900; color: #0F172A;'>
                         {rec_oee:.1%} <span style='font-size: 15px; margin-left: 5px;'>{diff_str}</span>
                     </div>
@@ -402,6 +432,7 @@ if data_to_process:
                 </div>
             </div>
             """, unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("<hr style='border: 1px solid #E2E8F0; margin-top: 10px; margin-bottom: 20px;'>", unsafe_allow_html=True)
 
@@ -416,6 +447,7 @@ if data_to_process:
     
     f_df = m_f_df[m_f_df['생산일'].isin(sel_d_side)].copy() if sel_d_side else m_f_df.copy()
 
+    # 🚨 요청 1번: 전광판 '당월(선택월) 평균' 이름 간결화
     title_month_str = ", ".join(sel_m_side) if sel_m_side else "전체"
     if not daily_df.empty:
         p_df_for_summary = daily_df[daily_df['생산월'].isin(sel_m_side)] if sel_m_side else daily_df
@@ -427,7 +459,7 @@ if data_to_process:
                 const avgElem = doc.getElementById('month_avg_placeholder');
                 const nameElem = doc.getElementById('month_name_placeholder');
                 if(avgElem) avgElem.innerText = '{month_oee:.1%}';
-                if(nameElem) nameElem.innerText = '📅 당월: {title_month_str} 평균';
+                if(nameElem) nameElem.innerText = '📅 {title_month_str} 평균';
             }}, 150);
         </script>
         """, width=0, height=0)
@@ -503,7 +535,6 @@ if data_to_process:
             
             m_list = building_dict[selected_building]
             if m_list:
-                # 🚨 요청 2번: 버튼 가로폭 4열로 확장 및 데이터 결합 처리 완료
                 cols = st.columns(4) 
                 for i, mach in enumerate(m_list):
                     parts = [p.strip() for p in mach.split('-')]
