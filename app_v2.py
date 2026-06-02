@@ -33,12 +33,29 @@ st.markdown("""
     .building-header { font-size: 18px; font-weight: 800; color: #1E293B; margin-top: 25px; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid #E2E8F0; }
     
     div[data-testid="column"] { padding: 0 4px !important; }
+    
+    /* 🚨 탭 2 설비 버튼 디자인 개조 (글씨 자동 줄바꿈 및 간격 확대) */
     div.stButton > button {
-        width: 100%; height: 60px; background-color: #FFFFFF; border: 2px solid #CBD5E1; color: #1E293B; font-size: 18px !important; font-weight: 800 !important; border-radius: 8px; margin: 0 !important; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
+        width: 100%; 
+        min-height: 75px; 
+        height: auto !important; 
+        background-color: #FFFFFF; 
+        border: 2px solid #CBD5E1; 
+        color: #1E293B; 
+        font-size: 16px !important; 
+        font-weight: 800 !important; 
+        border-radius: 8px; 
+        margin: 0 !important; 
+        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
+        white-space: normal !important; /* 글씨가 길면 자동으로 두 줄로 배치 */
+        word-break: keep-all !important;
+        line-height: 1.4 !important;
+        padding: 10px !important;
     }
-    div.stButton > button:hover { border-color: #3B82F6; color: #1D4ED8; background-color: #EFF6FF; }
+    div.stButton > button:hover { border-color: #3B82F6; color: #1D4ED8; background-color: #EFF6FF; transform: translateY(-1px); }
     div.stButton > button:active { background-color: #2563EB !important; color: white !important; border-color: #2563EB; }
 
+    /* 라디오 버튼 (구역 선택) 디자인 */
     div[data-testid="stRadio"] div[role="radiogroup"] { gap: 20px !important; flex-wrap: wrap !important; margin-top: 15px; }
     div[data-testid="stRadio"] label[data-baseweb="radio"] {
         background-color: #FFFFFF !important; border: 2px solid #CBD5E1 !important; padding: 16px 40px !important;
@@ -157,7 +174,7 @@ def prepare_daily_popup_table(df, full_df, current_date):
                 curr_oee = safe_float(curr_row.iloc[0]['종합효율'])
                 diff = curr_oee - prev_oee
                 if diff > 0: var_list.append(f"<span style='color:#2563EB; font-weight:900;'>▲ +{diff*100:.1f}%p</span>")
-                elif diff < 0: var_list.append(f"<span style='color:#DC2626; font-weight:900;'>▼ {diff*100:.1f}%p</span>")
+                elif diff < 0: var_list.append(f"<span style='color:#DC2626; font-weight:900;'>▼ {abs(diff)*100:.1f}%p</span>")
                 else: var_list.append("<span style='color:#64748B; font-weight:900;'>-</span>")
     
     disp_df['전일 대비(효율)'] = var_list
@@ -187,7 +204,7 @@ def get_building_group(mach_name):
 # ==========================================
 @st.dialog("📅 일일 가동 상세 현황", width="large")
 def show_daily_summary_popup(clicked_date, f_df, daily_df, full_df):
-    st.markdown(f"<h2 style='text-align:center; color:#0F172A; font-weight:900; font-size:36px; margin-bottom:10px;'><span style='color:#D91B1B;'>{clicked_date}</span> 사출생산팀 생산 실적 및 오픈이슈 현황</h2><hr style='border-top: 3px solid #E2E8F0; margin-bottom: 30px;'>", unsafe_allow_html=True)
+    st.markdown(f"<h2 style='text-align:center; color:#0F172A; font-weight:900; font-size:32px; margin-bottom:10px;'><span style='color:#D91B1B;'>{clicked_date}</span> 사출생산팀 생산 실적 및 오픈이슈 현황</h2><hr style='border-top: 3px solid #E2E8F0; margin-bottom: 30px;'>", unsafe_allow_html=True)
     
     day_df = f_df[f_df['생산일'] == clicked_date].copy().sort_values('설비명')
     active_day = day_df[day_df['종합효율'] > 0]
@@ -221,7 +238,7 @@ def show_daily_summary_popup(clicked_date, f_df, daily_df, full_df):
 
 @st.dialog("💻 설비 집중 분석 리포트", width="large")
 def show_machine_popup(tgt_mach, t7_df):
-    st.markdown(f"<h2 style='text-align:center; color:#0F172A; font-weight:900; font-size:36px; margin-bottom:10px;'><span style='color:#2563EB;'>{tgt_mach}</span> 이력 모니터링</h2><hr style='border-top: 3px solid #E2E8F0; margin-bottom: 30px;'>", unsafe_allow_html=True)
+    st.markdown(f"<h2 style='text-align:center; color:#0F172A; font-weight:900; font-size:32px; margin-bottom:10px;'><span style='color:#2563EB;'>{tgt_mach}</span> 이력 모니터링</h2><hr style='border-top: 3px solid #E2E8F0; margin-bottom: 30px;'>", unsafe_allow_html=True)
     
     valid_t7 = t7_df[t7_df['종합효율'] > 0].copy()
     avg_oee = valid_t7['종합효율'].apply(safe_float).mean() if not valid_t7.empty else 0.0
@@ -341,33 +358,22 @@ if data_to_process:
     df['OPEN ISSUE'] = df['OPEN ISSUE'].apply(format_issue)
 
     # =========================================================
-    # 🌟 5. 레이아웃 및 필터 (타이틀/로고 정렬 및 요약 전광판)
+    # 🌟 5. 레이아웃 및 필터 (요청 1, 2번 적용)
     # =========================================================
-    title_col1, title_col2, title_col3 = st.columns([1.2, 5.8, 3.5])
+    
+    # 🚨 헤더 중앙 정렬 및 비율 최적화
+    title_col1, title_col2, title_col3 = st.columns([1, 5.5, 3.5], gap="small")
     
     with title_col1:
-        st.markdown("<div style='display:flex; align-items:center; height: 100px;'>", unsafe_allow_html=True)
+        st.markdown("<div style='margin-top: 15px;'>", unsafe_allow_html=True)
         try: st.image("logo.png", width=120) 
         except: st.markdown("<div style='font-size: 50px;'>🏭</div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
         
     with title_col2: 
-        # 🚨 요청 1번: 듀링 삭제 및 두 줄 타이틀 중앙 정렬
-        st.markdown("<div style='display:flex; align-items:center; height: 100px;'><h1 style='margin: 0; font-weight: 900; font-size: 28px; color: #0F172A; line-height: 1.4;'>사출생산팀 생산성 및 오픈 이슈<br>분석 및 관리 리포트</h1></div>", unsafe_allow_html=True)
+        st.markdown("<h1 style='margin-top: 25px; font-weight: 900; font-size: 26px; color: #0F172A; line-height: 1.4;'>사출생산팀 생산성 및 오픈 이슈<br>분석 및 관리 리포트</h1>", unsafe_allow_html=True)
 
     with title_col3:
-        f1, f2 = st.columns(2)
-        all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
-        with f1: sel_m_side = st.multiselect("📅 생산월 선택", all_months, default=[all_months[-1]] if all_months else [], label_visibility="collapsed")
-        
-        m_f_df = df[df['생산월'].isin(sel_m_side)].copy() if sel_m_side else df.copy()
-        all_dates = list(m_f_df['생산일'].unique())
-        all_dates.sort(key=lambda x: date_mapping.get(x, ""), reverse=True)
-        with f2: sel_d_side = st.multiselect("📆 생산일 선택", all_dates, default=[], label_visibility="collapsed")
-        
-        f_df = m_f_df[m_f_df['생산일'].isin(sel_d_side)].copy() if sel_d_side else m_f_df.copy()
-
-        # 🚨 요청 4번: 우측 상단 스마트 요약 전광판 (당일/당월 듀얼 표시)
         if not daily_df.empty:
             recent_row = daily_df.iloc[-1]
             rec_date = recent_row['생산일']
@@ -380,10 +386,6 @@ if data_to_process:
                 if diff > 0: diff_str = f"<span style='color:#2563EB;'>▲ +{diff*100:.1f}%p</span>"
                 elif diff < 0: diff_str = f"<span style='color:#DC2626;'>▼ {abs(diff)*100:.1f}%p</span>"
 
-            title_month_str = ", ".join([m.split(' ')[-1] for m in sel_m_side]) if sel_m_side else "전체"
-            p_df_for_summary = daily_df[daily_df['생산월'].isin(sel_m_side)] if sel_m_side else daily_df
-            month_oee = p_df_for_summary['공장종합효율'].mean() if not p_df_for_summary.empty else 0.0
-
             st.markdown(f"""
             <div style='background-color: #F8FAFC; border: 2px solid #E2E8F0; border-radius: 12px; padding: 12px 20px; margin-top: 5px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);'>
                 <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid #E2E8F0; padding-bottom: 8px;'>
@@ -393,17 +395,34 @@ if data_to_process:
                     </div>
                 </div>
                 <div style='display: flex; justify-content: space-between; align-items: center;'>
-                    <span style='font-size: 14px; color: #475569; font-weight: 800;'>📅 당월 ({title_month_str}) 평균</span>
-                    <div style='font-size: 20px; font-weight: 800; color: #1E293B;'>
-                        {month_oee:.1%}
-                    </div>
+                    <span style='font-size: 14px; color: #475569; font-weight: 800;'>📅 당월 평균</span>
+                    <div style='font-size: 20px; font-weight: 800; color: #1E293B;' id='month_avg_placeholder'>
+                        {daily_df['공장종합효율'].mean():.1%} </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
-    st.markdown("<hr style='border: 1px solid #E2E8F0; margin-top: 15px; margin-bottom: 25px;'>", unsafe_allow_html=True)
+    st.markdown("<hr style='border: 1px solid #E2E8F0; margin-top: 15px; margin-bottom: 20px;'>", unsafe_allow_html=True)
 
-    # 🚨 요청 3번: 탭2 네이밍 직관적 변경
+    # 🚨 필터(월/일 선택)를 헤더 아래 독립적인 줄로 분리하여 레이아웃 붕괴 원천 차단!
+    f1, f2, f3 = st.columns([1, 1, 2])
+    all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
+    with f1: sel_m_side = st.multiselect("📅 생산월 선택", all_months, default=[all_months[-1]] if all_months else [])
+    
+    m_f_df = df[df['생산월'].isin(sel_m_side)].copy() if sel_m_side else df.copy()
+    all_dates = list(m_f_df['생산일'].unique())
+    all_dates.sort(key=lambda x: date_mapping.get(x, ""), reverse=True)
+    with f2: sel_d_side = st.multiselect("📆 생산일 선택", all_dates, default=[])
+    
+    f_df = m_f_df[m_f_df['생산일'].isin(sel_d_side)].copy() if sel_d_side else m_f_df.copy()
+
+    # 필터 선택값에 따라 전광판의 '당월 평균' 동적 업데이트 스크립트
+    if sel_m_side and not daily_df.empty:
+        p_df_for_summary = daily_df[daily_df['생산월'].isin(sel_m_side)]
+        month_oee = p_df_for_summary['공장종합효율'].mean() if not p_df_for_summary.empty else 0.0
+        components.html(f"<script>window.parent.document.getElementById('month_avg_placeholder').innerText = '{month_oee:.1%}';</script>", width=0, height=0)
+
+    st.markdown("<div style='margin-bottom: 25px;'></div>", unsafe_allow_html=True)
     tab1, tab2 = st.tabs(["📈 사출생산팀 종합효율 추이", "🎯 설비별 생산성 및 오픈이슈 분석"])
 
     # -----------------------------------------------------
@@ -413,6 +432,8 @@ if data_to_process:
         p_df = daily_df[daily_df['생산월'].isin(sel_m_side)].copy() if sel_m_side else daily_df.copy()
         if sel_d_side: p_df = p_df[p_df['생산일'].isin(sel_d_side)]
             
+        title_month_str = ", ".join([m.split(' ')[-1] for m in sel_m_side]) if sel_m_side else "전체"
+        
         if sel_m_side: render_section_title(f"사출생산팀 ({title_month_str}) 종합효율 추이")
         else: render_section_title("사출생산팀 전체 종합효율 추이")
             
@@ -474,10 +495,17 @@ if data_to_process:
             
             m_list = building_dict[selected_building]
             if m_list:
-                cols = st.columns(8) 
+                # 🚨 요청 2번: 버튼 가로폭 확장 (4 Columns 배치) & 설비명+호기명 텍스트 병합
+                cols = st.columns(4) 
                 for i, mach in enumerate(m_list):
-                    short_name = mach.split(' - ')[0].strip()
-                    if cols[i % 8].button(short_name, key=f"btn_{selected_building}_{i}_{mach}"):
+                    parts = [p.strip() for p in mach.split('-')]
+                    if len(parts) >= 2:
+                        # 긴 글씨는 자연스럽게 두 줄(Text Wrap)로 이어지게 함
+                        display_name = f"{parts[0]} - {parts[1]}"
+                    else:
+                        display_name = parts[0]
+                        
+                    if cols[i % 4].button(display_name, key=f"btn_{selected_building}_{i}_{mach}"):
                         t7_df = f_df[f_df['설비명'] == mach].copy().sort_values('sort_key')
                         show_machine_popup(mach, t7_df)
 
