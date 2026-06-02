@@ -10,7 +10,7 @@ from datetime import datetime
 # ==========================================
 # 🌟 1. 기본 설정 및 테마
 # ==========================================
-st.set_page_config(page_title="설비별 정밀 분석 대시보드", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="듀링 사출생산팀 설비 분석 대시보드", layout="wide", initial_sidebar_state="collapsed")
 
 components.html(
     """<script>
@@ -30,12 +30,6 @@ st.markdown("""
     .section-banner { background-color: #ffffff; border: 1px solid #E2E8F0; border-left: 8px solid #D91B1B; padding: 18px 24px; border-radius: 12px; margin-top: 35px; margin-bottom: 25px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
     .section-banner h3 { margin: 0; font-weight: 900; color: #0F172A; font-size: 22px; letter-spacing: -0.5px; }
     
-    .metric-card-container { background-color: #FFFFFF; border-radius: 16px; padding: 25px 20px; text-align: center; border: 1px solid #E2E8F0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
-    .metric-title { font-size: 16px; color: #475569; margin-bottom: 12px; font-weight: 700; }
-    .metric-value-box { display: flex; align-items: center; justify-content: center; gap: 8px; }
-    .metric-value { font-size: 42px; font-weight: 900; letter-spacing: -1.5px; line-height: 1; }
-    .metric-icon { font-size: 24px; }
-    
     .building-header { font-size: 18px; font-weight: 800; color: #1E293B; margin-top: 25px; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid #E2E8F0; }
     
     div[data-testid="column"] { padding: 0 4px !important; }
@@ -45,63 +39,20 @@ st.markdown("""
     div.stButton > button:hover { border-color: #3B82F6; color: #1D4ED8; background-color: #EFF6FF; }
     div.stButton > button:active { background-color: #2563EB !important; color: white !important; border-color: #2563EB; }
 
-    /* 🚨 탭2 라디오 버튼 -> 가로로 넓은 직사각형 버튼으로 개조 및 글씨 강제 복구 */
-    div[data-testid="stRadio"] div[role="radiogroup"] {
-        gap: 20px !important; 
-        flex-wrap: wrap !important;
-        margin-top: 15px;
-    }
+    div[data-testid="stRadio"] div[role="radiogroup"] { gap: 20px !important; flex-wrap: wrap !important; margin-top: 15px; }
     div[data-testid="stRadio"] label[data-baseweb="radio"] {
-        background-color: #FFFFFF !important;
-        border: 2px solid #CBD5E1 !important;
-        padding: 16px 40px !important; /* 가로로 훨씬 넓게 여백 확보 */
-        border-radius: 12px !important; 
-        margin: 0 !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
-        cursor: pointer;
-        transition: all 0.2s ease;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        min-width: 160px !important; /* 도형의 최소 가로 너비를 강제 확장 */
+        background-color: #FFFFFF !important; border: 2px solid #CBD5E1 !important; padding: 16px 40px !important;
+        border-radius: 12px !important; margin: 0 !important; box-shadow: 0 2px 4px rgba(0,0,0,0.02); cursor: pointer; transition: all 0.2s ease;
+        display: flex; justify-content: center; align-items: center; min-width: 160px !important;
     }
-    div[data-testid="stRadio"] label[data-baseweb="radio"]:hover {
-        border-color: #D91B1B !important;
-        background-color: #FFF5F5 !important;
-    }
-    
-    /* 기존 동그라미 아이콘 완벽 숨김 (레이아웃 간섭 차단) */
-    div[data-testid="stRadio"] label[data-baseweb="radio"] > div:first-child {
-        width: 0px !important;
-        height: 0px !important;
-        opacity: 0 !important;
-        overflow: hidden !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        display: none !important;
-    }
-    
-    /* 숨어버린 글씨(텍스트)를 강제 노출 및 폰트 크기 확대 */
+    div[data-testid="stRadio"] label[data-baseweb="radio"]:hover { border-color: #D91B1B !important; background-color: #FFF5F5 !important; }
+    div[data-testid="stRadio"] label[data-baseweb="radio"] > div:first-child { display: none !important; }
     div[data-testid="stRadio"] label[data-baseweb="radio"] div[data-testid="stMarkdownContainer"] p {
-        display: block !important;
-        visibility: visible !important;
-        font-size: 22px !important;
-        font-weight: 900 !important;
-        color: #475569 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        text-align: center !important;
-        width: 100% !important;
+        display: block !important; visibility: visible !important; font-size: 22px !important; font-weight: 900 !important;
+        color: #475569 !important; margin: 0 !important; padding: 0 !important; text-align: center !important; width: 100% !important;
     }
-    
-    /* 선택된 구역(동) 도형 스타일 */
-    div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) {
-        background-color: #D91B1B !important;
-        border-color: #D91B1B !important;
-    }
-    div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) div[data-testid="stMarkdownContainer"] p {
-        color: #FFFFFF !important;
-    }
+    div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) { background-color: #D91B1B !important; border-color: #D91B1B !important; }
+    div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) div[data-testid="stMarkdownContainer"] p { color: #FFFFFF !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -147,22 +98,14 @@ def render_rank_cards(df, title, is_worst, name_col):
             name = str(row.get(name_col, '')).split(' - ')[0]
             oee = safe_float(row.get('종합효율', 0.0))
             down = safe_float(row.get('비가동시간', 0.0))
-            
             html += f"""
             <div style="display: flex; justify-content: space-between; align-items: center; background: white; padding: 12px 15px; border-radius: 8px; border-left: 5px solid {border_color}; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
                 <div style="font-weight: 900; color: #1E293B; font-size: 16px;">{i+1}. {name}</div>
                 <div style="display: flex; gap: 20px; align-items: center;">
-                    <div style="text-align: right;">
-                        <span style="font-size: 12px; color: #64748B; margin-right: 5px; font-weight: 600;">종합효율</span>
-                        <span style="color: {border_color}; font-weight: 900; font-size: 17px;">{oee:.1%}</span>
-                    </div>
-                    <div style="text-align: right; min-width: 60px;">
-                        <span style="font-size: 12px; color: #64748B; margin-right: 5px; font-weight: 600;">비가동</span>
-                        <span style="color: #475569; font-weight: 900; font-size: 16px;">{down:.1f}h</span>
-                    </div>
+                    <div style="text-align: right;"><span style="font-size: 12px; color: #64748B; margin-right: 5px; font-weight: 600;">종합효율</span><span style="color: {border_color}; font-weight: 900; font-size: 17px;">{oee:.1%}</span></div>
+                    <div style="text-align: right; min-width: 60px;"><span style="font-size: 12px; color: #64748B; margin-right: 5px; font-weight: 600;">비가동</span><span style="color: #475569; font-weight: 900; font-size: 16px;">{down:.1f}h</span></div>
                 </div>
-            </div>
-            """
+            </div>"""
     html += "</div></div>"
     st.markdown(html.replace('\n', ''), unsafe_allow_html=True)
 
@@ -177,7 +120,7 @@ def split_issue_to_columns(issue_text):
         if line: curr.append(line)
     if not has_s: return f"<div style='font-size:14px; font-weight: 600; color:#334155; text-align:left;'>{'<br>'.join(lines)}</div>"
     d_h = '<br>'.join(g_l + d_l) if (g_l + d_l) else "-"; n_h = '<br>'.join(n_l) if n_l else "-"
-    return f"<div style='display: flex; gap: 8px; text-align:left;'><div style='flex: 1; background-color: #FFFBEB; padding: 10px; border-radius: 6px; border-top: 3px solid #F59E0B;'><div style='font-size:12px; font-weight:900; color:#B45309; margin-bottom:4px;'>☀️ 주간</div><div style='font-size:13px; font-weight:600;'>{d_h}</div></div><div style='flex: 1; background-color: #F1F5F9; padding: 10px; border-radius: 6px; border-top: 3px solid #334155;'><div style='font-size:12px; font-weight:900; color:#1E293B; margin-bottom:4px;'>🌙 야간</div><div style='font-size:13px; font-weight:600;'>{n_h}</div></div></div>"
+    return f"<div style='display: flex; gap: 8px; text-align:left; width:100%; min-width:300px;'><div style='flex: 1; background-color: #FFFBEB; padding: 10px; border-radius: 6px; border-top: 3px solid #F59E0B;'><div style='font-size:12px; font-weight:900; color:#B45309; margin-bottom:4px;'>☀️ 주간</div><div style='font-size:13px; font-weight:600;'>{d_h}</div></div><div style='flex: 1; background-color: #F1F5F9; padding: 10px; border-radius: 6px; border-top: 3px solid #334155;'><div style='font-size:12px; font-weight:900; color:#1E293B; margin-bottom:4px;'>🌙 야간</div><div style='font-size:13px; font-weight:600;'>{n_h}</div></div></div>"
 
 def format_issue(text):
     val = str(text).strip()
@@ -189,22 +132,46 @@ def render_styler_to_html(styler):
     try: raw_html = styler.to_html(escape=False)
     except: raw_html = styler.to_html()
     clean_html = re.sub(r'<style.*?</style>', '', raw_html, flags=re.DOTALL | re.IGNORECASE)
-    custom_css = "<style>.custom-table { width: 100% !important; border-collapse: collapse !important; font-size: 14px !important; background-color: white !important; } .custom-table th { background-color: #1E293B !important; color: #FFFFFF !important; border: 1px solid #334155 !important; padding: 14px !important; font-weight: 700 !important; font-size: 15px !important; text-align: center !important; } .custom-table td { border: 1px solid #E2E8F0 !important; padding: 12px !important; font-weight: 500 !important; color: #334155 !important; text-align: center !important; vertical-align: middle !important; } .custom-table td:last-child { text-align: left !important; padding-left: 20px !important; }</style>"
+    custom_css = "<style>.custom-table { width: 100% !important; border-collapse: collapse !important; font-size: 14px !important; background-color: white !important; } .custom-table th { background-color: #1E293B !important; color: #FFFFFF !important; border: 1px solid #334155 !important; padding: 14px !important; font-weight: 700 !important; font-size: 15px !important; text-align: center !important; white-space: nowrap; } .custom-table td { border: 1px solid #E2E8F0 !important; padding: 12px !important; font-weight: 500 !important; color: #334155 !important; text-align: center !important; vertical-align: middle !important; }</style>"
     clean_html = clean_html.replace('<table', '<table class="custom-table"')
     final_html = custom_css + f"<div style='width:100%; overflow-x:auto; border:1px solid #CBD5E1; border-radius:10px; margin-bottom:25px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);'>{clean_html}</div>"
     final_html = final_html.replace('\n', '').replace('\r', '')
     st.markdown(final_html, unsafe_allow_html=True)
 
-def prepare_display_table(df, desired_cols):
-    safe_cols = [c for c in desired_cols if c in df.columns]
+# 🚨 요청 3번: 전일 대비 증감률 자동 계산 엔진 추가
+def prepare_daily_popup_table(df, full_df, current_date):
+    safe_cols = [c for c in ['설비명', '품명', '종합효율', '비가동시간', 'OPEN ISSUE'] if c in df.columns]
     disp_df = df[safe_cols].copy()
+
+    var_list = []
+    for idx, row in disp_df.iterrows():
+        mach_name = row['설비명']
+        mach_df = full_df[full_df['설비명'] == mach_name].sort_values('sort_key')
+        curr_row = mach_df[mach_df['생산일'] == current_date]
+        if curr_row.empty: var_list.append("<span style='color:#94A3B8;'>-</span>")
+        else:
+            curr_sort_key = curr_row.iloc[0]['sort_key']
+            past_df = mach_df[mach_df['sort_key'] < curr_sort_key]
+            if past_df.empty: var_list.append("<span style='color:#94A3B8;'>-</span>")
+            else:
+                prev_oee = safe_float(past_df.iloc[-1]['종합효율'])
+                curr_oee = safe_float(curr_row.iloc[0]['종합효율'])
+                diff = curr_oee - prev_oee
+                if diff > 0: var_list.append(f"<span style='color:#2563EB; font-weight:900;'>▲ +{diff*100:.1f}%p</span>")
+                elif diff < 0: var_list.append(f"<span style='color:#DC2626; font-weight:900;'>▼ {diff*100:.1f}%p</span>")
+                else: var_list.append("<span style='color:#64748B; font-weight:900;'>-</span>")
+    
+    disp_df['전일 대비(효율)'] = var_list
+
     for idx, row in disp_df.iterrows():
         if '종합효율' in disp_df.columns: disp_df.at[idx, '종합효율'] = f"{safe_float(row['종합효율']):.1%}"
-        if '총 생산수량' in disp_df.columns: disp_df.at[idx, '총 생산수량'] = f"{int(safe_float(row['총 생산수량'])):,}"
         if '비가동시간' in disp_df.columns: disp_df.at[idx, '비가동시간'] = f"{safe_float(row['비가동시간']):.1f}h"
-    if 'OPEN ISSUE' in disp_df.columns:
-        disp_df['OPEN ISSUE'] = disp_df['OPEN ISSUE'].apply(split_issue_to_columns)
-    return disp_df
+    if 'OPEN ISSUE' in disp_df.columns: disp_df['OPEN ISSUE'] = disp_df['OPEN ISSUE'].apply(split_issue_to_columns)
+    
+    # 컬럼 순서 재배치 (제일 우측에 증감률)
+    cols = [c for c in disp_df.columns if c not in ['OPEN ISSUE', '전일 대비(효율)']]
+    cols.extend(['OPEN ISSUE', '전일 대비(효율)'])
+    return disp_df[cols]
 
 def get_building_group(mach_name):
     try:
@@ -218,11 +185,12 @@ def get_building_group(mach_name):
     except: return "기타 구역"
 
 # ==========================================
-# 🌟 3. 팝업창 (UI 고도화)
+# 🌟 3. 팝업창 
 # ==========================================
 @st.dialog("📅 일일 가동 상세 현황", width="large")
-def show_daily_summary_popup(clicked_date, f_df, daily_df):
-    st.markdown(f"<h2 style='text-align:center; color:#0F172A; font-weight:900; font-size:36px; margin-bottom:10px;'><span style='color:#D91B1B;'>{clicked_date}</span> 현장 가동 모니터링</h2><hr style='border-top: 3px solid #E2E8F0; margin-bottom: 30px;'>", unsafe_allow_html=True)
+def show_daily_summary_popup(clicked_date, f_df, daily_df, full_df):
+    # 🚨 요청 1번: 팝업 타이틀 텍스트 변경 및 디자인 강화
+    st.markdown(f"<h2 style='text-align:center; color:#0F172A; font-weight:900; font-size:36px; margin-bottom:10px;'><span style='color:#D91B1B;'>{clicked_date}</span> 사출생산팀 생산 실적 및 오픈이슈 현황</h2><hr style='border-top: 3px solid #E2E8F0; margin-bottom: 30px;'>", unsafe_allow_html=True)
     
     day_df = f_df[f_df['생산일'] == clicked_date].copy().sort_values('설비명')
     active_day = day_df[day_df['종합효율'] > 0]
@@ -230,7 +198,6 @@ def show_daily_summary_popup(clicked_date, f_df, daily_df):
     if not active_day.empty:
         active_count = len(active_day)
         total_down = active_day['비가동시간'].apply(safe_float).sum()
-        
         matching_daily = daily_df[daily_df['생산일'] == clicked_date]
         if not matching_daily.empty: day_total_val = matching_daily['공장종합효율'].iloc[0]
         else: day_total_val = active_day['종합효율'].apply(safe_float).mean() 
@@ -245,12 +212,14 @@ def show_daily_summary_popup(clicked_date, f_df, daily_df):
         best_5_mach = active_day.sort_values(by='종합효율', ascending=False).head(5)
         worst_5_mach = active_day.sort_values(by='종합효율', ascending=True).head(5)
         
+        # 🚨 요청 2번: 괄호 삭제 간결한 BEST 5 / WORST 5
         col_best, col_worst = st.columns(2)
-        with col_best: render_rank_cards(best_5_mach, "BEST 5 설비 (종합효율 상위)", is_worst=False, name_col="설비명")
-        with col_worst: render_rank_cards(worst_5_mach, "WORST 5 설비 (종합효율 하위)", is_worst=True, name_col="설비명")
+        with col_best: render_rank_cards(best_5_mach, "BEST 5", is_worst=False, name_col="설비명")
+        with col_worst: render_rank_cards(worst_5_mach, "WORST 5", is_worst=True, name_col="설비명")
 
         st.markdown("<h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📋 전체 설비 상세 가동 내역</h4>", unsafe_allow_html=True)
-        disp_day = prepare_display_table(active_day, ['설비명', '품명', '종합효율', '비가동시간', '총 생산수량', 'OPEN ISSUE'])
+        # 🚨 요청 3번: 증감률 자동 계산 표 출력
+        disp_day = prepare_daily_popup_table(active_day, full_df, clicked_date)
         render_styler_to_html(disp_day.style.hide(axis="index"))
     else:
         st.info("해당 일자의 설비 가동 데이터가 존재하지 않습니다.")
@@ -260,7 +229,6 @@ def show_machine_popup(tgt_mach, t7_df):
     st.markdown(f"<h2 style='text-align:center; color:#0F172A; font-weight:900; font-size:36px; margin-bottom:10px;'><span style='color:#2563EB;'>{tgt_mach}</span> 이력 모니터링</h2><hr style='border-top: 3px solid #E2E8F0; margin-bottom: 30px;'>", unsafe_allow_html=True)
     
     valid_t7 = t7_df[t7_df['종합효율'] > 0].copy()
-    
     avg_oee = valid_t7['종합효율'].apply(safe_float).mean() if not valid_t7.empty else 0.0
     total_down = t7_df['비가동시간'].apply(safe_float).sum()
     issue_count = t7_df['OPEN ISSUE'].apply(lambda x: 0 if str(x).strip() in ['', 'nan', '0', '0.0'] else 1).sum()
@@ -278,7 +246,6 @@ def show_machine_popup(tgt_mach, t7_df):
     ))
     fig7.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=350, yaxis=dict(tickformat='.0%', range=[0, 1.1]), margin=dict(l=0, r=0, t=10, b=0))
     st.plotly_chart(fig7, use_container_width=True)
-    
     st.markdown("<br>", unsafe_allow_html=True)
     
     if not valid_t7.empty:
@@ -286,8 +253,8 @@ def show_machine_popup(tgt_mach, t7_df):
         worst_5_days = valid_t7.sort_values(by='종합효율', ascending=True).head(5)
         
         col_best, col_worst = st.columns(2)
-        with col_best: render_rank_cards(best_5_days, "BEST 5 생산일 (효율 최고)", is_worst=False, name_col="생산일")
-        with col_worst: render_rank_cards(worst_5_days, "WORST 5 생산일 (효율 최하)", is_worst=True, name_col="생산일")
+        with col_best: render_rank_cards(best_5_days, "BEST 5", is_worst=False, name_col="생산일")
+        with col_worst: render_rank_cards(worst_5_days, "WORST 5", is_worst=True, name_col="생산일")
     else: 
         st.info("해당 설비의 유효한 가동 데이터가 없습니다.")
 
@@ -296,7 +263,14 @@ def show_machine_popup(tgt_mach, t7_df):
     title_dynamic = f"📋 {mach_short} {prod_name} 생산성 및 오픈 이슈 현황"
     
     st.markdown(f"<h4 style='font-weight:900; color:#0F172A; margin-bottom:15px; margin-top:20px;'>{title_dynamic}</h4>", unsafe_allow_html=True)
-    disp_t7 = prepare_display_table(t7_df, ['생산일', '품명', '종합효율', '비가동시간', '총 생산수량', 'OPEN ISSUE'])
+    
+    # 탭2에서는 단순 표 (총 생산수량 숨김 적용)
+    safe_cols = [c for c in ['생산일', '품명', '종합효율', '비가동시간', 'OPEN ISSUE'] if c in t7_df.columns]
+    disp_t7 = t7_df[safe_cols].copy()
+    for idx, row in disp_t7.iterrows():
+        if '종합효율' in disp_t7.columns: disp_t7.at[idx, '종합효율'] = f"{safe_float(row['종합효율']):.1%}"
+        if '비가동시간' in disp_t7.columns: disp_t7.at[idx, '비가동시간'] = f"{safe_float(row['비가동시간']):.1f}h"
+    if 'OPEN ISSUE' in disp_t7.columns: disp_t7['OPEN ISSUE'] = disp_t7['OPEN ISSUE'].apply(split_issue_to_columns)
     render_styler_to_html(disp_t7.style.hide(axis="index"))
 
 # ==========================================
@@ -373,13 +347,41 @@ if data_to_process:
     df['OPEN ISSUE'] = df['OPEN ISSUE'].apply(format_issue)
 
     # =========================================================
-    # 🌟 5. 레이아웃 및 필터
+    # 🌟 5. 레이아웃 및 필터 (로고 확대, 타이틀 변경, 전광판 추가)
     # =========================================================
-    title_col1, title_col2 = st.columns([0.6, 9.4])
+    title_col1, title_col2, title_col3 = st.columns([1, 6, 3])
     with title_col1:
-        try: st.image("logo.png", width=80) 
-        except: st.markdown("<div style='font-size: 50px; margin-top: 5px;'>🏭</div>", unsafe_allow_html=True)
-    with title_col2: st.markdown("<h1 style='margin-top: 15px; margin-bottom: 25px; font-weight: 900; font-size: 34px; color: #0F172A;'>사출생산팀 현장 설비 모니터링</h1>", unsafe_allow_html=True)
+        # 🚨 요청 4번: 로고 크기 대폭 확대
+        try: st.image("logo.png", width=150) 
+        except: st.markdown("<div style='font-size: 60px; margin-top: 5px;'>🏭</div>", unsafe_allow_html=True)
+        
+    with title_col2: 
+        # 🚨 요청 4번: 메인 타이틀 변경
+        st.markdown("<h1 style='margin-top: 25px; margin-bottom: 25px; font-weight: 900; font-size: 28px; color: #0F172A;'>듀링 사출생산팀 일일 생산성 분석 및 오픈 이슈 현황 관리 리포트</h1>", unsafe_allow_html=True)
+
+    with title_col3:
+        # 🚨 요청 4번: 우측 상단 '최근 업데이트 전광판' (전일대비 증감률 탑재)
+        if not daily_df.empty:
+            recent_row = daily_df.iloc[-1]
+            rec_date = recent_row['생산일']
+            rec_oee = safe_float(recent_row['공장종합효율'])
+            diff_str = "-"
+            if len(daily_df) > 1:
+                prev_oee = safe_float(daily_df.iloc[-2]['공장종합효율'])
+                diff = rec_oee - prev_oee
+                if diff > 0: diff_str = f"<span style='color:#2563EB;'>▲ +{diff*100:.1f}%p</span>"
+                elif diff < 0: diff_str = f"<span style='color:#DC2626;'>▼ {diff*100:.1f}%p</span>"
+
+            st.markdown(f"""
+            <div style='background-color: #F8FAFC; border: 2px solid #E2E8F0; border-radius: 12px; padding: 12px 20px; margin-top: 15px; text-align: right; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);'>
+                <div style='font-size: 14px; color: #64748B; font-weight: 800; margin-bottom: 5px;'>⏳ 가장 최근 생산일: {rec_date}</div>
+                <div style='font-size: 24px; font-weight: 900; color: #0F172A;'>
+                    종합효율 <span style='color: #1E293B;'>{rec_oee:.1%}</span> <span style='font-size: 18px; margin-left: 10px;'>{diff_str}</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.markdown("<hr style='border: 1px solid #E2E8F0; margin-top: 5px; margin-bottom: 20px;'>", unsafe_allow_html=True)
 
     f1, f2 = st.columns(2)
     all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
@@ -409,11 +411,12 @@ if data_to_process:
         if not p_df.empty:
             avg_oee = p_df['공장종합효율'].mean()
             
+            # 🚨 요청 3번: 목표 달성 스마트 브리핑 문구 변경
             is_achieved = avg_oee >= 0.86
             status_color = "#2563EB" if is_achieved else "#DC2626"
             status_text = "목표 효율 대비 달성 중입니다." if is_achieved else "목표 효율 대비 미달성 중입니다."
             
-            guide_text = f"사출생산팀 ({title_month_str}) 종합 효율은 <b>{avg_oee:.1%}</b>로 <span style='color:{status_color}; font-weight:900;'>{status_text}</span> 분석할 생산일의 그래프를 선택하면 해당 일의 생산성 자료 및 오픈이슈를 확인 가능합니다. 또한 <b>탭2 (설비별 정밀 분석)</b>에서 각 설비의 생산일 별 생산성 및 오픈이슈를 확인 가능합니다."
+            guide_text = f"사출생산팀 ({title_month_str}) 종합 효율은 <b>{avg_oee:.1%}</b>로 <span style='color:{status_color}; font-weight:900;'>{status_text}</span><br>분석할 생산일의 그래프를 선택하면 해당 일의 생산성 자료 및 오픈이슈를 확인 가능합니다. 또한 <b>탭2 (설비별 정밀 분석)</b>에서 각 설비의 생산일 별 생산성 및 오픈이슈를 확인 가능합니다."
             
             render_tab_insight("💡 사출생산팀 생산성 추이 분석", guide_text)
             
@@ -435,7 +438,8 @@ if data_to_process:
                 if st.session_state.trigger_daily_popup:
                     date_to_show = st.session_state.trigger_daily_popup
                     st.session_state.trigger_daily_popup = None 
-                    show_daily_summary_popup(date_to_show, f_df, daily_df)
+                    # 🚨 df 전체(df)를 넘겨 과거 데이터를 조회하게 합니다.
+                    show_daily_summary_popup(date_to_show, f_df, daily_df, df)
                     
             except TypeError:
                 st.plotly_chart(fig_oee, use_container_width=True)
