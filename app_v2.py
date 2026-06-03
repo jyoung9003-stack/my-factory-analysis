@@ -12,15 +12,12 @@ from collections import Counter
 # ==========================================
 # 🚨 [관리자 설정] 도면 위 설비 좌표 (x%, y%)
 # ==========================================
-# 도면(layout.jpg)의 왼쪽 위 끝이 x:0, y:0 이고, 오른쪽 아래 끝이 x:100, y:100 입니다.
-# 여기에 관리자님의 실제 설비 위치 비율을 적어주시면 도면 위에 효율(%)이 나타납니다!
 LAYOUT_COORDS = {
     "04호기": {"x": 42, "y": 15},
     "06호기": {"x": 55, "y": 15},
     "08호기": {"x": 68, "y": 15},
     "53호기": {"x": 10, "y": 80},
     "56호기": {"x": 25, "y": 80},
-    # 필요하신 만큼 아래에 계속 추가하시면 됩니다. (예: "10호기": {"x": 42, "y": 30})
 }
 
 # ==========================================
@@ -79,7 +76,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 🌟 2. 5-Factor AI 키워드 분석 & 공통 함수
+# 🌟 2. 3-Factor AI 키워드 분석 & 공통 함수
 # ==========================================
 def safe_float(val):
     try:
@@ -91,17 +88,21 @@ def safe_float(val):
         return float(v_str)
     except: return 0.0
 
-# 🚨 요청 1번: 사출 현장 5대 요소(Factor) 다차원 분류 엔진
+# 🚨 요청 1번: 사출 현장 3대 핵심 요소로 통폐합 및 키워드 정밀화
 def categorize_issues(df, column='OPEN ISSUE'):
     if column not in df.columns: return {}
     text_data = " ".join(df[column].dropna().astype(str).tolist())
     
+    # 무의미한 단어 1차 필터링
+    stopwords = ['주간', '야간', '특이사항', '없음', 'nan', 'none', '->', '→', '-', '*', '.', ',', '및', '등', '인한', '조치', '확인', '현상']
+    for sw in stopwords:
+        text_data = text_data.replace(sw, ' ')
+    
+    # 3대 카테고리 (설비/금형/품질조건)
     categories = {
-        "🤖 사출기/로봇": ['로보트', '로봇', '그리퍼', '원점', '스토퍼', '실린더', '노즐', '타이바', '사출기', '서보', '모터', '밸브', '에어라인', '작동성'],
-        "🛠️ 금형": ['금형', '코어', '인서트', '핀', '슬라이드', '캐비티', '런너', '게이트', '이젝터', '파팅', '밀핀'],
-        "⚙️ 주변설비": ['온수기', '냉각기', '공급기', '피딩', '건조기', '호퍼', '컨베이어', '비전', '검사기', '칠러'],
-        "🌡️ 사출조건": ['온도', '압력', '속도', '시간', '위치', '계량', '보압', '조건', '세팅', '셋팅', '승온', '재세팅', '구간', '장력'],
-        "✨ 품질/기타": ['미성형', '버', 'Burr', '흑점', '웰드', '스크래치', '치수', '변형', '오염', '찍힘', '누락', '간섭', '이탈', '공타', '미스']
+        "⚙️ 설비 (사출기/주변설비)": ['볼트', '이탈', '파손', '단선', '마모', '누수', '고장', '로보트', '로봇', '그리퍼', '원점', '스토퍼', '실린더', '노즐', '타이바', '사출기', '서보', '모터', '밸브', '에어라인', '작동성', '온수기', '냉각기', '공급기', '피딩', '건조기', '호퍼', '컨베이어', '비전', '검사기', '칠러', '센서', '히터', '알람', '대기', '지연', '재가동'],
+        "🛠️ 금형": ['금형', '코어', '인서트', '핀', '슬라이드', '캐비티', '런너', '게이트', '이젝터', '파팅', '밀핀', '스프루', '가이드', '취출', '냉각수', '세척'],
+        "✨ 품질 및 사출조건": ['미성형', '버', 'Burr', '흑점', '웰드', '스크래치', '치수', '변형', '오염', '찍힘', '누락', '간섭', '공타', '미스', '가스', '수지', '이물', '불량', '온도', '압력', '속도', '시간', '위치', '계량', '보압', '조건', '세팅', '셋팅', '승온', '재세팅', '구간', '장력', '조정', '수정']
     }
 
     results = {k: [] for k in categories.keys()}
@@ -112,8 +113,9 @@ def categorize_issues(df, column='OPEN ISSUE'):
             if count > 0:
                 results[cat].append((kw, count))
     
+    # 카테고리별로 최다 언급 키워드 상위 5개씩 추출
     for cat in results:
-        results[cat] = sorted(results[cat], key=lambda x: x[1], reverse=True)[:3] 
+        results[cat] = sorted(results[cat], key=lambda x: x[1], reverse=True)[:5] 
         
     return {k: v for k, v in results.items() if v}
 
@@ -121,12 +123,14 @@ def render_keyword_tags(categorized_data):
     if not categorized_data: return
     
     html = "<div style='background-color:#FFFBEB; border-left:6px solid #F59E0B; padding:18px 20px; border-radius:10px; margin-bottom:20px; box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.05);'>"
-    html += "<div style='font-size:16px; font-weight:900; color:#B45309; margin-bottom:15px;'>🔍 5-Factor 트러블 원인 분석 (키워드 최다 언급순)</div>"
+    html += "<div style='font-size:16px; font-weight:900; color:#B45309; margin-bottom:15px;'>🔍 핵심 트러블 원인 분석 (키워드 최다 언급순)</div>"
     html += "<div style='display:flex; flex-wrap:wrap; gap:15px;'>"
     
     for cat, items in categorized_data.items():
-        tags = "".join([f"<span style='background-color:#FEF3C7; color:#D97706; padding:4px 10px; border-radius:12px; font-weight:800; font-size:13px; margin-right:5px; border:1px solid #FCD34D;'>{word} <span style='font-size:11px; color:#B45309;'>({cnt})</span></span>" for word, cnt in items])
-        html += f"<div style='background-color:#FFFFFF; border:1px solid #FDE68A; border-radius:8px; padding:12px 15px; flex: 1; min-width: 220px;'><div style='font-size:14px; font-weight:800; color:#92400E; margin-bottom:8px;'>{cat}</div><div>{tags}</div></div>"
+        # 🚨 요청 1번: white-space:nowrap과 inline-block으로 태그 깨짐 완벽 방어
+        tags = "".join([f"<span style='display:inline-block; white-space:nowrap; background-color:#FEF3C7; color:#D97706; padding:6px 12px; border-radius:12px; font-weight:800; font-size:13px; margin-bottom:6px; margin-right:6px; border:1px solid #FCD34D;'>{word} <span style='font-size:11px; color:#B45309;'>({cnt})</span></span>" for word, cnt in items])
+        if not tags: tags = "<span style='font-size:13px; color:#9CA3AF; font-weight:600;'>관련 이슈 없음</span>"
+        html += f"<div style='background-color:#FFFFFF; border:1px solid #FDE68A; border-radius:8px; padding:15px; flex: 1; min-width: 250px;'><div style='font-size:15px; font-weight:800; color:#92400E; margin-bottom:12px;'>{cat}</div><div>{tags}</div></div>"
         
     html += "</div></div>"
     st.markdown(html, unsafe_allow_html=True)
@@ -283,7 +287,6 @@ def show_daily_summary_popup(clicked_date, f_df, daily_df, full_df):
         with col_best: render_rank_cards(best_5_mach, "BEST 5", is_worst=False, name_col="설비명")
         with col_worst: render_rank_cards(worst_5_mach, "WORST 5", is_worst=True, name_col="설비명")
 
-        # 🚨 AI 분류 엔진 호출
         categorized_data = categorize_issues(active_day)
         render_keyword_tags(categorized_data)
 
@@ -635,7 +638,6 @@ if data_to_process:
     with tab3:
         render_section_title("🗺️ 현장 레이아웃 OEE 라이브 뷰")
         
-        # 1. 최근 가동 데이터 추출 (가장 최신 생산일 기준)
         latest_date = None
         if not daily_df.empty: latest_date = daily_df.iloc[-1]['생산일']
         
@@ -645,7 +647,6 @@ if data_to_process:
         else:
             latest_f_df = pd.DataFrame()
             
-        # 2. 도면 이미지 불러오기 (layout.jpg 또는 layout.png)
         img_path = None
         if os.path.exists("layout.jpg"): img_path = "layout.jpg"
         elif os.path.exists("layout.png"): img_path = "layout.png"
@@ -653,19 +654,17 @@ if data_to_process:
         if img_path:
             img_b64 = get_image_base64(img_path)
             
-            # 3. 오버레이 HTML 생성
             overlay_html = ""
             for mach, coords in LAYOUT_COORDS.items():
                 x, y = coords['x'], coords['y']
                 
-                # 해당 설비의 최근 OEE 찾기
                 mach_row = latest_f_df[latest_f_df['설비명'].str.contains(mach, na=False)]
                 if not mach_row.empty and safe_float(mach_row.iloc[0]['종합효율']) > 0:
                     oee_val = safe_float(mach_row.iloc[0]['종합효율'])
-                    bg_color = "rgba(37, 99, 235, 0.9)" if oee_val >= 0.86 else "rgba(220, 38, 38, 0.9)" # 파란색 or 빨간색
+                    bg_color = "rgba(37, 99, 235, 0.9)" if oee_val >= 0.86 else "rgba(220, 38, 38, 0.9)" 
                     oee_str = f"{oee_val:.1%}"
                 else:
-                    bg_color = "rgba(100, 116, 139, 0.8)" # 가동 안함 (회색)
+                    bg_color = "rgba(100, 116, 139, 0.8)" 
                     oee_str = "OFF"
 
                 overlay_html += f"""
@@ -680,7 +679,6 @@ if data_to_process:
                 </div>
                 """
 
-            # HTML 구조로 이미지와 오버레이 결합
             map_html = f"""
             <div style="position: relative; width: 100%; max-width: 1400px; margin: 0 auto; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); border: 1px solid #CBD5E1;">
                 <img src="data:image/jpeg;base64,{img_b64}" style="width: 100%; height: auto; display: block;">
