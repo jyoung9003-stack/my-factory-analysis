@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 import re
 import os
 from datetime import datetime
+from collections import Counter # 🚨 키워드 분석용 라이브러리 추가
 
 # ==========================================
 # 🌟 1. 기본 설정 및 테마
@@ -63,7 +64,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 🌟 2. 공통 함수
+# 🌟 2. 공통 함수 및 AI 분석 엔진
 # ==========================================
 def safe_float(val):
     try:
@@ -74,6 +75,35 @@ def safe_float(val):
         if '%' in v_str: return float(v_str.replace('%', '')) / 100.0
         return float(v_str)
     except: return 0.0
+
+# 🚨 요청 2번: 오픈이슈 텍스트 트러블 분석(키워드 추출) 엔진
+def extract_keywords(df, column='OPEN ISSUE', top_n=5):
+    if column not in df.columns: return []
+    text_data = " ".join(df[column].dropna().astype(str).tolist())
+    # 쓸데없는 단어 필터링
+    stopwords = ['주간', '야간', '특이사항', '없음', 'nan', 'none', '->', '→', '-', '*', '.', ',', '및', '등', '발생', '인한', '조치', '확인', '진행', '현상', '조정', '알람', '대기', '불량', '지연', '재가동', '수정', '교체', '재세팅', '미흡', '점검']
+    for sw in stopwords:
+        text_data = text_data.replace(sw, ' ')
+    
+    # 2글자 이상 의미있는 단어만 추출
+    words = re.findall(r'[가-힣a-zA-Z0-9]+', text_data)
+    meaningful_words = [w for w in words if len(w) >= 2]
+    
+    if not meaningful_words: return []
+    return Counter(meaningful_words).most_common(top_n)
+
+def render_keyword_tags(keywords):
+    if not keywords: return
+    tags_html = "".join([f"<span style='background-color:#FEF3C7; color:#D97706; padding:6px 14px; border-radius:20px; font-weight:900; font-size:14px; border:1px solid #FCD34D; box-shadow: 0 1px 2px rgba(0,0,0,0.05);'>#{word} <span style='font-size:12px; color:#B45309;'>({cnt}건)</span></span>" for word, cnt in keywords])
+    html = f"""
+    <div style='background-color:#FFFBEB; border-left:6px solid #F59E0B; padding:18px 20px; border-radius:10px; margin-bottom:20px; box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.05);'>
+        <div style='font-size:15px; font-weight:900; color:#B45309; margin-bottom:10px;'>🔍 주요 트러블/이슈 키워드 분석 (최다 언급)</div>
+        <div style='display:flex; gap:10px; flex-wrap:wrap;'>
+            {tags_html}
+        </div>
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
 
 def render_section_title(text): st.markdown(f"<div class='section-banner'><h3>{text}</h3></div>", unsafe_allow_html=True)
 def render_tab_insight(title, content): st.markdown(f"<div style='background-color:#F8FAFC; border-left:6px solid #3B82F6; border-radius:8px; padding:20px 25px; margin-bottom:25px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);'><h4 style='margin-top:0; color:#1E293B; font-weight:900; font-size:18px; margin-bottom:12px;'>{title}</h4><div style='line-height:1.7; font-size:15.5px; color:#334155;'>{content}</div></div>", unsafe_allow_html=True)
@@ -156,7 +186,7 @@ def prepare_popup_table_with_diff(df, full_df, current_date, is_tab1=False):
         mach_df = full_df[full_df['설비명'] == mach_name].sort_values('sort_key')
         valid_mach_df = mach_df[mach_df['종합효율'].apply(safe_float) > 0]
         
-        curr_row = mach_df[mach_df['생산일'] == current_date]
+        curr_row = mach_df[mach_df['생산일'] == current_date] if current_date else mach_df[mach_df['생산일'] == row['생산일']]
         if curr_row.empty or safe_float(curr_row.iloc[0]['종합효율']) <= 0: 
             var_list.append("<span style='color:#94A3B8;'>-</span>")
         else:
@@ -194,7 +224,7 @@ def get_building_group(mach_name):
     except: return "기타 구역"
 
 # ==========================================
-# 🌟 3. 팝업창 
+# 🌟 3. 팝업창 (일간 및 월간 듀얼 기능)
 # ==========================================
 @st.dialog("📅 일일 가동 상세 현황", width="large")
 def show_daily_summary_popup(clicked_date, f_df, daily_df, full_df):
@@ -223,14 +253,62 @@ def show_daily_summary_popup(clicked_date, f_df, daily_df, full_df):
         with col_best: render_rank_cards(best_5_mach, "BEST 5", is_worst=False, name_col="설비명")
         with col_worst: render_rank_cards(worst_5_mach, "WORST 5", is_worst=True, name_col="설비명")
 
+        # 🚨 요청 2번: 키워드 분석 태그 렌더링
+        keywords = extract_keywords(active_day)
+        render_keyword_tags(keywords)
+
         st.markdown("<h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📋 전체 설비 상세 가동 내역</h4>", unsafe_allow_html=True)
         disp_day = prepare_popup_table_with_diff(active_day, full_df, clicked_date, is_tab1=True)
         render_styler_to_html(disp_day.style.hide(axis="index"))
     else:
         st.info("해당 일자의 설비 가동 데이터가 존재하지 않습니다.")
 
+# 🚨 보너스 기능: 전체 기간 조회 중 '월(Month)' 막대를 클릭했을 때 뜨는 월간 리포트
+@st.dialog("📅 월간 통합 실적 리포트", width="large")
+def show_monthly_summary_popup(clicked_month, f_df, daily_df, full_df):
+    st.markdown(f"<h2 style='text-align:center; color:#0F172A; font-weight:900; font-size:32px; margin-bottom:10px;'><span style='color:#D91B1B;'>{clicked_month}</span> 사출생산팀 통합 실적 및 오픈이슈 요약</h2><hr style='border-top: 3px solid #E2E8F0; margin-bottom: 30px;'>", unsafe_allow_html=True)
+    
+    month_df = f_df[f_df['생산월'] == clicked_month].copy()
+    valid_month = month_df[month_df['종합효율'] > 0]
+    
+    if not valid_month.empty:
+        mach_agg = valid_month.groupby(['설비명', '품명']).agg({'종합효율':'mean', '비가동시간':'sum'}).reset_index()
+        issue_agg = valid_month.groupby(['설비명'])['OPEN ISSUE'].apply(lambda x: "\n".join([str(i) for i in x if str(i).strip() not in ['', 'nan', '0', '0.0', 'None']])).reset_index()
+        mach_agg = pd.merge(mach_agg, issue_agg, on='설비명', how='left')
+        
+        active_count = len(mach_agg['설비명'].unique())
+        total_down = mach_agg['비가동시간'].sum()
+        month_total_val = daily_df[daily_df['생산월'] == clicked_month]['공장종합효율'].mean()
+        
+        c1, c2, c3 = st.columns(3)
+        with c1: render_scoreboard_metric("💡 월간 가동 설비 (누적)", f"{active_count}대", "#32CD32")
+        with c2: render_scoreboard_metric("📊 월간 평균 종합효율", f"{month_total_val:.1%}", "#3B82F6" if month_total_val >= 0.86 else "#FF3131")
+        with c3: render_scoreboard_metric("🛑 월간 총 비가동시간", f"{total_down:.1f}h", "#FF3131" if total_down > 0 else "#32CD32")
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        best_5_mach = mach_agg.sort_values(by='종합효율', ascending=False).head(5)
+        worst_5_mach = mach_agg.sort_values(by='종합효율', ascending=True).head(5)
+        col_best, col_worst = st.columns(2)
+        with col_best: render_rank_cards(best_5_mach, "월간 평균 OEE BEST 5", is_worst=False, name_col="설비명")
+        with col_worst: render_rank_cards(worst_5_mach, "월간 평균 OEE WORST 5", is_worst=True, name_col="설비명")
+
+        keywords = extract_keywords(valid_month)
+        render_keyword_tags(keywords)
+
+        st.markdown("<h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📋 월간 설비별 종합 가동 내역</h4>", unsafe_allow_html=True)
+        # 월간 데이터는 평균이므로 증감율 컬럼 대신 깔끔하게 테이블만 렌더링
+        disp_month = mach_agg[['설비명', '품명', '종합효율', '비가동시간', 'OPEN ISSUE']].copy()
+        for idx, row in disp_month.iterrows():
+            disp_month.at[idx, '종합효율'] = f"{safe_float(row['종합효율']):.1%}"
+            disp_month.at[idx, '비가동시간'] = f"{safe_float(row['비가동시간']):.1f}h"
+        disp_month['OPEN ISSUE'] = disp_month['OPEN ISSUE'].apply(split_issue_to_columns)
+        render_styler_to_html(disp_month.style.hide(axis="index"))
+    else:
+        st.info("해당 월의 설비 가동 데이터가 존재하지 않습니다.")
+
 @st.dialog("💻 설비 집중 분석 리포트", width="large")
-def show_machine_popup(tgt_mach, t7_df, full_df):
+def show_machine_popup(tgt_mach, t7_df, full_df, sel_m_side):
     st.markdown(f"<h2 style='text-align:center; color:#0F172A; font-weight:900; font-size:32px; margin-bottom:10px;'><span style='color:#2563EB;'>{tgt_mach}</span> 이력 모니터링</h2><hr style='border-top: 3px solid #E2E8F0; margin-bottom: 30px;'>", unsafe_allow_html=True)
     
     valid_t7 = t7_df[t7_df['종합효율'] > 0].copy()
@@ -243,10 +321,20 @@ def show_machine_popup(tgt_mach, t7_df, full_df):
     with c2: render_scoreboard_metric("🛑 누적 비가동 손실", f"{total_down:.1f}h", "#FF3131" if total_down > 0 else "#32CD32")
     with c3: render_scoreboard_metric("📝 이슈 발생 일수", f"{issue_count}일", "#FF9900" if issue_count > 0 else "#32CD32") 
     
-    st.markdown("<br><h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📊 일자별 종합효율 흐름도</h4>", unsafe_allow_html=True)
+    # 🚨 요청 1번: 탭 2에서도 '전체' 선택시 월간 평균 차트로 변환 
+    if not sel_m_side:
+        chart_df = valid_t7.groupby('생산월').agg({'종합효율': 'mean', 'sort_key': 'min'}).sort_values('sort_key').reset_index()
+        x_col = '생산월'
+        chart_title = "📊 월별 평균 종합효율 흐름도"
+    else:
+        chart_df = t7_df
+        x_col = '생산일'
+        chart_title = "📊 일자별 종합효율 흐름도"
+
+    st.markdown(f"<br><h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>{chart_title}</h4>", unsafe_allow_html=True)
     fig7 = go.Figure(go.Scatter(
-        x=t7_df['생산일'], y=t7_df['종합효율'], mode='lines+markers+text',
-        text=t7_df['종합효율'].apply(lambda x: f"{x:.1%}"), textposition="top center",
+        x=chart_df[x_col], y=chart_df['종합효율'], mode='lines+markers+text',
+        text=chart_df['종합효율'].apply(lambda x: f"{x:.1%}"), textposition="top center",
         line=dict(color='#2563EB', width=4), marker=dict(size=12, color='#0F172A'), textfont=dict(size=14, weight='bold')
     ))
     fig7.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=350, yaxis=dict(tickformat='.0%', range=[0, 1.1]), margin=dict(l=0, r=0, t=10, b=0))
@@ -262,42 +350,17 @@ def show_machine_popup(tgt_mach, t7_df, full_df):
     else: 
         st.info("해당 설비의 유효한 가동 데이터가 없습니다.")
 
+    # 🚨 요청 2번: 설비 집중 분석에도 키워드 분석 태그 렌더링
+    keywords = extract_keywords(valid_t7)
+    render_keyword_tags(keywords)
+
     mach_short = str(tgt_mach).split(' - ')[0].strip()
     prod_name = valid_t7['품명'].dropna().iloc[0] if not valid_t7['품명'].dropna().empty else ""
     title_dynamic = f"📋 {mach_short} {prod_name} 생산성 및 오픈 이슈 현황"
     st.markdown(f"<h4 style='font-weight:900; color:#0F172A; margin-bottom:15px; margin-top:20px;'>{title_dynamic}</h4>", unsafe_allow_html=True)
     
     disp_t7 = prepare_popup_table_with_diff(t7_df, full_df, None, is_tab1=False) 
-    
-    safe_cols = [c for c in ['생산일', 'sort_key', '품명', '종합효율', '비가동시간', 'OPEN ISSUE'] if c in t7_df.columns]
-    raw_disp_t7 = t7_df[safe_cols].copy()
-    var_list_t2 = []
-    valid_mach_df = full_df[full_df['설비명'] == tgt_mach].sort_values('sort_key')
-    valid_mach_df = valid_mach_df[valid_mach_df['종합효율'].apply(safe_float) > 0]
-    
-    for idx, row in raw_disp_t7.iterrows():
-        curr_oee = safe_float(row.get('종합효율', 0.0))
-        if curr_oee <= 0:
-            var_list_t2.append("<span style='color:#94A3B8;'>-</span>")
-            continue
-        curr_sk = row.get('sort_key', '')
-        past_df = valid_mach_df[valid_mach_df['sort_key'] < curr_sk]
-        if past_df.empty: var_list_t2.append("<span style='color:#94A3B8;'>-</span>")
-        else:
-            prev_oee = safe_float(past_df.iloc[-1]['종합효율'])
-            diff = curr_oee - prev_oee
-            if diff > 0: var_list_t2.append(f"<span style='color:#2563EB; font-weight:900;'>▲ +{diff*100:.1f}%p</span>")
-            elif diff < 0: var_list_t2.append(f"<span style='color:#DC2626; font-weight:900;'>▼ {abs(diff)*100:.1f}%p</span>")
-            else: var_list_t2.append("<span style='color:#64748B; font-weight:900;'>-</span>")
-            
-    raw_disp_t7['전일 대비 증감율'] = var_list_t2
-    for idx, row in raw_disp_t7.iterrows():
-        if '종합효율' in raw_disp_t7.columns: raw_disp_t7.at[idx, '종합효율'] = f"{safe_float(row['종합효율']):.1%}"
-        if '비가동시간' in raw_disp_t7.columns: raw_disp_t7.at[idx, '비가동시간'] = f"{safe_float(row['비가동시간']):.1f}h"
-    if 'OPEN ISSUE' in raw_disp_t7.columns: raw_disp_t7['OPEN ISSUE'] = raw_disp_t7['OPEN ISSUE'].apply(split_issue_to_columns)
-    
-    final_cols_t7 = [c for c in ['생산일', '품명', '종합효율', '전일 대비 증감율', '비가동시간', 'OPEN ISSUE'] if c in raw_disp_t7.columns]
-    render_styler_to_html(raw_disp_t7[final_cols_t7].style.hide(axis="index"))
+    render_styler_to_html(disp_t7.style.hide(axis="index"))
 
 # ==========================================
 # 🌟 4. 데이터 로드 및 정제 
@@ -373,9 +436,9 @@ if data_to_process:
     df['OPEN ISSUE'] = df['OPEN ISSUE'].apply(format_issue)
 
     # =========================================================
-    # 🌟 5. 레이아웃 및 필터 (정렬 최적화 완료)
+    # 🌟 5. 레이아웃 및 필터
     # =========================================================
-    title_col1, title_col2, title_col3 = st.columns([1, 5.5, 3.5], gap="small", vertical_alignment="center")
+    title_col1, title_col2, title_col3 = st.columns([1, 5.5, 3.5], gap="small")
     
     with title_col1:
         try: st.image("logo.png", width=120) 
@@ -445,7 +508,6 @@ if data_to_process:
 
     st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
     
-    # 🚨 신규 탭 추가: 현장 도면(사진) 기반 모니터링
     tab1, tab2, tab3 = st.tabs(["📈 사출생산팀 종합효율 추이", "🎯 설비별 생산성 및 오픈이슈 분석", "🗺️ 도면 기반 설비 모니터링 (BETA)"])
 
     # -----------------------------------------------------
@@ -468,8 +530,18 @@ if data_to_process:
             
             render_tab_insight("💡 사출생산팀 생산성 추이 분석", guide_text)
             
-            bar_colors = ['#3B82F6' if safe_float(row['공장종합효율']) >= 0.86 else '#EF4444' for _, row in p_df.iterrows()]
-            fig_oee = go.Figure(go.Bar(x=p_df['생산일'], y=p_df['공장종합효율'], text=p_df['공장종합효율'].apply(lambda x: f"{x:.1%}"), textposition='auto', marker_color=bar_colors, textfont=dict(size=14, weight='bold', color='white')))
+            # 🚨 요청 1번: 전체 조회 시 '월별 평균 차트' 자동 변환
+            if not sel_m_side and not sel_d_side:
+                chart_df = p_df.groupby('생산월').agg({'공장종합효율': 'mean', 'sort_key': 'min'}).sort_values('sort_key').reset_index()
+                x_col = '생산월'
+                chart_text = chart_df['공장종합효율'].apply(lambda x: f"{x:.1%}")
+            else:
+                chart_df = p_df
+                x_col = '생산일'
+                chart_text = chart_df['공장종합효율'].apply(lambda x: f"{x:.1%}")
+
+            bar_colors = ['#3B82F6' if safe_float(val) >= 0.86 else '#EF4444' for val in chart_df['공장종합효율']]
+            fig_oee = go.Figure(go.Bar(x=chart_df[x_col], y=chart_df['공장종합효율'], text=chart_text, textposition='auto', marker_color=bar_colors, textfont=dict(size=14, weight='bold', color='white')))
             fig_oee.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=450, yaxis=dict(tickformat='.0%', range=[0, 1.0]), margin=dict(t=20))
             
             if 'last_chart_click' not in st.session_state: st.session_state.last_chart_click = None
@@ -484,9 +556,14 @@ if data_to_process:
                     if curr_click is not None: st.session_state.trigger_daily_popup = curr_click
                 
                 if st.session_state.trigger_daily_popup:
-                    date_to_show = st.session_state.trigger_daily_popup
+                    clicked_val = st.session_state.trigger_daily_popup
                     st.session_state.trigger_daily_popup = None 
-                    show_daily_summary_popup(date_to_show, f_df, daily_df, df)
+                    
+                    # 🚨 클릭된 항목이 '월'인지 '일'인지 판단하여 팝업 분기
+                    if not sel_m_side and not sel_d_side:
+                        show_monthly_summary_popup(clicked_val, f_df, daily_df, df)
+                    else:
+                        show_daily_summary_popup(clicked_val, f_df, daily_df, df)
                     
             except TypeError:
                 st.plotly_chart(fig_oee, use_container_width=True)
@@ -524,7 +601,8 @@ if data_to_process:
                         
                     if cols[i % 4].button(display_name, key=f"btn_{selected_building}_{i}_{mach}"):
                         t7_df = f_df[f_df['설비명'] == mach].copy().sort_values('sort_key')
-                        show_machine_popup(mach, t7_df, df)
+                        # 🚨 탭 2에서도 전체/특정월 상태를 넘겨서 차트를 자동 스케일링
+                        show_machine_popup(mach, t7_df, df, sel_m_side)
 
         else: st.info("분석할 설비 데이터가 존재하지 않습니다.")
 
@@ -534,7 +612,6 @@ if data_to_process:
     with tab3:
         render_section_title("🗺️ 현장 레이아웃 도면 매핑")
         
-        # GitHub에 layout.jpg 또는 layout.png를 올리면 이 공간에 그림이 나타납니다.
         if os.path.exists("layout.jpg"):
             st.image("layout.jpg", use_container_width=True)
         elif os.path.exists("layout.png"):
@@ -545,7 +622,6 @@ if data_to_process:
         st.markdown("<hr style='border: 1px dashed #CBD5E1; margin: 20px 0;'>", unsafe_allow_html=True)
         st.markdown("<h4 style='font-weight:800; color:#0F172A; text-align:center;'>👇 도면에서 확인한 설비를 아래에서 즉시 선택하세요</h4><br>", unsafe_allow_html=True)
         
-        # 탭 2의 버튼 로직을 재사용하여 도면 바로 밑에서 클릭할 수 있게 지원
         if machine_list:
             cols = st.columns(6) 
             for i, mach in enumerate(machine_list):
@@ -553,6 +629,6 @@ if data_to_process:
                 short_name = parts[0]
                 if cols[i % 6].button(short_name, key=f"btn_map_{i}_{mach}"):
                     t7_df = f_df[f_df['설비명'] == mach].copy().sort_values('sort_key')
-                    show_machine_popup(mach, t7_df, df)
+                    show_machine_popup(mach, t7_df, df, sel_m_side)
 
 else: st.info("GitHub data 폴더에 CSV/Excel 파일을 넣어주세요.")
