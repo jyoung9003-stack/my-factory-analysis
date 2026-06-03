@@ -76,7 +76,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 🌟 2. 3-Factor AI 키워드 분석 & 공통 함수
+# 🌟 2. 3-Factor AI 문맥 분석 엔진 & 공통 함수
 # ==========================================
 def safe_float(val):
     try:
@@ -88,49 +88,62 @@ def safe_float(val):
         return float(v_str)
     except: return 0.0
 
-# 🚨 요청 1번: 사출 현장 3대 핵심 요소로 통폐합 및 키워드 정밀화
+# 🚨 신규 도입: 문맥 스코어링 기반 3대 요소 분류 엔진
 def categorize_issues(df, column='OPEN ISSUE'):
     if column not in df.columns: return {}
-    text_data = " ".join(df[column].dropna().astype(str).tolist())
     
-    # 무의미한 단어 1차 필터링
-    stopwords = ['주간', '야간', '특이사항', '없음', 'nan', 'none', '->', '→', '-', '*', '.', ',', '및', '등', '인한', '조치', '확인', '현상']
-    for sw in stopwords:
-        text_data = text_data.replace(sw, ' ')
-    
-    # 3대 카테고리 (설비/금형/품질조건)
-    categories = {
-        "⚙️ 설비 (사출기/주변설비)": ['볼트', '이탈', '파손', '단선', '마모', '누수', '고장', '로보트', '로봇', '그리퍼', '원점', '스토퍼', '실린더', '노즐', '타이바', '사출기', '서보', '모터', '밸브', '에어라인', '작동성', '온수기', '냉각기', '공급기', '피딩', '건조기', '호퍼', '컨베이어', '비전', '검사기', '칠러', '센서', '히터', '알람', '대기', '지연', '재가동'],
-        "🛠️ 금형": ['금형', '코어', '인서트', '핀', '슬라이드', '캐비티', '런너', '게이트', '이젝터', '파팅', '밀핀', '스프루', '가이드', '취출', '냉각수', '세척'],
-        "✨ 품질 및 사출조건": ['미성형', '버', 'Burr', '흑점', '웰드', '스크래치', '치수', '변형', '오염', '찍힘', '누락', '간섭', '공타', '미스', '가스', '수지', '이물', '불량', '온도', '압력', '속도', '시간', '위치', '계량', '보압', '조건', '세팅', '셋팅', '승온', '재세팅', '구간', '장력', '조정', '수정']
+    rules = {
+        "⚙️ 설비 (사출기/주변설비)": ['로보트', '로봇', '그리퍼', '원점', '스토퍼', '실린더', '노즐', '타이바', '사출기', '서보', '모터', '밸브', '에어라인', '작동성', '온수기', '냉각기', '공급기', '피딩', '건조기', '호퍼', '컨베이어', '비전', '검사기', '칠러', '센서', '히터', '알람', '대기', '지연', '재가동', '볼트', '파손', '단선', '누수', '고장', '통신', '에러'],
+        "🛠️ 금형": ['금형', '코어', '인서트', '핀', '슬라이드', '캐비티', '런너', '게이트', '이젝터', '파팅', '밀핀', '스프루', '가이드', '취출', '냉각수', '세척', '하측', '상측', '코팅'],
+        "✨ 품질 및 사출조건": ['미성형', '버', 'Burr', '흑점', '웰드', '스크래치', '치수', '변형', '오염', '찍힘', '누락', '간섭', '공타', '미스', '가스', '수지', '이물', '불량', '온도', '압력', '속도', '시간', '위치', '계량', '보압', '조건', '세팅', '셋팅', '승온', '재세팅', '구간', '장력', '조정', '수정', '미달']
     }
-
-    results = {k: [] for k in categories.keys()}
     
-    for cat, kws in categories.items():
-        for kw in kws:
-            count = text_data.count(kw)
-            if count > 0:
-                results[cat].append((kw, count))
+    results = {"⚙️ 설비 (사출기/주변설비)": [], "🛠️ 금형": [], "✨ 품질 및 사출조건": []}
+    issues = df[column].dropna().astype(str).tolist()
     
-    # 카테고리별로 최다 언급 키워드 상위 5개씩 추출
-    for cat in results:
-        results[cat] = sorted(results[cat], key=lambda x: x[1], reverse=True)[:5] 
+    for issue_text in issues:
+        sentences = [s.strip() for s in re.split(r'\n|->|→', issue_text) if len(s.strip()) > 2]
         
-    return {k: v for k, v in results.items() if v}
+        for sentence in sentences:
+            if sentence in ['특이사항 없음', '특이사항없음', '주간', '야간', 'nan', 'none']: continue
+            
+            scores = {"⚙️ 설비 (사출기/주변설비)": 0, "🛠️ 금형": 0, "✨ 품질 및 사출조건": 0}
+            for cat, kws in rules.items():
+                for kw in kws:
+                    if kw in sentence:
+                        scores[cat] += 1
+            
+            best_cat = max(scores, key=scores.get)
+            if scores[best_cat] == 0: 
+                best_cat = "✨ 품질 및 사출조건" 
+                
+            results[best_cat].append(sentence)
+    
+    final_results = {}
+    for cat in results:
+        counted = Counter(results[cat]).most_common(5)
+        if counted:
+            final_results[cat] = counted
+            
+    return final_results
 
+# 🚨 신규 도입: 리스트형 UI 렌더링
 def render_keyword_tags(categorized_data):
     if not categorized_data: return
     
     html = "<div style='background-color:#FFFBEB; border-left:6px solid #F59E0B; padding:18px 20px; border-radius:10px; margin-bottom:20px; box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.05);'>"
-    html += "<div style='font-size:16px; font-weight:900; color:#B45309; margin-bottom:15px;'>🔍 핵심 트러블 원인 분석 (키워드 최다 언급순)</div>"
+    html += "<div style='font-size:16px; font-weight:900; color:#B45309; margin-bottom:15px;'>🔍 3-Factor 트러블 원인 분석 (주요 이슈 문장 요약)</div>"
     html += "<div style='display:flex; flex-wrap:wrap; gap:15px;'>"
     
     for cat, items in categorized_data.items():
-        # 🚨 요청 1번: white-space:nowrap과 inline-block으로 태그 깨짐 완벽 방어
-        tags = "".join([f"<span style='display:inline-block; white-space:nowrap; background-color:#FEF3C7; color:#D97706; padding:6px 12px; border-radius:12px; font-weight:800; font-size:13px; margin-bottom:6px; margin-right:6px; border:1px solid #FCD34D;'>{word} <span style='font-size:11px; color:#B45309;'>({cnt})</span></span>" for word, cnt in items])
-        if not tags: tags = "<span style='font-size:13px; color:#9CA3AF; font-weight:600;'>관련 이슈 없음</span>"
-        html += f"<div style='background-color:#FFFFFF; border:1px solid #FDE68A; border-radius:8px; padding:15px; flex: 1; min-width: 250px;'><div style='font-size:15px; font-weight:800; color:#92400E; margin-bottom:12px;'>{cat}</div><div>{tags}</div></div>"
+        list_html = "<ul style='margin:0; padding-left:20px; font-size:13.5px; color:#334155; line-height:1.6; font-weight:600;'>"
+        for sentence, cnt in items:
+            list_html += f"<li>{sentence} <span style='color:#DC2626; font-weight:900; font-size:12px;'>({cnt}건)</span></li>"
+        list_html += "</ul>"
+        
+        if not items: list_html = "<span style='font-size:13px; color:#9CA3AF; font-weight:600; padding-left:5px;'>관련 이슈 없음</span>"
+        
+        html += f"<div style='background-color:#FFFFFF; border:1px solid #FDE68A; border-radius:8px; padding:15px; flex: 1; min-width: 250px;'><div style='font-size:15px; font-weight:800; color:#92400E; margin-bottom:10px; border-bottom:1px solid #FEF3C7; padding-bottom:5px;'>{cat}</div><div>{list_html}</div></div>"
         
     html += "</div></div>"
     st.markdown(html, unsafe_allow_html=True)
