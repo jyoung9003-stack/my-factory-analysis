@@ -76,7 +76,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 🌟 2. 3-Factor AI 문맥 분석 엔진 및 공통 함수
+# 🌟 2. AI 이슈/원인 분리 엔진 및 공통 함수
 # ==========================================
 def safe_float(val):
     try:
@@ -98,54 +98,75 @@ def categorize_issues(df, column='OPEN ISSUE'):
     }
     
     results = {"⚙️ 설비 (사출기/주변설비)": [], "🛠️ 금형": [], "✨ 품질 및 사출조건": []}
-    issues = df[column].dropna().astype(str).tolist()
     
-    for issue_text in issues:
+    for idx, row in df.iterrows():
+        mach_name = str(row.get('설비명', '')).split(' - ')[0].strip()
+        issue_text = str(row.get(column, ''))
+        if issue_text in ['', 'nan', '0', '0.0', 'None']: continue
+        
+        phenom = ""
+        cause = ""
         for line in issue_text.split('\n'):
             line = line.strip()
-            if not line: continue
-            if line.startswith('→') or line.startswith('->') or line.startswith('-'): continue 
+            line = re.sub(r'^\*?\s*(주간|야간)\s*', '', line).strip()
+            if not line or line in ['특이사항 없음', '특이사항없음', 'nan', 'none']: continue
             
-            clean_line = re.sub(r'^\*?\s*(주간|야간)\s*', '', line).strip()
-            
-            if len(clean_line) > 2 and clean_line not in ['특이사항 없음', '특이사항없음', 'nan', 'none']:
-                scores = {"⚙️ 설비 (사출기/주변설비)": 0, "🛠️ 금형": 0, "✨ 품질 및 사출조건": 0}
-                for cat, kws in rules.items():
-                    for kw in kws:
-                        if kw in clean_line:
-                            scores[cat] += 1
+            # 🚨 3번 피드백: 원인 추출 및 조치내역( ~ 후 ) 자르기
+            if line.startswith('→') or line.startswith('->') or line.startswith('-'):
+                if not cause: 
+                    cause_raw = re.sub(r'^[-→>]*\s*', '', line)
+                    cause = cause_raw.split(' 후 ')[0].strip()
+            else:
+                if not phenom: phenom = line
                 
-                best_cat = max(scores, key=scores.get)
-                if scores[best_cat] == 0: 
-                    best_cat = "✨ 품질 및 사출조건" 
-                    
-                results[best_cat].append(clean_line)
+        if phenom:
+            combined_text = phenom + " " + cause
+            scores = {"⚙️ 설비 (사출기/주변설비)": 0, "🛠️ 금형": 0, "✨ 품질 및 사출조건": 0}
+            for cat, kws in rules.items():
+                for kw in kws:
+                    if kw in combined_text: scores[cat] += 1
+            
+            best_cat = max(scores, key=scores.get)
+            if scores[best_cat] == 0: best_cat = "✨ 품질 및 사출조건" 
+                
+            # 🚨 3번 피드백: 해당 설비 표기 및 원인 병합
+            final_str = f"<span style='color:#2563EB; font-weight:900;'>[{mach_name}]</span> {phenom}"
+            if cause:
+                final_str += f" <span style='color:#DC2626; font-weight:700;'>(원인: {cause})</span>"
+                
+            results[best_cat].append(final_str)
     
     final_results = {}
     for cat in results:
-        counted = Counter(results[cat]).most_common(5)
-        if counted: final_results[cat] = counted
+        seen = set()
+        unique_items = []
+        for item in results[cat]:
+            if item not in seen:
+                seen.add(item)
+                unique_items.append(item)
+        if unique_items:
+            final_results[cat] = unique_items[:5]
             
     return final_results
 
-def render_keyword_tags(categorized_data):
+# 🚨 2번 피드백: 타이틀 인자 추가 (당일 / 월간 / 설비별 동적 적용)
+def render_keyword_tags(categorized_data, title="🔍 당일 주요 이슈 현황"):
     if not categorized_data: return
     
     html = "<div style='background-color:#FFFBEB; border-left:6px solid #F59E0B; padding:18px 20px; border-radius:10px; margin-bottom:20px; box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.05);'>"
-    html += "<div style='font-size:16px; font-weight:900; color:#B45309; margin-bottom:15px;'>🔍 3-Factor 트러블 원인 분석 (주요 현상 요약)</div>"
+    html += f"<div style='font-size:16px; font-weight:900; color:#B45309; margin-bottom:15px;'>{title}</div>"
     html += "<div style='display:flex; flex-wrap:wrap; gap:15px;'>"
     
     for cat, items in categorized_data.items():
         list_html = "<ul style='margin:0; padding-left:20px; font-size:13.5px; color:#334155; line-height:1.6; font-weight:600;'>"
-        for sentence, cnt in items:
-            list_html += f"<li>{sentence} <span style='color:#DC2626; font-weight:900; font-size:12px;'>({cnt})</span></li>"
+        for sentence in items:
+            list_html += f"<li style='margin-bottom:6px;'>{sentence}</li>"
         list_html += "</ul>"
         
         if not items: list_html = "<span style='font-size:13px; color:#9CA3AF; font-weight:600; padding-left:5px;'>관련 이슈 없음</span>"
         html += f"<div style='background-color:#FFFFFF; border:1px solid #FDE68A; border-radius:8px; padding:15px; flex: 1; min-width: 250px;'><div style='font-size:15px; font-weight:800; color:#92400E; margin-bottom:10px; border-bottom:1px solid #FEF3C7; padding-bottom:5px;'>{cat}</div><div>{list_html}</div></div>"
         
     html += "</div></div>"
-    # 🚨 버그 픽스: HTML 코드가 코드로 인식되지 않도록 엔터 제거
     st.markdown(html.replace('\n', ''), unsafe_allow_html=True)
 
 def render_section_title(text): st.markdown(f"<div class='section-banner'><h3>{text}</h3></div>", unsafe_allow_html=True)
@@ -301,7 +322,7 @@ def show_daily_summary_popup(clicked_date, f_df, daily_df, full_df):
         with col_worst: render_rank_cards(worst_5_mach, "WORST 5", is_worst=True, name_col="설비명")
 
         categorized_data = categorize_issues(active_day)
-        render_keyword_tags(categorized_data)
+        render_keyword_tags(categorized_data, title="🔍 당일 주요 이슈 현황")
 
         st.markdown("<h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📋 전체 설비 상세 가동 내역</h4>", unsafe_allow_html=True)
         disp_day = prepare_popup_table_with_diff(active_day, full_df, clicked_date, is_tab1=True)
@@ -339,7 +360,7 @@ def show_monthly_summary_popup(clicked_month, f_df, daily_df, full_df):
         with col_worst: render_rank_cards(worst_5_mach, "월간 평균 OEE WORST 5", is_worst=True, name_col="설비명")
 
         categorized_data = categorize_issues(valid_month)
-        render_keyword_tags(categorized_data)
+        render_keyword_tags(categorized_data, title="🔍 월간 주요 이슈 현황")
 
         st.markdown("<h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📋 월간 설비별 종합 가동 내역</h4>", unsafe_allow_html=True)
         disp_month = mach_agg[['설비명', '품명', '종합효율', '비가동시간', 'OPEN ISSUE']].copy()
@@ -394,7 +415,7 @@ def show_machine_popup(tgt_mach, t7_df, full_df, sel_m_side):
         st.info("해당 설비의 유효한 가동 데이터가 없습니다.")
 
     categorized_data = categorize_issues(valid_t7)
-    render_keyword_tags(categorized_data)
+    render_keyword_tags(categorized_data, title="🔍 설비 주요 이슈 현황")
 
     mach_short = str(tgt_mach).split(' - ')[0].strip()
     prod_name = valid_t7['품명'].dropna().iloc[0] if not valid_t7['품명'].dropna().empty else ""
@@ -491,6 +512,7 @@ if data_to_process:
 
     st.markdown("<hr style='border: 1px solid #E2E8F0; margin-top: 10px; margin-bottom: 15px;'>", unsafe_allow_html=True)
 
+    # 🚨 요약 전광판 적용 (버그 픽스)
     f1, f2, f3 = st.columns([1, 1, 2.5])
     all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
     with f1: sel_m_side = st.multiselect("📅 생산월 선택", all_months, default=[all_months[-1]] if all_months else [])
@@ -521,20 +543,23 @@ if data_to_process:
                     p_name = str(row['품명'])
                     if len(p_name) > 12: p_name = p_name[:12] + ".."
                     oee = safe_float(row['종합효율'])
+                    # 🚨 1번 피드백: 효율을 위쪽으로 배치하여 카드 세로길이 축소
                     worst_html += f"""
-                    <div style="background: #FEF2F2; padding: 6px 10px; border-radius: 6px; border: 1px solid #FCA5A5; flex: 1;">
-                        <div style="font-weight: 900; color: #1E293B; font-size: 13px; margin-bottom: 2px;">{i+1}. {m_name}</div>
-                        <div style="color: #64748B; font-size: 11px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{str(row['품명'])}">{p_name}</div>
-                        <div style="color:#DC2626; font-weight: 900; font-size: 14px; text-align: right;">{oee:.1%}</div>
+                    <div style="background: #FEF2F2; padding: 8px 10px; border-radius: 6px; border: 1px solid #FCA5A5; flex: 1; display: flex; flex-direction: column; justify-content: center;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                            <div style="font-weight: 900; color: #1E293B; font-size: 13px;">{i+1}. {m_name}</div>
+                            <div style="color:#DC2626; font-weight: 900; font-size: 15px;">{oee:.1%}</div>
+                        </div>
+                        <div style="color: #64748B; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{str(row['품명'])}">{p_name}</div>
                     </div>
                     """
                 
-                # 🚨 렌더링 버그(HTML 텍스트 노출) 원천 차단: 압축 엔진 적용
+                # 🚨 1번 피드백: "가동 설비", "종합 효율" 라벨 텍스트 변경
                 summary_html = f"""
                 <div style="background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 8px; padding: 12px 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); height: 100%;">
                     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 8px; margin-bottom: 10px;">
                         <span style="font-size: 14px; font-weight: 900; color: #0F172A;">🚀 {target_date} 요약</span>
-                        <span style="font-size: 13px; font-weight: 800; color: #3B82F6;">가동 {active_count}대 | 효율 {day_oee:.1%} | 비가동 {total_down:.1f}h</span>
+                        <span style="font-size: 13px; font-weight: 800; color: #3B82F6;">가동 설비 {active_count}대 | 종합 효율 {day_oee:.1%} | 비가동 {total_down:.1f}h</span>
                     </div>
                     <div style="font-size: 12px; color: #DC2626; font-weight: 900; margin-bottom: 6px;">🚨 종합효율 WORST 3</div>
                     <div style="display: flex; gap: 10px;">
