@@ -5,8 +5,23 @@ import plotly.express as px
 import plotly.graph_objects as go
 import re
 import os
+import base64
 from datetime import datetime
-from collections import Counter # 🚨 키워드 분석용 라이브러리 추가
+from collections import Counter
+
+# ==========================================
+# 🚨 [관리자 설정] 도면 위 설비 좌표 (x%, y%)
+# ==========================================
+# 도면(layout.jpg)의 왼쪽 위 끝이 x:0, y:0 이고, 오른쪽 아래 끝이 x:100, y:100 입니다.
+# 여기에 관리자님의 실제 설비 위치 비율을 적어주시면 도면 위에 효율(%)이 나타납니다!
+LAYOUT_COORDS = {
+    "04호기": {"x": 42, "y": 15},
+    "06호기": {"x": 55, "y": 15},
+    "08호기": {"x": 68, "y": 15},
+    "53호기": {"x": 10, "y": 80},
+    "56호기": {"x": 25, "y": 80},
+    # 필요하신 만큼 아래에 계속 추가하시면 됩니다. (예: "10호기": {"x": 42, "y": 30})
+}
 
 # ==========================================
 # 🌟 1. 기본 설정 및 테마
@@ -64,7 +79,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 🌟 2. 공통 함수 및 AI 분석 엔진
+# 🌟 2. 5-Factor AI 키워드 분석 & 공통 함수
 # ==========================================
 def safe_float(val):
     try:
@@ -76,33 +91,44 @@ def safe_float(val):
         return float(v_str)
     except: return 0.0
 
-# 🚨 요청 2번: 오픈이슈 텍스트 트러블 분석(키워드 추출) 엔진
-def extract_keywords(df, column='OPEN ISSUE', top_n=5):
-    if column not in df.columns: return []
+# 🚨 요청 1번: 사출 현장 5대 요소(Factor) 다차원 분류 엔진
+def categorize_issues(df, column='OPEN ISSUE'):
+    if column not in df.columns: return {}
     text_data = " ".join(df[column].dropna().astype(str).tolist())
-    # 쓸데없는 단어 필터링
-    stopwords = ['주간', '야간', '특이사항', '없음', 'nan', 'none', '->', '→', '-', '*', '.', ',', '및', '등', '발생', '인한', '조치', '확인', '진행', '현상', '조정', '알람', '대기', '불량', '지연', '재가동', '수정', '교체', '재세팅', '미흡', '점검']
-    for sw in stopwords:
-        text_data = text_data.replace(sw, ' ')
     
-    # 2글자 이상 의미있는 단어만 추출
-    words = re.findall(r'[가-힣a-zA-Z0-9]+', text_data)
-    meaningful_words = [w for w in words if len(w) >= 2]
-    
-    if not meaningful_words: return []
-    return Counter(meaningful_words).most_common(top_n)
+    categories = {
+        "🤖 사출기/로봇": ['로보트', '로봇', '그리퍼', '원점', '스토퍼', '실린더', '노즐', '타이바', '사출기', '서보', '모터', '밸브', '에어라인', '작동성'],
+        "🛠️ 금형": ['금형', '코어', '인서트', '핀', '슬라이드', '캐비티', '런너', '게이트', '이젝터', '파팅', '밀핀'],
+        "⚙️ 주변설비": ['온수기', '냉각기', '공급기', '피딩', '건조기', '호퍼', '컨베이어', '비전', '검사기', '칠러'],
+        "🌡️ 사출조건": ['온도', '압력', '속도', '시간', '위치', '계량', '보압', '조건', '세팅', '셋팅', '승온', '재세팅', '구간', '장력'],
+        "✨ 품질/기타": ['미성형', '버', 'Burr', '흑점', '웰드', '스크래치', '치수', '변형', '오염', '찍힘', '누락', '간섭', '이탈', '공타', '미스']
+    }
 
-def render_keyword_tags(keywords):
-    if not keywords: return
-    tags_html = "".join([f"<span style='background-color:#FEF3C7; color:#D97706; padding:6px 14px; border-radius:20px; font-weight:900; font-size:14px; border:1px solid #FCD34D; box-shadow: 0 1px 2px rgba(0,0,0,0.05);'>#{word} <span style='font-size:12px; color:#B45309;'>({cnt}건)</span></span>" for word, cnt in keywords])
-    html = f"""
-    <div style='background-color:#FFFBEB; border-left:6px solid #F59E0B; padding:18px 20px; border-radius:10px; margin-bottom:20px; box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.05);'>
-        <div style='font-size:15px; font-weight:900; color:#B45309; margin-bottom:10px;'>🔍 주요 트러블/이슈 키워드 분석 (최다 언급)</div>
-        <div style='display:flex; gap:10px; flex-wrap:wrap;'>
-            {tags_html}
-        </div>
-    </div>
-    """
+    results = {k: [] for k in categories.keys()}
+    
+    for cat, kws in categories.items():
+        for kw in kws:
+            count = text_data.count(kw)
+            if count > 0:
+                results[cat].append((kw, count))
+    
+    for cat in results:
+        results[cat] = sorted(results[cat], key=lambda x: x[1], reverse=True)[:3] 
+        
+    return {k: v for k, v in results.items() if v}
+
+def render_keyword_tags(categorized_data):
+    if not categorized_data: return
+    
+    html = "<div style='background-color:#FFFBEB; border-left:6px solid #F59E0B; padding:18px 20px; border-radius:10px; margin-bottom:20px; box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.05);'>"
+    html += "<div style='font-size:16px; font-weight:900; color:#B45309; margin-bottom:15px;'>🔍 5-Factor 트러블 원인 분석 (키워드 최다 언급순)</div>"
+    html += "<div style='display:flex; flex-wrap:wrap; gap:15px;'>"
+    
+    for cat, items in categorized_data.items():
+        tags = "".join([f"<span style='background-color:#FEF3C7; color:#D97706; padding:4px 10px; border-radius:12px; font-weight:800; font-size:13px; margin-right:5px; border:1px solid #FCD34D;'>{word} <span style='font-size:11px; color:#B45309;'>({cnt})</span></span>" for word, cnt in items])
+        html += f"<div style='background-color:#FFFFFF; border:1px solid #FDE68A; border-radius:8px; padding:12px 15px; flex: 1; min-width: 220px;'><div style='font-size:14px; font-weight:800; color:#92400E; margin-bottom:8px;'>{cat}</div><div>{tags}</div></div>"
+        
+    html += "</div></div>"
     st.markdown(html, unsafe_allow_html=True)
 
 def render_section_title(text): st.markdown(f"<div class='section-banner'><h3>{text}</h3></div>", unsafe_allow_html=True)
@@ -223,8 +249,12 @@ def get_building_group(mach_name):
         else: return "기타 구역"
     except: return "기타 구역"
 
+def get_image_base64(filepath):
+    with open(filepath, "rb") as f:
+        return base64.b64encode(f.read()).decode()
+
 # ==========================================
-# 🌟 3. 팝업창 (일간 및 월간 듀얼 기능)
+# 🌟 3. 팝업창 모듈
 # ==========================================
 @st.dialog("📅 일일 가동 상세 현황", width="large")
 def show_daily_summary_popup(clicked_date, f_df, daily_df, full_df):
@@ -253,9 +283,9 @@ def show_daily_summary_popup(clicked_date, f_df, daily_df, full_df):
         with col_best: render_rank_cards(best_5_mach, "BEST 5", is_worst=False, name_col="설비명")
         with col_worst: render_rank_cards(worst_5_mach, "WORST 5", is_worst=True, name_col="설비명")
 
-        # 🚨 요청 2번: 키워드 분석 태그 렌더링
-        keywords = extract_keywords(active_day)
-        render_keyword_tags(keywords)
+        # 🚨 AI 분류 엔진 호출
+        categorized_data = categorize_issues(active_day)
+        render_keyword_tags(categorized_data)
 
         st.markdown("<h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📋 전체 설비 상세 가동 내역</h4>", unsafe_allow_html=True)
         disp_day = prepare_popup_table_with_diff(active_day, full_df, clicked_date, is_tab1=True)
@@ -263,7 +293,6 @@ def show_daily_summary_popup(clicked_date, f_df, daily_df, full_df):
     else:
         st.info("해당 일자의 설비 가동 데이터가 존재하지 않습니다.")
 
-# 🚨 보너스 기능: 전체 기간 조회 중 '월(Month)' 막대를 클릭했을 때 뜨는 월간 리포트
 @st.dialog("📅 월간 통합 실적 리포트", width="large")
 def show_monthly_summary_popup(clicked_month, f_df, daily_df, full_df):
     st.markdown(f"<h2 style='text-align:center; color:#0F172A; font-weight:900; font-size:32px; margin-bottom:10px;'><span style='color:#D91B1B;'>{clicked_month}</span> 사출생산팀 통합 실적 및 오픈이슈 요약</h2><hr style='border-top: 3px solid #E2E8F0; margin-bottom: 30px;'>", unsafe_allow_html=True)
@@ -293,11 +322,10 @@ def show_monthly_summary_popup(clicked_month, f_df, daily_df, full_df):
         with col_best: render_rank_cards(best_5_mach, "월간 평균 OEE BEST 5", is_worst=False, name_col="설비명")
         with col_worst: render_rank_cards(worst_5_mach, "월간 평균 OEE WORST 5", is_worst=True, name_col="설비명")
 
-        keywords = extract_keywords(valid_month)
-        render_keyword_tags(keywords)
+        categorized_data = categorize_issues(valid_month)
+        render_keyword_tags(categorized_data)
 
         st.markdown("<h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📋 월간 설비별 종합 가동 내역</h4>", unsafe_allow_html=True)
-        # 월간 데이터는 평균이므로 증감율 컬럼 대신 깔끔하게 테이블만 렌더링
         disp_month = mach_agg[['설비명', '품명', '종합효율', '비가동시간', 'OPEN ISSUE']].copy()
         for idx, row in disp_month.iterrows():
             disp_month.at[idx, '종합효율'] = f"{safe_float(row['종합효율']):.1%}"
@@ -321,7 +349,6 @@ def show_machine_popup(tgt_mach, t7_df, full_df, sel_m_side):
     with c2: render_scoreboard_metric("🛑 누적 비가동 손실", f"{total_down:.1f}h", "#FF3131" if total_down > 0 else "#32CD32")
     with c3: render_scoreboard_metric("📝 이슈 발생 일수", f"{issue_count}일", "#FF9900" if issue_count > 0 else "#32CD32") 
     
-    # 🚨 요청 1번: 탭 2에서도 '전체' 선택시 월간 평균 차트로 변환 
     if not sel_m_side:
         chart_df = valid_t7.groupby('생산월').agg({'종합효율': 'mean', 'sort_key': 'min'}).sort_values('sort_key').reset_index()
         x_col = '생산월'
@@ -350,9 +377,8 @@ def show_machine_popup(tgt_mach, t7_df, full_df, sel_m_side):
     else: 
         st.info("해당 설비의 유효한 가동 데이터가 없습니다.")
 
-    # 🚨 요청 2번: 설비 집중 분석에도 키워드 분석 태그 렌더링
-    keywords = extract_keywords(valid_t7)
-    render_keyword_tags(keywords)
+    categorized_data = categorize_issues(valid_t7)
+    render_keyword_tags(categorized_data)
 
     mach_short = str(tgt_mach).split(' - ')[0].strip()
     prod_name = valid_t7['품명'].dropna().iloc[0] if not valid_t7['품명'].dropna().empty else ""
@@ -438,7 +464,7 @@ if data_to_process:
     # =========================================================
     # 🌟 5. 레이아웃 및 필터
     # =========================================================
-    title_col1, title_col2, title_col3 = st.columns([1, 5.5, 3.5], gap="small")
+    title_col1, title_col2, title_col3 = st.columns([1, 5.5, 3.5], gap="small", vertical_alignment="center")
     
     with title_col1:
         try: st.image("logo.png", width=120) 
@@ -508,7 +534,7 @@ if data_to_process:
 
     st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
     
-    tab1, tab2, tab3 = st.tabs(["📈 사출생산팀 종합효율 추이", "🎯 설비별 생산성 및 오픈이슈 분석", "🗺️ 도면 기반 설비 모니터링 (BETA)"])
+    tab1, tab2, tab3 = st.tabs(["📈 사출생산팀 종합효율 추이", "🎯 설비별 생산성 및 오픈이슈 분석", "🗺️ 현장 도면 OEE 오버레이"])
 
     # -----------------------------------------------------
     # TAB 1: 종합 효율 추이 
@@ -530,7 +556,6 @@ if data_to_process:
             
             render_tab_insight("💡 사출생산팀 생산성 추이 분석", guide_text)
             
-            # 🚨 요청 1번: 전체 조회 시 '월별 평균 차트' 자동 변환
             if not sel_m_side and not sel_d_side:
                 chart_df = p_df.groupby('생산월').agg({'공장종합효율': 'mean', 'sort_key': 'min'}).sort_values('sort_key').reset_index()
                 x_col = '생산월'
@@ -559,7 +584,6 @@ if data_to_process:
                     clicked_val = st.session_state.trigger_daily_popup
                     st.session_state.trigger_daily_popup = None 
                     
-                    # 🚨 클릭된 항목이 '월'인지 '일'인지 판단하여 팝업 분기
                     if not sel_m_side and not sel_d_side:
                         show_monthly_summary_popup(clicked_val, f_df, daily_df, df)
                     else:
@@ -601,34 +625,72 @@ if data_to_process:
                         
                     if cols[i % 4].button(display_name, key=f"btn_{selected_building}_{i}_{mach}"):
                         t7_df = f_df[f_df['설비명'] == mach].copy().sort_values('sort_key')
-                        # 🚨 탭 2에서도 전체/특정월 상태를 넘겨서 차트를 자동 스케일링
                         show_machine_popup(mach, t7_df, df, sel_m_side)
 
         else: st.info("분석할 설비 데이터가 존재하지 않습니다.")
 
     # -----------------------------------------------------
-    # 🚨 TAB 3: 현장 도면(사진) 기반 모니터링 (BETA)
+    # 🚨 TAB 3: 현장 도면(사진) 기반 OEE 오버레이 
     # -----------------------------------------------------
     with tab3:
-        render_section_title("🗺️ 현장 레이아웃 도면 매핑")
+        render_section_title("🗺️ 현장 레이아웃 OEE 라이브 뷰")
         
-        if os.path.exists("layout.jpg"):
-            st.image("layout.jpg", use_container_width=True)
-        elif os.path.exists("layout.png"):
-            st.image("layout.png", use_container_width=True)
+        # 1. 최근 가동 데이터 추출 (가장 최신 생산일 기준)
+        latest_date = None
+        if not daily_df.empty: latest_date = daily_df.iloc[-1]['생산일']
+        
+        if latest_date:
+            st.markdown(f"<div style='background-color:#1E293B; color:white; padding:10px 20px; border-radius:8px; display:inline-block; font-weight:800; margin-bottom:15px;'>🕒 조회 시점: {latest_date}</div>", unsafe_allow_html=True)
+            latest_f_df = f_df[f_df['생산일'] == latest_date]
         else:
-            st.info("💡 GitHub 데이터 폴더에 현장 도면 사진을 `layout.jpg` 또는 `layout.png` 이름으로 올려주시면 이곳에 나타납니다.")
+            latest_f_df = pd.DataFrame()
             
-        st.markdown("<hr style='border: 1px dashed #CBD5E1; margin: 20px 0;'>", unsafe_allow_html=True)
-        st.markdown("<h4 style='font-weight:800; color:#0F172A; text-align:center;'>👇 도면에서 확인한 설비를 아래에서 즉시 선택하세요</h4><br>", unsafe_allow_html=True)
+        # 2. 도면 이미지 불러오기 (layout.jpg 또는 layout.png)
+        img_path = None
+        if os.path.exists("layout.jpg"): img_path = "layout.jpg"
+        elif os.path.exists("layout.png"): img_path = "layout.png"
         
-        if machine_list:
-            cols = st.columns(6) 
-            for i, mach in enumerate(machine_list):
-                parts = [p.strip() for p in mach.split('-')]
-                short_name = parts[0]
-                if cols[i % 6].button(short_name, key=f"btn_map_{i}_{mach}"):
-                    t7_df = f_df[f_df['설비명'] == mach].copy().sort_values('sort_key')
-                    show_machine_popup(mach, t7_df, df, sel_m_side)
+        if img_path:
+            img_b64 = get_image_base64(img_path)
+            
+            # 3. 오버레이 HTML 생성
+            overlay_html = ""
+            for mach, coords in LAYOUT_COORDS.items():
+                x, y = coords['x'], coords['y']
+                
+                # 해당 설비의 최근 OEE 찾기
+                mach_row = latest_f_df[latest_f_df['설비명'].str.contains(mach, na=False)]
+                if not mach_row.empty and safe_float(mach_row.iloc[0]['종합효율']) > 0:
+                    oee_val = safe_float(mach_row.iloc[0]['종합효율'])
+                    bg_color = "rgba(37, 99, 235, 0.9)" if oee_val >= 0.86 else "rgba(220, 38, 38, 0.9)" # 파란색 or 빨간색
+                    oee_str = f"{oee_val:.1%}"
+                else:
+                    bg_color = "rgba(100, 116, 139, 0.8)" # 가동 안함 (회색)
+                    oee_str = "OFF"
+
+                overlay_html += f"""
+                <div style="position: absolute; top: {y}%; left: {x}%; transform: translate(-50%, -50%); 
+                            background-color: {bg_color}; color: white; padding: 6px 10px; border-radius: 6px; 
+                            text-align: center; border: 2px solid white; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+                            cursor: pointer; transition: transform 0.2s;"
+                            onmouseover="this.style.transform='translate(-50%, -50%) scale(1.1)';"
+                            onmouseout="this.style.transform='translate(-50%, -50%) scale(1)';">
+                    <div style="font-size: 11px; font-weight: 700; margin-bottom: 2px; opacity: 0.9;">{mach}</div>
+                    <div style="font-size: 16px; font-weight: 900;">{oee_str}</div>
+                </div>
+                """
+
+            # HTML 구조로 이미지와 오버레이 결합
+            map_html = f"""
+            <div style="position: relative; width: 100%; max-width: 1400px; margin: 0 auto; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); border: 1px solid #CBD5E1;">
+                <img src="data:image/jpeg;base64,{img_b64}" style="width: 100%; height: auto; display: block;">
+                {overlay_html}
+            </div>
+            """
+            st.markdown(map_html, unsafe_allow_html=True)
+            
+            st.info("💡 **관리자님!** 코드 맨 위쪽의 `LAYOUT_COORDS` 설정에서 엑셀처럼 `x`와 `y` 숫자를 변경하시면 화면상의 스티커 위치를 원하시는 곳으로 완벽하게 맞출 수 있습니다.")
+        else:
+            st.warning("🚨 GitHub 데이터 폴더에 현장 도면 사진을 `layout.jpg` 또는 `layout.png` 이름으로 먼저 업로드해주세요!")
 
 else: st.info("GitHub data 폴더에 CSV/Excel 파일을 넣어주세요.")
