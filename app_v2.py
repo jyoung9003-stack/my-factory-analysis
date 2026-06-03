@@ -76,7 +76,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 🌟 2. 3-Factor AI 문맥 분석 엔진 (현상 추출 정밀화)
+# 🌟 2. 3-Factor AI 문맥 분석 엔진 및 공통 함수
 # ==========================================
 def safe_float(val):
     try:
@@ -101,16 +101,11 @@ def categorize_issues(df, column='OPEN ISSUE'):
     issues = df[column].dropna().astype(str).tolist()
     
     for issue_text in issues:
-        # 🚨 요청 1번: 줄바꿈으로 분리 후 조치내역(->)은 버리고 순수 '현상'만 필터링
         for line in issue_text.split('\n'):
             line = line.strip()
             if not line: continue
+            if line.startswith('→') or line.startswith('->') or line.startswith('-'): continue 
             
-            # 원인 및 조치 내역을 식별하여 패스
-            if line.startswith('→') or line.startswith('->') or line.startswith('-'):
-                continue 
-            
-            # 주간/야간 태그 제거하여 깔끔한 현상 문장만 도출
             clean_line = re.sub(r'^\*?\s*(주간|야간)\s*', '', line).strip()
             
             if len(clean_line) > 2 and clean_line not in ['특이사항 없음', '특이사항없음', 'nan', 'none']:
@@ -129,8 +124,7 @@ def categorize_issues(df, column='OPEN ISSUE'):
     final_results = {}
     for cat in results:
         counted = Counter(results[cat]).most_common(5)
-        if counted:
-            final_results[cat] = counted
+        if counted: final_results[cat] = counted
             
     return final_results
 
@@ -144,16 +138,15 @@ def render_keyword_tags(categorized_data):
     for cat, items in categorized_data.items():
         list_html = "<ul style='margin:0; padding-left:20px; font-size:13.5px; color:#334155; line-height:1.6; font-weight:600;'>"
         for sentence, cnt in items:
-            # 🚨 요청 1번: (3건) -> (3) 으로 표기 변경
             list_html += f"<li>{sentence} <span style='color:#DC2626; font-weight:900; font-size:12px;'>({cnt})</span></li>"
         list_html += "</ul>"
         
         if not items: list_html = "<span style='font-size:13px; color:#9CA3AF; font-weight:600; padding-left:5px;'>관련 이슈 없음</span>"
-        
         html += f"<div style='background-color:#FFFFFF; border:1px solid #FDE68A; border-radius:8px; padding:15px; flex: 1; min-width: 250px;'><div style='font-size:15px; font-weight:800; color:#92400E; margin-bottom:10px; border-bottom:1px solid #FEF3C7; padding-bottom:5px;'>{cat}</div><div>{list_html}</div></div>"
         
     html += "</div></div>"
-    st.markdown(html, unsafe_allow_html=True)
+    # 🚨 버그 픽스: HTML 코드가 코드로 인식되지 않도록 엔터 제거
+    st.markdown(html.replace('\n', ''), unsafe_allow_html=True)
 
 def render_section_title(text): st.markdown(f"<div class='section-banner'><h3>{text}</h3></div>", unsafe_allow_html=True)
 def render_tab_insight(title, content): st.markdown(f"<div style='background-color:#F8FAFC; border-left:6px solid #3B82F6; border-radius:8px; padding:20px 25px; margin-bottom:25px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);'><h4 style='margin-top:0; color:#1E293B; font-weight:900; font-size:18px; margin-bottom:12px;'>{title}</h4><div style='line-height:1.7; font-size:15.5px; color:#334155;'>{content}</div></div>", unsafe_allow_html=True)
@@ -487,7 +480,7 @@ if data_to_process:
     # =========================================================
     # 🌟 5. 레이아웃 및 필터
     # =========================================================
-    title_col1, title_col2 = st.columns([1.5, 8.5], gap="small", vertical_alignment="center")
+    title_col1, title_col2, title_col3 = st.columns([1, 5.5, 3.5], gap="small", vertical_alignment="center")
     
     with title_col1:
         try: st.image("logo.png", width=120) 
@@ -498,7 +491,6 @@ if data_to_process:
 
     st.markdown("<hr style='border: 1px solid #E2E8F0; margin-top: 10px; margin-bottom: 15px;'>", unsafe_allow_html=True)
 
-    # 🚨 요청 2번: 빈 공간(f3)에 '당일 요약 패널' 완벽 장착
     f1, f2, f3 = st.columns([1, 1, 2.5])
     all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
     with f1: sel_m_side = st.multiselect("📅 생산월 선택", all_months, default=[all_months[-1]] if all_months else [])
@@ -537,6 +529,7 @@ if data_to_process:
                     </div>
                     """
                 
+                # 🚨 렌더링 버그(HTML 텍스트 노출) 원천 차단: 압축 엔진 적용
                 summary_html = f"""
                 <div style="background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 8px; padding: 12px 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); height: 100%;">
                     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 8px; margin-bottom: 10px;">
@@ -549,7 +542,7 @@ if data_to_process:
                     </div>
                 </div>
                 """
-                st.markdown(summary_html, unsafe_allow_html=True)
+                st.markdown(summary_html.replace('\n', ''), unsafe_allow_html=True)
 
     st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
     
