@@ -76,7 +76,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 🌟 2. 3-Factor AI 문맥 분석 엔진 & 공통 함수
+# 🌟 2. 3-Factor AI 문맥 분석 엔진 (현상 추출 정밀화)
 # ==========================================
 def safe_float(val):
     try:
@@ -88,7 +88,6 @@ def safe_float(val):
         return float(v_str)
     except: return 0.0
 
-# 🚨 신규 도입: 문맥 스코어링 기반 3대 요소 분류 엔진
 def categorize_issues(df, column='OPEN ISSUE'):
     if column not in df.columns: return {}
     
@@ -102,22 +101,30 @@ def categorize_issues(df, column='OPEN ISSUE'):
     issues = df[column].dropna().astype(str).tolist()
     
     for issue_text in issues:
-        sentences = [s.strip() for s in re.split(r'\n|->|→', issue_text) if len(s.strip()) > 2]
-        
-        for sentence in sentences:
-            if sentence in ['특이사항 없음', '특이사항없음', '주간', '야간', 'nan', 'none']: continue
+        # 🚨 요청 1번: 줄바꿈으로 분리 후 조치내역(->)은 버리고 순수 '현상'만 필터링
+        for line in issue_text.split('\n'):
+            line = line.strip()
+            if not line: continue
             
-            scores = {"⚙️ 설비 (사출기/주변설비)": 0, "🛠️ 금형": 0, "✨ 품질 및 사출조건": 0}
-            for cat, kws in rules.items():
-                for kw in kws:
-                    if kw in sentence:
-                        scores[cat] += 1
+            # 원인 및 조치 내역을 식별하여 패스
+            if line.startswith('→') or line.startswith('->') or line.startswith('-'):
+                continue 
             
-            best_cat = max(scores, key=scores.get)
-            if scores[best_cat] == 0: 
-                best_cat = "✨ 품질 및 사출조건" 
+            # 주간/야간 태그 제거하여 깔끔한 현상 문장만 도출
+            clean_line = re.sub(r'^\*?\s*(주간|야간)\s*', '', line).strip()
+            
+            if len(clean_line) > 2 and clean_line not in ['특이사항 없음', '특이사항없음', 'nan', 'none']:
+                scores = {"⚙️ 설비 (사출기/주변설비)": 0, "🛠️ 금형": 0, "✨ 품질 및 사출조건": 0}
+                for cat, kws in rules.items():
+                    for kw in kws:
+                        if kw in clean_line:
+                            scores[cat] += 1
                 
-            results[best_cat].append(sentence)
+                best_cat = max(scores, key=scores.get)
+                if scores[best_cat] == 0: 
+                    best_cat = "✨ 품질 및 사출조건" 
+                    
+                results[best_cat].append(clean_line)
     
     final_results = {}
     for cat in results:
@@ -127,18 +134,18 @@ def categorize_issues(df, column='OPEN ISSUE'):
             
     return final_results
 
-# 🚨 신규 도입: 리스트형 UI 렌더링
 def render_keyword_tags(categorized_data):
     if not categorized_data: return
     
     html = "<div style='background-color:#FFFBEB; border-left:6px solid #F59E0B; padding:18px 20px; border-radius:10px; margin-bottom:20px; box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.05);'>"
-    html += "<div style='font-size:16px; font-weight:900; color:#B45309; margin-bottom:15px;'>🔍 3-Factor 트러블 원인 분석 (주요 이슈 문장 요약)</div>"
+    html += "<div style='font-size:16px; font-weight:900; color:#B45309; margin-bottom:15px;'>🔍 3-Factor 트러블 원인 분석 (주요 현상 요약)</div>"
     html += "<div style='display:flex; flex-wrap:wrap; gap:15px;'>"
     
     for cat, items in categorized_data.items():
         list_html = "<ul style='margin:0; padding-left:20px; font-size:13.5px; color:#334155; line-height:1.6; font-weight:600;'>"
         for sentence, cnt in items:
-            list_html += f"<li>{sentence} <span style='color:#DC2626; font-weight:900; font-size:12px;'>({cnt}건)</span></li>"
+            # 🚨 요청 1번: (3건) -> (3) 으로 표기 변경
+            list_html += f"<li>{sentence} <span style='color:#DC2626; font-weight:900; font-size:12px;'>({cnt})</span></li>"
         list_html += "</ul>"
         
         if not items: list_html = "<span style='font-size:13px; color:#9CA3AF; font-weight:600; padding-left:5px;'>관련 이슈 없음</span>"
@@ -480,7 +487,7 @@ if data_to_process:
     # =========================================================
     # 🌟 5. 레이아웃 및 필터
     # =========================================================
-    title_col1, title_col2, title_col3 = st.columns([1, 5.5, 3.5], gap="small", vertical_alignment="center")
+    title_col1, title_col2 = st.columns([1.5, 8.5], gap="small", vertical_alignment="center")
     
     with title_col1:
         try: st.image("logo.png", width=120) 
@@ -489,39 +496,10 @@ if data_to_process:
     with title_col2: 
         st.markdown("<h1 style='margin: 0; padding: 0; font-weight: 900; font-size: 26px; color: #0F172A; white-space: nowrap;'>사출생산팀 생산성 및 오픈 이슈 분석 및 관리 리포트</h1>", unsafe_allow_html=True)
 
-    with title_col3:
-        if not daily_df.empty:
-            recent_row = daily_df.iloc[-1]
-            rec_date = recent_row['생산일']
-            rec_oee = safe_float(recent_row['공장종합효율'])
-            
-            diff_str = "<span style='color:#64748B;'>-</span>"
-            if len(daily_df) > 1:
-                prev_oee = safe_float(daily_df.iloc[-2]['공장종합효율'])
-                diff = rec_oee - prev_oee
-                if diff > 0: diff_str = f"<span style='color:#2563EB;'>▲ +{diff*100:.1f}%p</span>"
-                elif diff < 0: diff_str = f"<span style='color:#DC2626;'>▼ {abs(diff)*100:.1f}%p</span>"
+    st.markdown("<hr style='border: 1px solid #E2E8F0; margin-top: 10px; margin-bottom: 15px;'>", unsafe_allow_html=True)
 
-            st.markdown(f"""
-            <div style='background-color: #F8FAFC; border: 2px solid #E2E8F0; border-radius: 12px; padding: 12px 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); width: 100%;'>
-                <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid #E2E8F0; padding-bottom: 8px;'>
-                    <span style='font-size: 14px; color: #475569; font-weight: 800;'>{rec_date}</span>
-                    <div style='font-size: 22px; font-weight: 900; color: #0F172A; display: flex; align-items: baseline;'>
-                        {rec_oee:.1%} <span style='font-size: 11px; font-weight:800; color:#64748B; margin-left:12px; margin-right:4px;'>전일대비 증감율</span><span style='font-size: 15px;'>{diff_str}</span>
-                    </div>
-                </div>
-                <div style='display: flex; justify-content: space-between; align-items: center;'>
-                    <span style='font-size: 14px; color: #475569; font-weight: 800;' id='month_name_placeholder'>선택월 평균</span>
-                    <div style='font-size: 20px; font-weight: 800; color: #1E293B;' id='month_avg_placeholder'>
-                        {daily_df['공장종합효율'].mean():.1%}
-                    </div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-    st.markdown("<hr style='border: 1px solid #E2E8F0; margin-top: 10px; margin-bottom: 10px;'>", unsafe_allow_html=True)
-
-    f1, f2, f3 = st.columns([1, 1, 2])
+    # 🚨 요청 2번: 빈 공간(f3)에 '당일 요약 패널' 완벽 장착
+    f1, f2, f3 = st.columns([1, 1, 2.5])
     all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
     with f1: sel_m_side = st.multiselect("📅 생산월 선택", all_months, default=[all_months[-1]] if all_months else [])
     
@@ -532,21 +510,46 @@ if data_to_process:
     
     f_df = m_f_df[m_f_df['생산일'].isin(sel_d_side)].copy() if sel_d_side else m_f_df.copy()
 
-    title_month_str = ", ".join(sel_m_side) if sel_m_side else "전체"
-    if not daily_df.empty:
-        p_df_for_summary = daily_df[daily_df['생산월'].isin(sel_m_side)] if sel_m_side else daily_df
-        month_oee = p_df_for_summary['공장종합효율'].mean() if not p_df_for_summary.empty else 0.0
-        components.html(f"""
-        <script>
-            setTimeout(function() {{
-                const doc = window.parent.document;
-                const avgElem = doc.getElementById('month_avg_placeholder');
-                const nameElem = doc.getElementById('month_name_placeholder');
-                if(avgElem) avgElem.innerText = '{month_oee:.1%}';
-                if(nameElem) nameElem.innerText = '{title_month_str} 평균';
-            }}, 150);
-        </script>
-        """, width=0, height=0)
+    with f3:
+        target_date = sel_d_side[0] if sel_d_side else (m_f_df.sort_values('sort_key').iloc[-1]['생산일'] if not m_f_df.empty else None)
+        if target_date:
+            t_day_df = df[df['생산일'] == target_date]
+            active_day = t_day_df[t_day_df['종합효율'].apply(safe_float) > 0]
+            
+            if not active_day.empty:
+                active_count = len(active_day)
+                total_down = active_day['비가동시간'].apply(safe_float).sum()
+                matching_daily = daily_df[daily_df['생산일'] == target_date]
+                day_oee = safe_float(matching_daily.iloc[0]['공장종합효율']) if not matching_daily.empty else active_day['종합효율'].apply(safe_float).mean()
+                
+                worst_3 = active_day.sort_values(by='종합효율', ascending=True).head(3)
+                worst_html = ""
+                for i, (_, row) in enumerate(worst_3.iterrows()):
+                    m_name = str(row['설비명']).split(' - ')[0]
+                    p_name = str(row['품명'])
+                    if len(p_name) > 12: p_name = p_name[:12] + ".."
+                    oee = safe_float(row['종합효율'])
+                    worst_html += f"""
+                    <div style="background: #FEF2F2; padding: 6px 10px; border-radius: 6px; border: 1px solid #FCA5A5; flex: 1;">
+                        <div style="font-weight: 900; color: #1E293B; font-size: 13px; margin-bottom: 2px;">{i+1}. {m_name}</div>
+                        <div style="color: #64748B; font-size: 11px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{str(row['품명'])}">{p_name}</div>
+                        <div style="color:#DC2626; font-weight: 900; font-size: 14px; text-align: right;">{oee:.1%}</div>
+                    </div>
+                    """
+                
+                summary_html = f"""
+                <div style="background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 8px; padding: 12px 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); height: 100%;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 8px; margin-bottom: 10px;">
+                        <span style="font-size: 14px; font-weight: 900; color: #0F172A;">🚀 {target_date} 요약</span>
+                        <span style="font-size: 13px; font-weight: 800; color: #3B82F6;">가동 {active_count}대 | 효율 {day_oee:.1%} | 비가동 {total_down:.1f}h</span>
+                    </div>
+                    <div style="font-size: 12px; color: #DC2626; font-weight: 900; margin-bottom: 6px;">🚨 종합효율 WORST 3</div>
+                    <div style="display: flex; gap: 10px;">
+                        {worst_html}
+                    </div>
+                </div>
+                """
+                st.markdown(summary_html, unsafe_allow_html=True)
 
     st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
     
@@ -559,6 +562,8 @@ if data_to_process:
         p_df = daily_df[daily_df['생산월'].isin(sel_m_side)].copy() if sel_m_side else daily_df.copy()
         if sel_d_side: p_df = p_df[p_df['생산일'].isin(sel_d_side)]
             
+        title_month_str = ", ".join(sel_m_side) if sel_m_side else "전체"
+        
         if sel_m_side: render_section_title(f"사출생산팀 ({title_month_str}) 종합효율 추이")
         else: render_section_title("사출생산팀 전체 종합효율 추이")
             
