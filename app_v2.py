@@ -52,8 +52,8 @@ st.markdown("""
     
     div.stButton > button {
         width: 100%; min-height: 75px; height: auto !important; background-color: #FFFFFF; border: 2px solid #CBD5E1; color: #1E293B; 
-        font-size: 16px !important; font-weight: 800 !important; border-radius: 8px; margin: 0 !important; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
-        white-space: normal !important; word-break: keep-all !important; line-height: 1.4 !important; padding: 10px !important;
+        font-size: 15px !important; font-weight: 800 !important; border-radius: 8px; margin: 0 !important; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
+        white-space: pre-wrap !important; word-break: keep-all !important; line-height: 1.4 !important; padding: 12px 10px !important; text-align: center;
     }
     div.stButton > button:hover { border-color: #3B82F6; color: #1D4ED8; background-color: #EFF6FF; transform: translateY(-1px); }
     div.stButton > button:active { background-color: #2563EB !important; color: white !important; border-color: #2563EB; }
@@ -100,7 +100,7 @@ def categorize_issues(df, column='OPEN ISSUE'):
     results = {"⚙️ 설비 (사출기/주변설비)": [], "🛠️ 금형": [], "✨ 품질 및 사출조건": []}
     
     for idx, row in df.iterrows():
-        prod_date = str(row.get('생산일', '')).strip() # 🚨 생산일 추출
+        prod_date = str(row.get('생산일', '')).strip()
         mach_name = str(row.get('설비명', '')).split(' - ')[0].strip()
         issue_text = str(row.get(column, ''))
         if issue_text in ['', 'nan', '0', '0.0', 'None']: continue
@@ -129,7 +129,6 @@ def categorize_issues(df, column='OPEN ISSUE'):
             best_cat = max(scores, key=scores.get)
             if scores[best_cat] == 0: best_cat = "✨ 품질 및 사출조건" 
                 
-            # 🚨 타임스탬프(생산일) 추가 적용
             final_str = f"<span style='color:#475569; font-weight:800; font-size:12.5px;'>[{prod_date}]</span> <span style='color:#2563EB; font-weight:900;'>[{mach_name}]</span> {phenom}"
             if cause:
                 final_str += f" <span style='color:#DC2626; font-weight:700;'>({cause})</span>"
@@ -541,7 +540,7 @@ if data_to_process:
 
     st.markdown("<hr style='border: 1px solid #E2E8F0; margin-top: 10px; margin-bottom: 10px;'>", unsafe_allow_html=True)
 
-    f1, f2, f3 = st.columns([1, 1, 2.5])
+    f1, f2, f3 = st.columns([1, 1, 2.5], gap="medium")
     all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
     with f1: sel_m_side = st.multiselect("📅 생산월 선택", all_months, default=[all_months[-1]] if all_months else [])
     
@@ -571,6 +570,7 @@ if data_to_process:
                     p_name = str(row['품명'])
                     if len(p_name) > 12: p_name = p_name[:12] + ".."
                     oee = safe_float(row['종합효율'])
+                    # 🚨 1번 요청: WORST 3 카드에서 종합효율을 설비명 우측으로 올려 가독성 최적화
                     worst_html += f"""
                     <div style="background: #FEF2F2; padding: 8px 10px; border-radius: 6px; border: 1px solid #FCA5A5; flex: 1; display: flex; flex-direction: column; justify-content: center;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
