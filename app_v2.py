@@ -50,11 +50,10 @@ st.markdown("""
     .building-header { font-size: 18px; font-weight: 800; color: #1E293B; margin-top: 25px; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid #E2E8F0; }
     div[data-testid="column"] { padding: 0 6px !important; }
     
-    /* 🚨 버튼 줄바꿈(pre-wrap) 적용 및 세로 길이 조정 */
     div.stButton > button {
-        width: 100%; min-height: 85px; height: auto !important; background-color: #FFFFFF; border: 2px solid #CBD5E1; color: #1E293B; 
-        font-size: 15px !important; font-weight: 800 !important; border-radius: 8px; margin: 0 !important; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
-        white-space: pre-wrap !important; word-break: keep-all !important; line-height: 1.5 !important; padding: 12px 10px !important;
+        width: 100%; min-height: 75px; height: auto !important; background-color: #FFFFFF; border: 2px solid #CBD5E1; color: #1E293B; 
+        font-size: 16px !important; font-weight: 800 !important; border-radius: 8px; margin: 0 !important; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
+        white-space: normal !important; word-break: keep-all !important; line-height: 1.4 !important; padding: 10px !important;
     }
     div.stButton > button:hover { border-color: #3B82F6; color: #1D4ED8; background-color: #EFF6FF; transform: translateY(-1px); }
     div.stButton > button:active { background-color: #2563EB !important; color: white !important; border-color: #2563EB; }
@@ -101,6 +100,7 @@ def categorize_issues(df, column='OPEN ISSUE'):
     results = {"⚙️ 설비 (사출기/주변설비)": [], "🛠️ 금형": [], "✨ 품질 및 사출조건": []}
     
     for idx, row in df.iterrows():
+        prod_date = str(row.get('생산일', '')).strip() # 🚨 생산일 추출
         mach_name = str(row.get('설비명', '')).split(' - ')[0].strip()
         issue_text = str(row.get(column, ''))
         if issue_text in ['', 'nan', '0', '0.0', 'None']: continue
@@ -129,7 +129,8 @@ def categorize_issues(df, column='OPEN ISSUE'):
             best_cat = max(scores, key=scores.get)
             if scores[best_cat] == 0: best_cat = "✨ 품질 및 사출조건" 
                 
-            final_str = f"<span style='color:#2563EB; font-weight:900;'>[{mach_name}]</span> {phenom}"
+            # 🚨 타임스탬프(생산일) 추가 적용
+            final_str = f"<span style='color:#475569; font-weight:800; font-size:12.5px;'>[{prod_date}]</span> <span style='color:#2563EB; font-weight:900;'>[{mach_name}]</span> {phenom}"
             if cause:
                 final_str += f" <span style='color:#DC2626; font-weight:700;'>({cause})</span>"
                 
@@ -540,8 +541,7 @@ if data_to_process:
 
     st.markdown("<hr style='border: 1px solid #E2E8F0; margin-top: 10px; margin-bottom: 10px;'>", unsafe_allow_html=True)
 
-    # 🚨 탭2 버튼 넓이를 위해 gap을 medium으로 조정
-    f1, f2, f3 = st.columns([1, 1, 2.5], gap="medium")
+    f1, f2, f3 = st.columns([1, 1, 2.5])
     all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
     with f1: sel_m_side = st.multiselect("📅 생산월 선택", all_months, default=[all_months[-1]] if all_months else [])
     
@@ -696,14 +696,12 @@ if data_to_process:
             
             m_list = building_dict[selected_building]
             if m_list:
-                # 🚨 탭2 버튼 폭을 넓히기 위해 4열 설정 및 gap 유지
-                cols = st.columns(4, gap="medium") 
+                cols = st.columns(4) 
                 for i, mach in enumerate(m_list):
                     parts = [p.strip() for p in mach.split('-')]
                     if len(parts) >= 2: mach_title = f"{parts[0]} - {parts[1]}"
                     else: mach_title = parts[0]
                     
-                    # 주력 생산 품목 찾기
                     m_df = f_df[f_df['설비명'] == mach]
                     prods = m_df['품명'].dropna()
                     if not prods.empty:
@@ -712,7 +710,6 @@ if data_to_process:
                     else:
                         top_p = "생산품 없음"
                         
-                    # 🚨 버튼 텍스트에 줄바꿈(\n) 적용하여 2줄로 생성
                     display_name = f"{mach_title}\n[품목: {top_p}]"
                         
                     if cols[i % 4].button(display_name, key=f"btn_{selected_building}_{i}_{mach}", use_container_width=True):
