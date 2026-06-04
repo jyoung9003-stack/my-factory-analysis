@@ -50,10 +50,11 @@ st.markdown("""
     .building-header { font-size: 18px; font-weight: 800; color: #1E293B; margin-top: 25px; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid #E2E8F0; }
     div[data-testid="column"] { padding: 0 6px !important; }
     
+    /* 🚨 버튼 줄바꿈(pre-wrap) 적용 및 세로 길이 조정 */
     div.stButton > button {
-        width: 100%; min-height: 75px; height: auto !important; background-color: #FFFFFF; border: 2px solid #CBD5E1; color: #1E293B; 
-        font-size: 16px !important; font-weight: 800 !important; border-radius: 8px; margin: 0 !important; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
-        white-space: normal !important; word-break: keep-all !important; line-height: 1.4 !important; padding: 10px !important;
+        width: 100%; min-height: 85px; height: auto !important; background-color: #FFFFFF; border: 2px solid #CBD5E1; color: #1E293B; 
+        font-size: 15px !important; font-weight: 800 !important; border-radius: 8px; margin: 0 !important; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
+        white-space: pre-wrap !important; word-break: keep-all !important; line-height: 1.5 !important; padding: 12px 10px !important;
     }
     div.stButton > button:hover { border-color: #3B82F6; color: #1D4ED8; background-color: #EFF6FF; transform: translateY(-1px); }
     div.stButton > button:active { background-color: #2563EB !important; color: white !important; border-color: #2563EB; }
@@ -111,7 +112,6 @@ def categorize_issues(df, column='OPEN ISSUE'):
             line = re.sub(r'^\*?\s*(주간|야간)\s*', '', line).strip()
             if not line or line in ['특이사항 없음', '특이사항없음', 'nan', 'none']: continue
             
-            # 🚨 3번 피드백: 원인 추출 및 조치내역( ~ 후 ) 자르기
             if line.startswith('→') or line.startswith('->') or line.startswith('-'):
                 if not cause: 
                     cause_raw = re.sub(r'^[-→>]*\s*', '', line)
@@ -129,10 +129,9 @@ def categorize_issues(df, column='OPEN ISSUE'):
             best_cat = max(scores, key=scores.get)
             if scores[best_cat] == 0: best_cat = "✨ 품질 및 사출조건" 
                 
-            # 🚨 3번 피드백: 해당 설비 표기 및 원인 병합
             final_str = f"<span style='color:#2563EB; font-weight:900;'>[{mach_name}]</span> {phenom}"
             if cause:
-                final_str += f" <span style='color:#DC2626; font-weight:700;'>(원인: {cause})</span>"
+                final_str += f" <span style='color:#DC2626; font-weight:700;'>({cause})</span>"
                 
             results[best_cat].append(final_str)
     
@@ -149,7 +148,6 @@ def categorize_issues(df, column='OPEN ISSUE'):
             
     return final_results
 
-# 🚨 2번 피드백: 타이틀 인자 추가 (당일 / 월간 / 설비별 동적 적용)
 def render_keyword_tags(categorized_data, title="🔍 당일 주요 이슈 현황"):
     if not categorized_data: return
     
@@ -510,10 +508,40 @@ if data_to_process:
     with title_col2: 
         st.markdown("<h1 style='margin: 0; padding: 0; font-weight: 900; font-size: 26px; color: #0F172A; white-space: nowrap;'>사출생산팀 생산성 및 오픈 이슈 분석 및 관리 리포트</h1>", unsafe_allow_html=True)
 
-    st.markdown("<hr style='border: 1px solid #E2E8F0; margin-top: 10px; margin-bottom: 15px;'>", unsafe_allow_html=True)
+    with title_col3:
+        if not daily_df.empty:
+            recent_row = daily_df.iloc[-1]
+            rec_date = recent_row['생산일']
+            rec_oee = safe_float(recent_row['공장종합효율'])
+            
+            diff_str = "<span style='color:#64748B;'>-</span>"
+            if len(daily_df) > 1:
+                prev_oee = safe_float(daily_df.iloc[-2]['공장종합효율'])
+                diff = rec_oee - prev_oee
+                if diff > 0: diff_str = f"<span style='color:#2563EB;'>▲ +{diff*100:.1f}%p</span>"
+                elif diff < 0: diff_str = f"<span style='color:#DC2626;'>▼ {abs(diff)*100:.1f}%p</span>"
 
-    # 🚨 요약 전광판 적용 (버그 픽스)
-    f1, f2, f3 = st.columns([1, 1, 2.5])
+            st.markdown(f"""
+            <div style='background-color: #F8FAFC; border: 2px solid #E2E8F0; border-radius: 12px; padding: 12px 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); width: 100%;'>
+                <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid #E2E8F0; padding-bottom: 8px;'>
+                    <span style='font-size: 14px; color: #475569; font-weight: 800;'>{rec_date}</span>
+                    <div style='font-size: 22px; font-weight: 900; color: #0F172A; display: flex; align-items: baseline;'>
+                        {rec_oee:.1%} <span style='font-size: 11px; font-weight:800; color:#64748B; margin-left:12px; margin-right:4px;'>전일대비 증감율</span><span style='font-size: 15px;'>{diff_str}</span>
+                    </div>
+                </div>
+                <div style='display: flex; justify-content: space-between; align-items: center;'>
+                    <span style='font-size: 14px; color: #475569; font-weight: 800;' id='month_name_placeholder'>선택월 평균</span>
+                    <div style='font-size: 20px; font-weight: 800; color: #1E293B;' id='month_avg_placeholder'>
+                        {daily_df['공장종합효율'].mean():.1%}
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.markdown("<hr style='border: 1px solid #E2E8F0; margin-top: 10px; margin-bottom: 10px;'>", unsafe_allow_html=True)
+
+    # 🚨 탭2 버튼 넓이를 위해 gap을 medium으로 조정
+    f1, f2, f3 = st.columns([1, 1, 2.5], gap="medium")
     all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
     with f1: sel_m_side = st.multiselect("📅 생산월 선택", all_months, default=[all_months[-1]] if all_months else [])
     
@@ -543,7 +571,6 @@ if data_to_process:
                     p_name = str(row['품명'])
                     if len(p_name) > 12: p_name = p_name[:12] + ".."
                     oee = safe_float(row['종합효율'])
-                    # 🚨 1번 피드백: 효율을 위쪽으로 배치하여 카드 세로길이 축소
                     worst_html += f"""
                     <div style="background: #FEF2F2; padding: 8px 10px; border-radius: 6px; border: 1px solid #FCA5A5; flex: 1; display: flex; flex-direction: column; justify-content: center;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
@@ -554,7 +581,6 @@ if data_to_process:
                     </div>
                     """
                 
-                # 🚨 1번 피드백: "가동 설비", "종합 효율" 라벨 텍스트 변경
                 summary_html = f"""
                 <div style="background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 8px; padding: 12px 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); height: 100%;">
                     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 8px; margin-bottom: 10px;">
@@ -569,6 +595,22 @@ if data_to_process:
                 """
                 st.markdown(summary_html.replace('\n', ''), unsafe_allow_html=True)
 
+    title_month_str = ", ".join(sel_m_side) if sel_m_side else "전체"
+    if not daily_df.empty:
+        p_df_for_summary = daily_df[daily_df['생산월'].isin(sel_m_side)] if sel_m_side else daily_df
+        month_oee = p_df_for_summary['공장종합효율'].mean() if not p_df_for_summary.empty else 0.0
+        components.html(f"""
+        <script>
+            setTimeout(function() {{
+                const doc = window.parent.document;
+                const avgElem = doc.getElementById('month_avg_placeholder');
+                const nameElem = doc.getElementById('month_name_placeholder');
+                if(avgElem) avgElem.innerText = '{month_oee:.1%}';
+                if(nameElem) nameElem.innerText = '{title_month_str} 평균';
+            }}, 150);
+        </script>
+        """, width=0, height=0)
+
     st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
     
     tab1, tab2, tab3 = st.tabs(["📈 사출생산팀 종합효율 추이", "🎯 설비별 생산성 및 오픈이슈 분석", "🗺️ 현장 도면 OEE 오버레이"])
@@ -580,8 +622,6 @@ if data_to_process:
         p_df = daily_df[daily_df['생산월'].isin(sel_m_side)].copy() if sel_m_side else daily_df.copy()
         if sel_d_side: p_df = p_df[p_df['생산일'].isin(sel_d_side)]
             
-        title_month_str = ", ".join(sel_m_side) if sel_m_side else "전체"
-        
         if sel_m_side: render_section_title(f"사출생산팀 ({title_month_str}) 종합효율 추이")
         else: render_section_title("사출생산팀 전체 종합효율 추이")
             
@@ -656,20 +696,33 @@ if data_to_process:
             
             m_list = building_dict[selected_building]
             if m_list:
-                cols = st.columns(4) 
+                # 🚨 탭2 버튼 폭을 넓히기 위해 4열 설정 및 gap 유지
+                cols = st.columns(4, gap="medium") 
                 for i, mach in enumerate(m_list):
                     parts = [p.strip() for p in mach.split('-')]
-                    if len(parts) >= 2: display_name = f"{parts[0]} - {parts[1]}"
-                    else: display_name = parts[0]
+                    if len(parts) >= 2: mach_title = f"{parts[0]} - {parts[1]}"
+                    else: mach_title = parts[0]
+                    
+                    # 주력 생산 품목 찾기
+                    m_df = f_df[f_df['설비명'] == mach]
+                    prods = m_df['품명'].dropna()
+                    if not prods.empty:
+                        top_p = prods.value_counts().index[0]
+                        if len(top_p) > 20: top_p = top_p[:18] + ".."
+                    else:
+                        top_p = "생산품 없음"
                         
-                    if cols[i % 4].button(display_name, key=f"btn_{selected_building}_{i}_{mach}"):
+                    # 🚨 버튼 텍스트에 줄바꿈(\n) 적용하여 2줄로 생성
+                    display_name = f"{mach_title}\n[품목: {top_p}]"
+                        
+                    if cols[i % 4].button(display_name, key=f"btn_{selected_building}_{i}_{mach}", use_container_width=True):
                         t7_df = f_df[f_df['설비명'] == mach].copy().sort_values('sort_key')
                         show_machine_popup(mach, t7_df, df, sel_m_side)
 
         else: st.info("분석할 설비 데이터가 존재하지 않습니다.")
 
     # -----------------------------------------------------
-    # 🚨 TAB 3: 현장 도면(사진) 기반 OEE 오버레이 
+    # TAB 3: 현장 도면(사진) 기반 OEE 오버레이 
     # -----------------------------------------------------
     with tab3:
         render_section_title("🗺️ 현장 레이아웃 OEE 라이브 뷰")
