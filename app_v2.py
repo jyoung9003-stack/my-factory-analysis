@@ -53,7 +53,7 @@ st.markdown("""
     div.stButton > button {
         width: 100%; min-height: 75px; height: auto !important; background-color: #FFFFFF; border: 2px solid #CBD5E1; color: #1E293B; 
         font-size: 15px !important; font-weight: 800 !important; border-radius: 8px; margin: 0 !important; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
-        white-space: pre-wrap !important; word-break: keep-all !important; line-height: 1.4 !important; padding: 12px 10px !important; text-align: center;
+        white-space: pre-wrap !important; word-break: keep-all !important; line-height: 1.5 !important; padding: 12px 10px !important; text-align: center;
     }
     div.stButton > button:hover { border-color: #3B82F6; color: #1D4ED8; background-color: #EFF6FF; transform: translateY(-1px); }
     div.stButton > button:active { background-color: #2563EB !important; color: white !important; border-color: #2563EB; }
@@ -76,7 +76,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 🌟 2. AI 이슈/원인 분리 엔진 및 공통 함수
+# 🌟 2. 🚨 집중 분석 엔진 (WORST 5 중심)
 # ==========================================
 def safe_float(val):
     try:
@@ -88,83 +88,71 @@ def safe_float(val):
         return float(v_str)
     except: return 0.0
 
-def categorize_issues(df, column='OPEN ISSUE'):
-    if column not in df.columns: return {}
+# 🚨 요청 2 & 3번: WORST 5 OEE 및 비가동시간 설비의 이슈만 추출 + 하단 키워드
+def extract_worst_issues(df, column='OPEN ISSUE', is_single_machine=False):
+    if column not in df.columns or df.empty: return [], [], []
     
-    rules = {
-        "⚙️ 설비 (사출기/주변설비)": ['로보트', '로봇', '그리퍼', '원점', '스토퍼', '실린더', '노즐', '타이바', '사출기', '서보', '모터', '밸브', '에어라인', '작동성', '온수기', '냉각기', '공급기', '피딩', '건조기', '호퍼', '컨베이어', '비전', '검사기', '칠러', '센서', '히터', '알람', '대기', '지연', '재가동', '볼트', '파손', '단선', '누수', '고장', '통신', '에러'],
-        "🛠️ 금형": ['금형', '코어', '인서트', '핀', '슬라이드', '캐비티', '런너', '게이트', '이젝터', '파팅', '밀핀', '스프루', '가이드', '취출', '냉각수', '세척', '하측', '상측', '코팅'],
-        "✨ 품질 및 사출조건": ['미성형', '버', 'Burr', '흑점', '웰드', '스크래치', '치수', '변형', '오염', '찍힘', '누락', '간섭', '공타', '미스', '가스', '수지', '이물', '불량', '온도', '압력', '속도', '시간', '위치', '계량', '보압', '조건', '세팅', '셋팅', '승온', '재세팅', '구간', '장력', '조정', '수정', '미달']
-    }
+    # 1. OEE Worst 5 (가동은 했으나 효율이 가장 낮은 5대)
+    worst_oee_df = df[df['종합효율'].apply(safe_float) > 0].sort_values(by='종합효율', ascending=True).head(5)
+    # 2. 비가동시간 Worst 5 (비가동이 가장 긴 5대)
+    worst_down_df = df.sort_values(by='비가동시간', ascending=False).head(5)
     
-    results = {"⚙️ 설비 (사출기/주변설비)": [], "🛠️ 금형": [], "✨ 품질 및 사출조건": []}
-    
-    for idx, row in df.iterrows():
-        prod_date = str(row.get('생산일', '')).strip()
-        mach_name = str(row.get('설비명', '')).split(' - ')[0].strip()
-        issue_text = str(row.get(column, ''))
-        if issue_text in ['', 'nan', '0', '0.0', 'None']: continue
-        
-        phenom = ""
-        cause = ""
-        for line in issue_text.split('\n'):
-            line = line.strip()
-            line = re.sub(r'^\*?\s*(주간|야간)\s*', '', line).strip()
-            if not line or line in ['특이사항 없음', '특이사항없음', 'nan', 'none']: continue
+    def get_issues(target_df):
+        res = []
+        for _, row in target_df.iterrows():
+            mach_name = str(row.get('설비명', '')).split(' - ')[0].strip()
+            prod_date = str(row.get('생산일', '')).strip()
+            issue_text = str(row.get(column, ''))
+            if issue_text in ['', 'nan', '0', '0.0', 'None']: continue
             
-            if line.startswith('→') or line.startswith('->') or line.startswith('-'):
-                if not cause: 
-                    cause_raw = re.sub(r'^[-→>]*\s*', '', line)
-                    cause = cause_raw.split(' 후 ')[0].strip()
-            else:
-                if not phenom: phenom = line
-                
-        if phenom:
-            combined_text = phenom + " " + cause
-            scores = {"⚙️ 설비 (사출기/주변설비)": 0, "🛠️ 금형": 0, "✨ 품질 및 사출조건": 0}
-            for cat, kws in rules.items():
-                for kw in kws:
-                    if kw in combined_text: scores[cat] += 1
-            
-            best_cat = max(scores, key=scores.get)
-            if scores[best_cat] == 0: best_cat = "✨ 품질 및 사출조건" 
-                
-            final_str = f"<span style='color:#475569; font-weight:800; font-size:12.5px;'>[{prod_date}]</span> <span style='color:#2563EB; font-weight:900;'>[{mach_name}]</span> {phenom}"
-            if cause:
-                final_str += f" <span style='color:#DC2626; font-weight:700;'>({cause})</span>"
-                
-            results[best_cat].append(final_str)
+            phenom, cause = "", ""
+            for line in issue_text.split('\n'):
+                line = re.sub(r'^\*?\s*(주간|야간)\s*', '', line.strip()).strip()
+                if not line or line in ['특이사항 없음', '특이사항없음', 'nan', 'none']: continue
+                if line.startswith('→') or line.startswith('->') or line.startswith('-'):
+                    if not cause: cause = re.sub(r'^[-→>]*\s*', '', line).split(' 후 ')[0].strip()
+                else:
+                    if not phenom: phenom = line
+                    
+            if phenom:
+                # 탭 1/2 구분에 따라 날짜 또는 설비명 강조 표시
+                label = f"[{prod_date}]" if is_single_machine else f"[{mach_name}]"
+                final_str = f"<span style='color:#2563EB; font-weight:900;'>{label}</span> {phenom}"
+                if cause: final_str += f" <span style='color:#DC2626; font-weight:700;'>({cause})</span>"
+                res.append(final_str)
+        return res
     
-    final_results = {}
-    for cat in results:
-        seen = set()
-        unique_items = []
-        for item in results[cat]:
-            if item not in seen:
-                seen.add(item)
-                unique_items.append(item)
-        if unique_items:
-            final_results[cat] = unique_items[:5]
-            
-    return final_results
+    oee_issues = get_issues(worst_oee_df)
+    down_issues = get_issues(worst_down_df)
+    
+    # 3. 최다 언급 단어 분석 (Top 5)
+    text_data = " ".join(df[column].dropna().astype(str).tolist())
+    stopwords = ['주간', '야간', '특이사항', '없음', 'nan', 'none', '->', '→', '-', '*', '.', ',', '및', '등', '인한', '조치', '확인', '현상', '이슈', '발생', '대기', '지연']
+    for sw in stopwords: text_data = text_data.replace(sw, ' ')
+    
+    words = [w for w in re.findall(r'[가-힣a-zA-Z0-9]+', text_data) if len(w) >= 2]
+    top_words = Counter(words).most_common(5)
+    
+    return oee_issues, down_issues, top_words
 
-def render_keyword_tags(categorized_data, title="🔍 당일 주요 이슈 현황"):
-    if not categorized_data: return
-    
+def render_worst_issues(oee_issues, down_issues, top_words, title="🔍 핵심 트러블 및 오픈이슈 분석"):
     html = "<div style='background-color:#FFFBEB; border-left:6px solid #F59E0B; padding:18px 20px; border-radius:10px; margin-bottom:20px; box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.05);'>"
     html += f"<div style='font-size:16px; font-weight:900; color:#B45309; margin-bottom:15px;'>{title}</div>"
-    html += "<div style='display:flex; flex-wrap:wrap; gap:15px;'>"
+    html += "<div style='display:flex; flex-wrap:wrap; gap:15px; margin-bottom:15px;'>"
     
-    for cat, items in categorized_data.items():
-        list_html = "<ul style='margin:0; padding-left:20px; font-size:13.5px; color:#334155; line-height:1.6; font-weight:600;'>"
-        for sentence in items:
-            list_html += f"<li style='margin-bottom:6px;'>{sentence}</li>"
-        list_html += "</ul>"
+    def make_ul(issues):
+        if not issues: return "<span style='font-size:13px; color:#9CA3AF; font-weight:600; padding-left:5px;'>관련 이슈 없음</span>"
+        return "<ul style='margin:0; padding-left:20px; font-size:13.5px; color:#334155; line-height:1.6; font-weight:600;'>" + "".join([f"<li style='margin-bottom:6px;'>{s}</li>" for s in issues]) + "</ul>"
+
+    html += f"<div style='background-color:#FFFFFF; border:1px solid #FCA5A5; border-radius:8px; padding:15px; flex: 1; min-width: 250px;'><div style='font-size:15px; font-weight:900; color:#DC2626; margin-bottom:10px; border-bottom:1px solid #FEE2E2; padding-bottom:5px;'>📉 종합효율 WORST 5 이슈</div>{make_ul(oee_issues)}</div>"
+    html += f"<div style='background-color:#FFFFFF; border:1px solid #FCA5A5; border-radius:8px; padding:15px; flex: 1; min-width: 250px;'><div style='font-size:15px; font-weight:900; color:#DC2626; margin-bottom:10px; border-bottom:1px solid #FEE2E2; padding-bottom:5px;'>🛑 비가동시간 WORST 5 이슈</div>{make_ul(down_issues)}</div>"
+    html += "</div>"
+    
+    if top_words:
+        tags = "".join([f"<span style='display:inline-block; white-space:nowrap; background-color:#FEF3C7; color:#D97706; padding:6px 12px; border-radius:12px; font-weight:800; font-size:13px; margin-right:6px; border:1px solid #FCD34D;'>{word} <span style='font-size:11px; color:#B45309;'>({cnt})</span></span>" for word, cnt in top_words])
+        html += f"<div style='background-color:#FFFFFF; border:1px solid #FDE68A; border-radius:8px; padding:12px 15px;'><div style='font-size:14px; font-weight:800; color:#92400E; margin-bottom:8px;'>🏷️ 트러블 다빈도 키워드 (Top 5)</div><div>{tags}</div></div>"
         
-        if not items: list_html = "<span style='font-size:13px; color:#9CA3AF; font-weight:600; padding-left:5px;'>관련 이슈 없음</span>"
-        html += f"<div style='background-color:#FFFFFF; border:1px solid #FDE68A; border-radius:8px; padding:15px; flex: 1; min-width: 250px;'><div style='font-size:15px; font-weight:800; color:#92400E; margin-bottom:10px; border-bottom:1px solid #FEF3C7; padding-bottom:5px;'>{cat}</div><div>{list_html}</div></div>"
-        
-    html += "</div></div>"
+    html += "</div>"
     st.markdown(html.replace('\n', ''), unsafe_allow_html=True)
 
 def render_section_title(text): st.markdown(f"<div class='section-banner'><h3>{text}</h3></div>", unsafe_allow_html=True)
@@ -319,8 +307,9 @@ def show_daily_summary_popup(clicked_date, f_df, daily_df, full_df):
         with col_best: render_rank_cards(best_5_mach, "BEST 5", is_worst=False, name_col="설비명")
         with col_worst: render_rank_cards(worst_5_mach, "WORST 5", is_worst=True, name_col="설비명")
 
-        categorized_data = categorize_issues(active_day)
-        render_keyword_tags(categorized_data, title="🔍 당일 주요 이슈 현황")
+        # 🚨 요약 이슈 렌더링 호출 (WORST 기반)
+        oee_iss, down_iss, top_words = extract_worst_issues(active_day, is_single_machine=False)
+        render_worst_issues(oee_iss, down_iss, top_words, title="🔍 당일 주요 이슈 현황")
 
         st.markdown("<h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📋 전체 설비 상세 가동 내역</h4>", unsafe_allow_html=True)
         disp_day = prepare_popup_table_with_diff(active_day, full_df, clicked_date, is_tab1=True)
@@ -357,8 +346,8 @@ def show_monthly_summary_popup(clicked_month, f_df, daily_df, full_df):
         with col_best: render_rank_cards(best_5_mach, "월간 평균 OEE BEST 5", is_worst=False, name_col="설비명")
         with col_worst: render_rank_cards(worst_5_mach, "월간 평균 OEE WORST 5", is_worst=True, name_col="설비명")
 
-        categorized_data = categorize_issues(valid_month)
-        render_keyword_tags(categorized_data, title="🔍 월간 주요 이슈 현황")
+        oee_iss, down_iss, top_words = extract_worst_issues(valid_month, is_single_machine=False)
+        render_worst_issues(oee_iss, down_iss, top_words, title="🔍 월간 주요 이슈 현황")
 
         st.markdown("<h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📋 월간 설비별 종합 가동 내역</h4>", unsafe_allow_html=True)
         disp_month = mach_agg[['설비명', '품명', '종합효율', '비가동시간', 'OPEN ISSUE']].copy()
@@ -412,8 +401,8 @@ def show_machine_popup(tgt_mach, t7_df, full_df, sel_m_side):
     else: 
         st.info("해당 설비의 유효한 가동 데이터가 없습니다.")
 
-    categorized_data = categorize_issues(valid_t7)
-    render_keyword_tags(categorized_data, title="🔍 설비 주요 이슈 현황")
+    oee_iss, down_iss, top_words = extract_worst_issues(valid_t7, is_single_machine=True)
+    render_worst_issues(oee_iss, down_iss, top_words, title="🔍 설비 주요 이슈 현황")
 
     mach_short = str(tgt_mach).split(' - ')[0].strip()
     prod_name = valid_t7['품명'].dropna().iloc[0] if not valid_t7['품명'].dropna().empty else ""
@@ -563,33 +552,49 @@ if data_to_process:
                 matching_daily = daily_df[daily_df['생산일'] == target_date]
                 day_oee = safe_float(matching_daily.iloc[0]['공장종합효율']) if not matching_daily.empty else active_day['종합효율'].apply(safe_float).mean()
                 
-                worst_3 = active_day.sort_values(by='종합효율', ascending=True).head(3)
-                worst_html = ""
-                for i, (_, row) in enumerate(worst_3.iterrows()):
-                    m_name = str(row['설비명']).split(' - ')[0]
-                    p_name = str(row['품명'])
-                    if len(p_name) > 12: p_name = p_name[:12] + ".."
-                    oee = safe_float(row['종합효율'])
-                    # 🚨 1번 요청: WORST 3 카드에서 종합효율을 설비명 우측으로 올려 가독성 최적화
-                    worst_html += f"""
-                    <div style="background: #FEF2F2; padding: 8px 10px; border-radius: 6px; border: 1px solid #FCA5A5; flex: 1; display: flex; flex-direction: column; justify-content: center;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                            <div style="font-weight: 900; color: #1E293B; font-size: 13px;">{i+1}. {m_name}</div>
-                            <div style="color:#DC2626; font-weight: 900; font-size: 15px;">{oee:.1%}</div>
+                # 🚨 1번 피드백: BEST 3 / WORST 3 분할 UI 생성 함수
+                def build_mini_card(data_df, is_best):
+                    res_html = ""
+                    bg_color = "#EFF6FF" if is_best else "#FEF2F2"
+                    border_color = "#93C5FD" if is_best else "#FCA5A5"
+                    val_color = "#2563EB" if is_best else "#DC2626"
+                    for i, (_, row) in enumerate(data_df.iterrows()):
+                        m_name = str(row['설비명']).split(' - ')[0]
+                        p_name = str(row['품명'])
+                        if len(p_name) > 12: p_name = p_name[:12] + ".."
+                        oee = safe_float(row['종합효율'])
+                        res_html += f"""
+                        <div style="background: {bg_color}; padding: 6px 10px; border-radius: 6px; border: 1px solid {border_color}; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center;">
+                            <div style="display: flex; flex-direction: column; width: 65%;">
+                                <span style="font-weight: 900; color: #1E293B; font-size: 13px;">{i+1}. {m_name}</span>
+                                <span style="color: #64748B; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{str(row['품명'])}">{p_name}</span>
+                            </div>
+                            <div style="color:{val_color}; font-weight: 900; font-size: 14px;">{oee:.1%}</div>
                         </div>
-                        <div style="color: #64748B; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{str(row['품명'])}">{p_name}</div>
-                    </div>
-                    """
-                
+                        """
+                    return res_html
+
+                best_3 = active_day.sort_values(by='종합효율', ascending=False).head(3)
+                worst_3 = active_day.sort_values(by='종합효율', ascending=True).head(3)
+
+                best_html = build_mini_card(best_3, True)
+                worst_html = build_mini_card(worst_3, False)
+
                 summary_html = f"""
                 <div style="background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 8px; padding: 12px 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); height: 100%;">
                     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 8px; margin-bottom: 10px;">
                         <span style="font-size: 14px; font-weight: 900; color: #0F172A;">🚀 {target_date} 요약</span>
                         <span style="font-size: 13px; font-weight: 800; color: #3B82F6;">가동 설비 {active_count}대 | 종합 효율 {day_oee:.1%} | 비가동 {total_down:.1f}h</span>
                     </div>
-                    <div style="font-size: 12px; color: #DC2626; font-weight: 900; margin-bottom: 6px;">🚨 종합효율 WORST 3</div>
-                    <div style="display: flex; gap: 10px;">
-                        {worst_html}
+                    <div style="display: flex; gap: 15px;">
+                        <div style="flex: 1;">
+                            <div style="font-size: 12px; color: #2563EB; font-weight: 900; margin-bottom: 6px;">🏆 종합효율 BEST 3</div>
+                            {best_html}
+                        </div>
+                        <div style="flex: 1;">
+                            <div style="font-size: 12px; color: #DC2626; font-weight: 900; margin-bottom: 6px;">🚨 종합효율 WORST 3</div>
+                            {worst_html}
+                        </div>
                     </div>
                 </div>
                 """
@@ -696,7 +701,7 @@ if data_to_process:
             
             m_list = building_dict[selected_building]
             if m_list:
-                cols = st.columns(4) 
+                cols = st.columns(4, gap="medium") 
                 for i, mach in enumerate(m_list):
                     parts = [p.strip() for p in mach.split('-')]
                     if len(parts) >= 2: mach_title = f"{parts[0]} - {parts[1]}"
