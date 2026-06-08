@@ -52,8 +52,8 @@ st.markdown("""
     
     div.stButton > button {
         width: 100%; min-height: 75px; height: auto !important; background-color: #FFFFFF; border: 2px solid #CBD5E1; color: #1E293B; 
-        font-size: 16px !important; font-weight: 800 !important; border-radius: 8px; margin: 0 !important; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
-        white-space: pre-wrap !important; word-break: keep-all !important; line-height: 1.4 !important; padding: 10px !important; text-align: center;
+        font-size: 15px !important; font-weight: 800 !important; border-radius: 8px; margin: 0 !important; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
+        white-space: pre-wrap !important; word-break: keep-all !important; line-height: 1.4 !important; padding: 12px 10px !important; text-align: center;
     }
     div.stButton > button:hover { border-color: #3B82F6; color: #1D4ED8; background-color: #EFF6FF; transform: translateY(-1px); }
     div.stButton > button:active { background-color: #2563EB !important; color: white !important; border-color: #2563EB; }
@@ -290,8 +290,70 @@ def get_image_base64(filepath):
         return base64.b64encode(f.read()).decode()
 
 # ==========================================
-# 🌟 3. 팝업창 모듈
+# 🌟 3. 팝업창 집중 분석 & 모듈
 # ==========================================
+def extract_worst_issues(df, column='OPEN ISSUE', is_single_machine=False):
+    if column not in df.columns or df.empty: return [], [], []
+    
+    worst_oee_df = df[df['종합효율'].apply(safe_float) > 0].sort_values(by='종합효율', ascending=True).head(5)
+    worst_down_df = df.sort_values(by='비가동시간', ascending=False).head(5)
+    
+    def get_issues(target_df):
+        res = []
+        for _, row in target_df.iterrows():
+            mach_name = str(row.get('설비명', '')).split(' - ')[0].strip()
+            prod_date = str(row.get('생산일', '')).strip()
+            issue_text = str(row.get(column, ''))
+            if issue_text in ['', 'nan', '0', '0.0', 'None']: continue
+            
+            phenom, cause = "", ""
+            for line in issue_text.split('\n'):
+                line = re.sub(r'^\*?\s*(주간|야간)\s*', '', line.strip()).strip()
+                if not line or line in ['특이사항 없음', '특이사항없음', 'nan', 'none']: continue
+                if line.startswith('→') or line.startswith('->') or line.startswith('-'):
+                    if not cause: cause = re.sub(r'^[-→>]*\s*', '', line).split(' 후 ')[0].strip()
+                else:
+                    if not phenom: phenom = line
+                    
+            if phenom:
+                label = f"[{prod_date}]" if is_single_machine else f"[{mach_name}]"
+                final_str = f"<span style='color:#2563EB; font-weight:900;'>{label}</span> {phenom}"
+                if cause: final_str += f" <span style='color:#DC2626; font-weight:700;'>({cause})</span>"
+                res.append(final_str)
+        return res
+    
+    oee_issues = get_issues(worst_oee_df)
+    down_issues = get_issues(worst_down_df)
+    
+    text_data = " ".join(df[column].dropna().astype(str).tolist())
+    stopwords = ['주간', '야간', '특이사항', '없음', 'nan', 'none', '->', '→', '-', '*', '.', ',', '및', '등', '인한', '조치', '확인', '현상', '이슈', '발생', '대기', '지연']
+    for sw in stopwords: text_data = text_data.replace(sw, ' ')
+    words = [w for w in re.findall(r'[가-힣a-zA-Z0-9]+', text_data) if len(w) >= 2]
+    top_words = Counter(words).most_common(5)
+    
+    return oee_issues, down_issues, top_words
+
+def render_worst_issues(oee_issues, down_issues, top_words, title="🔍 핵심 트러블 및 오픈이슈 분석"):
+    html = "<div style='background-color:#FFFBEB; border-left:6px solid #F59E0B; padding:18px 20px; border-radius:10px; margin-bottom:20px; box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.05);'>"
+    html += f"<div style='font-size:16px; font-weight:900; color:#B45309; margin-bottom:15px;'>{title}</div>"
+    html += "<div style='display:flex; flex-wrap:wrap; gap:15px; margin-bottom:15px;'>"
+    
+    def make_ul(issues):
+        if not issues: return "<span style='font-size:13px; color:#9CA3AF; font-weight:600; padding-left:5px;'>관련 이슈 없음</span>"
+        return "<ul style='margin:0; padding-left:20px; font-size:13.5px; color:#334155; line-height:1.6; font-weight:600;'>" + "".join([f"<li style='margin-bottom:6px;'>{s}</li>" for s in issues]) + "</ul>"
+
+    html += f"<div style='background-color:#FFFFFF; border:1px solid #FCA5A5; border-radius:8px; padding:15px; flex: 1; min-width: 250px;'><div style='font-size:15px; font-weight:900; color:#DC2626; margin-bottom:10px; border-bottom:1px solid #FEE2E2; padding-bottom:5px;'>📉 종합효율 WORST 5 이슈</div>{make_ul(oee_issues)}</div>"
+    html += f"<div style='background-color:#FFFFFF; border:1px solid #FCA5A5; border-radius:8px; padding:15px; flex: 1; min-width: 250px;'><div style='font-size:15px; font-weight:900; color:#DC2626; margin-bottom:10px; border-bottom:1px solid #FEE2E2; padding-bottom:5px;'>🛑 비가동시간 WORST 5 이슈</div>{make_ul(down_issues)}</div>"
+    html += "</div>"
+    
+    if top_words:
+        tags = "".join([f"<span style='display:inline-block; white-space:nowrap; background-color:#FEF3C7; color:#D97706; padding:6px 12px; border-radius:12px; font-weight:800; font-size:13px; margin-right:6px; border:1px solid #FCD34D;'>{word} <span style='font-size:11px; color:#B45309;'>({cnt})</span></span>" for word, cnt in top_words])
+        html += f"<div style='background-color:#FFFFFF; border:1px solid #FDE68A; border-radius:8px; padding:12px 15px;'><div style='font-size:14px; font-weight:800; color:#92400E; margin-bottom:8px;'>🏷️ 트러블 다빈도 키워드 (Top 5)</div><div>{tags}</div></div>"
+        
+    html += "</div>"
+    st.markdown(html.replace('\n', ''), unsafe_allow_html=True)
+
+
 @st.dialog("📅 일일 가동 상세 현황", width="large")
 def show_daily_summary_popup(clicked_date, f_df, daily_df, full_df):
     st.markdown(f"<h2 style='text-align:center; color:#0F172A; font-weight:900; font-size:32px; margin-bottom:10px;'><span style='color:#D91B1B;'>{clicked_date}</span> 사출생산팀 생산 실적 및 오픈이슈 현황</h2><hr style='border-top: 3px solid #E2E8F0; margin-bottom: 30px;'>", unsafe_allow_html=True)
@@ -319,8 +381,8 @@ def show_daily_summary_popup(clicked_date, f_df, daily_df, full_df):
         with col_best: render_rank_cards(best_5_mach, "BEST 5", is_worst=False, name_col="설비명")
         with col_worst: render_rank_cards(worst_5_mach, "WORST 5", is_worst=True, name_col="설비명")
 
-        categorized_data = categorize_issues(active_day)
-        render_keyword_tags(categorized_data, title="🔍 당일 주요 이슈 현황")
+        oee_iss, down_iss, top_words = extract_worst_issues(active_day, is_single_machine=False)
+        render_worst_issues(oee_iss, down_iss, top_words, title="🔍 당일 주요 이슈 현황")
 
         st.markdown("<h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📋 전체 설비 상세 가동 내역</h4>", unsafe_allow_html=True)
         disp_day = prepare_popup_table_with_diff(active_day, full_df, clicked_date, is_tab1=True)
@@ -357,8 +419,8 @@ def show_monthly_summary_popup(clicked_month, f_df, daily_df, full_df):
         with col_best: render_rank_cards(best_5_mach, "월간 평균 OEE BEST 5", is_worst=False, name_col="설비명")
         with col_worst: render_rank_cards(worst_5_mach, "월간 평균 OEE WORST 5", is_worst=True, name_col="설비명")
 
-        categorized_data = categorize_issues(valid_month)
-        render_keyword_tags(categorized_data, title="🔍 월간 주요 이슈 현황")
+        oee_iss, down_iss, top_words = extract_worst_issues(valid_month, is_single_machine=False)
+        render_worst_issues(oee_iss, down_iss, top_words, title="🔍 월간 주요 이슈 현황")
 
         st.markdown("<h4 style='font-weight:800; color:#0F172A; margin-bottom:15px;'>📋 월간 설비별 종합 가동 내역</h4>", unsafe_allow_html=True)
         disp_month = mach_agg[['설비명', '품명', '종합효율', '비가동시간', 'OPEN ISSUE']].copy()
@@ -412,8 +474,8 @@ def show_machine_popup(tgt_mach, t7_df, full_df, sel_m_side):
     else: 
         st.info("해당 설비의 유효한 가동 데이터가 없습니다.")
 
-    categorized_data = categorize_issues(valid_t7)
-    render_keyword_tags(categorized_data, title="🔍 설비 주요 이슈 현황")
+    oee_iss, down_iss, top_words = extract_worst_issues(valid_t7, is_single_machine=True)
+    render_worst_issues(oee_iss, down_iss, top_words, title="🔍 설비 주요 이슈 현황")
 
     mach_short = str(tgt_mach).split(' - ')[0].strip()
     prod_name = valid_t7['품명'].dropna().iloc[0] if not valid_t7['품명'].dropna().empty else ""
@@ -499,7 +561,7 @@ if data_to_process:
     # =========================================================
     # 🌟 5. 레이아웃 및 필터
     # =========================================================
-    title_col1, title_col2, title_col3 = st.columns([1, 5.5, 3.5], gap="small", vertical_alignment="center")
+    title_col1, title_col2 = st.columns([1.5, 8.5], gap="small", vertical_alignment="center")
     
     with title_col1:
         try: st.image("logo.png", width=120) 
@@ -508,39 +570,10 @@ if data_to_process:
     with title_col2: 
         st.markdown("<h1 style='margin: 0; padding: 0; font-weight: 900; font-size: 26px; color: #0F172A; white-space: nowrap;'>사출생산팀 생산성 및 오픈 이슈 분석 및 관리 리포트</h1>", unsafe_allow_html=True)
 
-    with title_col3:
-        if not daily_df.empty:
-            recent_row = daily_df.iloc[-1]
-            rec_date = recent_row['생산일']
-            rec_oee = safe_float(recent_row['공장종합효율'])
-            
-            diff_str = "<span style='color:#64748B;'>-</span>"
-            if len(daily_df) > 1:
-                prev_oee = safe_float(daily_df.iloc[-2]['공장종합효율'])
-                diff = rec_oee - prev_oee
-                if diff > 0: diff_str = f"<span style='color:#2563EB;'>▲ +{diff*100:.1f}%p</span>"
-                elif diff < 0: diff_str = f"<span style='color:#DC2626;'>▼ {abs(diff)*100:.1f}%p</span>"
+    st.markdown("<hr style='border: 1px solid #E2E8F0; margin-top: 10px; margin-bottom: 15px;'>", unsafe_allow_html=True)
 
-            st.markdown(f"""
-            <div style='background-color: #F8FAFC; border: 2px solid #E2E8F0; border-radius: 12px; padding: 12px 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); width: 100%;'>
-                <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid #E2E8F0; padding-bottom: 8px;'>
-                    <span style='font-size: 14px; color: #475569; font-weight: 800;'>{rec_date}</span>
-                    <div style='font-size: 22px; font-weight: 900; color: #0F172A; display: flex; align-items: baseline;'>
-                        {rec_oee:.1%} <span style='font-size: 11px; font-weight:800; color:#64748B; margin-left:12px; margin-right:4px;'>전일대비 증감율</span><span style='font-size: 15px;'>{diff_str}</span>
-                    </div>
-                </div>
-                <div style='display: flex; justify-content: space-between; align-items: center;'>
-                    <span style='font-size: 14px; color: #475569; font-weight: 800;' id='month_name_placeholder'>선택월 평균</span>
-                    <div style='font-size: 20px; font-weight: 800; color: #1E293B;' id='month_avg_placeholder'>
-                        {daily_df['공장종합효율'].mean():.1%}
-                    </div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-    st.markdown("<hr style='border: 1px solid #E2E8F0; margin-top: 10px; margin-bottom: 10px;'>", unsafe_allow_html=True)
-
-    f1, f2, f3 = st.columns([1, 1, 2.5], gap="medium")
+    # 🚨 1번 피드백 반영: 가로 비율 파격 조정 (필터 좁히고 전광판 확장) 및 세로 중앙 정렬
+    f1, f2, f3 = st.columns([0.8, 0.8, 3.4], gap="large", vertical_alignment="center")
     all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
     with f1: sel_m_side = st.multiselect("📅 생산월 선택", all_months, default=[all_months[-1]] if all_months else [])
     
@@ -563,7 +596,7 @@ if data_to_process:
                 matching_daily = daily_df[daily_df['생산일'] == target_date]
                 day_oee = safe_float(matching_daily.iloc[0]['공장종합효율']) if not matching_daily.empty else active_day['종합효율'].apply(safe_float).mean()
                 
-                # 🚨 1번 피드백 반영: 미니 카드(BEST/WORST) 가로 정렬 컴포넌트
+                # 🚨 1번 피드백 반영: 가로 나열 렌더링 및 justify-content: space-between 적용
                 def build_mini_card(data_df, is_best):
                     res_html = "<div style='display: flex; gap: 8px; width: 100%;'>"
                     bg_color = "#EFF6FF" if is_best else "#FEF2F2"
@@ -574,13 +607,15 @@ if data_to_process:
                         p_name = str(row['품명'])
                         if len(p_name) > 10: p_name = p_name[:10] + ".."
                         oee = safe_float(row['종합효율'])
+                        
+                        # space-between과 width:100%를 적용하여 카드가 좁아져도 겹치지 않게 방어
                         res_html += f"""
-                        <div style="background: {bg_color}; padding: 6px 8px; border-radius: 6px; border: 1px solid {border_color}; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;">
-                            <div style="display: flex; align-items: baseline; gap: 6px; margin-bottom: 2px;">
-                                <span style="font-weight: 900; color: #1E293B; font-size: 13px;">{i+1}. {m_name}</span>
+                        <div style="background: {bg_color}; padding: 6px 8px; border-radius: 6px; border: 1px solid {border_color}; flex: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0;">
+                            <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px; width: 100%;">
+                                <span style="font-weight: 900; color: #1E293B; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%;">{i+1}. {m_name}</span>
                                 <span style="color:{val_color}; font-weight: 900; font-size: 14px;">{oee:.1%}</span>
                             </div>
-                            <div style="color: #64748B; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;" title="{str(row['품명'])}">{p_name}</div>
+                            <div style="color: #64748B; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;" title="{str(row['품명'])}">{p_name}</div>
                         </div>
                         """
                     res_html += "</div>"
@@ -593,17 +628,17 @@ if data_to_process:
                 worst_html = build_mini_card(worst_3, False)
 
                 summary_html = f"""
-                <div style="background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 8px; padding: 12px 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); height: 100%;">
+                <div style="background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 8px; padding: 10px 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); height: 100%;">
                     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; padding-bottom: 8px; margin-bottom: 10px;">
                         <span style="font-size: 14px; font-weight: 900; color: #0F172A;">🚀 {target_date} 요약</span>
                         <span style="font-size: 13px; font-weight: 800; color: #3B82F6;">가동 설비 {active_count}대 | 종합 효율 {day_oee:.1%} | 비가동 {total_down:.1f}h</span>
                     </div>
                     <div style="display: flex; gap: 15px;">
-                        <div style="flex: 1;">
+                        <div style="flex: 1; min-width: 0;">
                             <div style="font-size: 12px; color: #2563EB; font-weight: 900; margin-bottom: 6px;">🏆 종합효율 BEST 3</div>
                             {best_html}
                         </div>
-                        <div style="flex: 1;">
+                        <div style="flex: 1; min-width: 0;">
                             <div style="font-size: 12px; color: #DC2626; font-weight: 900; margin-bottom: 6px;">🚨 종합효율 WORST 3</div>
                             {worst_html}
                         </div>
@@ -611,22 +646,6 @@ if data_to_process:
                 </div>
                 """
                 st.markdown(summary_html.replace('\n', ''), unsafe_allow_html=True)
-
-    title_month_str = ", ".join(sel_m_side) if sel_m_side else "전체"
-    if not daily_df.empty:
-        p_df_for_summary = daily_df[daily_df['생산월'].isin(sel_m_side)] if sel_m_side else daily_df
-        month_oee = p_df_for_summary['공장종합효율'].mean() if not p_df_for_summary.empty else 0.0
-        components.html(f"""
-        <script>
-            setTimeout(function() {{
-                const doc = window.parent.document;
-                const avgElem = doc.getElementById('month_avg_placeholder');
-                const nameElem = doc.getElementById('month_name_placeholder');
-                if(avgElem) avgElem.innerText = '{month_oee:.1%}';
-                if(nameElem) nameElem.innerText = '{title_month_str} 평균';
-            }}, 150);
-        </script>
-        """, width=0, height=0)
 
     st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
     
@@ -639,6 +658,8 @@ if data_to_process:
         p_df = daily_df[daily_df['생산월'].isin(sel_m_side)].copy() if sel_m_side else daily_df.copy()
         if sel_d_side: p_df = p_df[p_df['생산일'].isin(sel_d_side)]
             
+        title_month_str = ", ".join(sel_m_side) if sel_m_side else "전체"
+        
         if sel_m_side: render_section_title(f"사출생산팀 ({title_month_str}) 종합효율 추이")
         else: render_section_title("사출생산팀 전체 종합효율 추이")
             
