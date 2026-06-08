@@ -290,7 +290,7 @@ def get_image_base64(filepath):
         return base64.b64encode(f.read()).decode()
 
 # ==========================================
-# 🌟 3. 팝업창 집중 분석 & 모듈
+# 🌟 3. 팝업창 모듈 및 집중 분석 엔진
 # ==========================================
 def extract_worst_issues(df, column='OPEN ISSUE', is_single_machine=False):
     if column not in df.columns or df.empty: return [], [], []
@@ -352,7 +352,6 @@ def render_worst_issues(oee_issues, down_issues, top_words, title="🔍 핵심 �
         
     html += "</div>"
     st.markdown(html.replace('\n', ''), unsafe_allow_html=True)
-
 
 @st.dialog("📅 일일 가동 상세 현황", width="large")
 def show_daily_summary_popup(clicked_date, f_df, daily_df, full_df):
@@ -561,7 +560,8 @@ if data_to_process:
     # =========================================================
     # 🌟 5. 레이아웃 및 필터
     # =========================================================
-    title_col1, title_col2 = st.columns([1.5, 8.5], gap="small", vertical_alignment="center")
+    # 🚨 상단 타이틀 구역은 이전과 동일 (우측 상단 26년 6월 평균 요약 복구된 상태 유지)
+    title_col1, title_col2, title_col3 = st.columns([1, 5.5, 3.5], gap="small", vertical_alignment="center")
     
     with title_col1:
         try: st.image("logo.png", width=120) 
@@ -570,10 +570,40 @@ if data_to_process:
     with title_col2: 
         st.markdown("<h1 style='margin: 0; padding: 0; font-weight: 900; font-size: 26px; color: #0F172A; white-space: nowrap;'>사출생산팀 생산성 및 오픈 이슈 분석 및 관리 리포트</h1>", unsafe_allow_html=True)
 
-    st.markdown("<hr style='border: 1px solid #E2E8F0; margin-top: 10px; margin-bottom: 15px;'>", unsafe_allow_html=True)
+    with title_col3:
+        if not daily_df.empty:
+            recent_row = daily_df.iloc[-1]
+            rec_date = recent_row['생산일']
+            rec_oee = safe_float(recent_row['공장종합효율'])
+            
+            diff_str = "<span style='color:#64748B;'>-</span>"
+            if len(daily_df) > 1:
+                prev_oee = safe_float(daily_df.iloc[-2]['공장종합효율'])
+                diff = rec_oee - prev_oee
+                if diff > 0: diff_str = f"<span style='color:#2563EB;'>▲ +{diff*100:.1f}%p</span>"
+                elif diff < 0: diff_str = f"<span style='color:#DC2626;'>▼ {abs(diff)*100:.1f}%p</span>"
 
-    # 🚨 1번 피드백 반영: 가로 비율 파격 조정 (필터 좁히고 전광판 확장) 및 세로 중앙 정렬
-    f1, f2, f3 = st.columns([0.8, 0.8, 3.4], gap="large", vertical_alignment="center")
+            st.markdown(f"""
+            <div style='background-color: #F8FAFC; border: 2px solid #E2E8F0; border-radius: 12px; padding: 12px 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); width: 100%;'>
+                <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid #E2E8F0; padding-bottom: 8px;'>
+                    <span style='font-size: 14px; color: #475569; font-weight: 800;'>{rec_date}</span>
+                    <div style='font-size: 22px; font-weight: 900; color: #0F172A; display: flex; align-items: baseline;'>
+                        {rec_oee:.1%} <span style='font-size: 11px; font-weight:800; color:#64748B; margin-left:12px; margin-right:4px;'>전일대비 증감율</span><span style='font-size: 15px;'>{diff_str}</span>
+                    </div>
+                </div>
+                <div style='display: flex; justify-content: space-between; align-items: center;'>
+                    <span style='font-size: 14px; color: #475569; font-weight: 800;' id='month_name_placeholder'>선택월 평균</span>
+                    <div style='font-size: 20px; font-weight: 800; color: #1E293B;' id='month_avg_placeholder'>
+                        {daily_df['공장종합효율'].mean():.1%}
+                    </div>
+                </div>
+            </div>
+            """.replace('\n', ''), unsafe_allow_html=True)
+
+    st.markdown("<hr style='border: 1px solid #E2E8F0; margin-top: 10px; margin-bottom: 10px;'>", unsafe_allow_html=True)
+
+    # 🚨 1번 요청: 필터와 전광판 가로 비율 파격 조정 (0.8 : 0.8 : 3.5) 및 수직 중앙 정렬
+    f1, f2, f3 = st.columns([0.8, 0.8, 3.5], gap="large", vertical_alignment="center")
     all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
     with f1: sel_m_side = st.multiselect("📅 생산월 선택", all_months, default=[all_months[-1]] if all_months else [])
     
@@ -596,7 +626,6 @@ if data_to_process:
                 matching_daily = daily_df[daily_df['생산일'] == target_date]
                 day_oee = safe_float(matching_daily.iloc[0]['공장종합효율']) if not matching_daily.empty else active_day['종합효율'].apply(safe_float).mean()
                 
-                # 🚨 1번 피드백 반영: 가로 나열 렌더링 및 justify-content: space-between 적용
                 def build_mini_card(data_df, is_best):
                     res_html = "<div style='display: flex; gap: 8px; width: 100%;'>"
                     bg_color = "#EFF6FF" if is_best else "#FEF2F2"
@@ -608,7 +637,7 @@ if data_to_process:
                         if len(p_name) > 10: p_name = p_name[:10] + ".."
                         oee = safe_float(row['종합효율'])
                         
-                        # space-between과 width:100%를 적용하여 카드가 좁아져도 겹치지 않게 방어
+                        # 🚨 3번 해결: space-between 적용 및 여백 최소화로 줄바꿈 방어
                         res_html += f"""
                         <div style="background: {bg_color}; padding: 6px 8px; border-radius: 6px; border: 1px solid {border_color}; flex: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0;">
                             <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px; width: 100%;">
@@ -646,6 +675,22 @@ if data_to_process:
                 </div>
                 """
                 st.markdown(summary_html.replace('\n', ''), unsafe_allow_html=True)
+
+    title_month_str = ", ".join(sel_m_side) if sel_m_side else "전체"
+    if not daily_df.empty:
+        p_df_for_summary = daily_df[daily_df['생산월'].isin(sel_m_side)] if sel_m_side else daily_df
+        month_oee = p_df_for_summary['공장종합효율'].mean() if not p_df_for_summary.empty else 0.0
+        components.html(f"""
+        <script>
+            setTimeout(function() {{
+                const doc = window.parent.document;
+                const avgElem = doc.getElementById('month_avg_placeholder');
+                const nameElem = doc.getElementById('month_name_placeholder');
+                if(avgElem) avgElem.innerText = '{month_oee:.1%}';
+                if(nameElem) nameElem.innerText = '{title_month_str} 평균';
+            }}, 150);
+        </script>
+        """, width=0, height=0)
 
     st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
     
