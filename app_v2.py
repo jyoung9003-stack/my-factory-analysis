@@ -800,7 +800,3 @@ if data_to_process:
                         show_machine_popup(mach, t7_df, df, sel_m_side)
 
         else: st.info("분석할 설비 데이터가 존재하지 않습니다.")
-
-            st.warning("🚨 GitHub 데이터 폴더에 현장 도면 사진을 `layout.jpg` 또는 `layout.png` 이름으로 먼저 업로드해주세요!")
-
-else: st.info("GitHub data 폴더에 CSV/Excel 파일을 넣어주세요.")
