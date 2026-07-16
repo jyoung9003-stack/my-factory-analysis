@@ -10,17 +10,6 @@ from datetime import datetime
 from collections import Counter
 
 # ==========================================
-# 🚨 [관리자 설정] 도면 위 설비 좌표 (x%, y%)
-# ==========================================
-LAYOUT_COORDS = {
-    "04호기": {"x": 42, "y": 15},
-    "06호기": {"x": 55, "y": 15},
-    "08호기": {"x": 68, "y": 15},
-    "53호기": {"x": 10, "y": 80},
-    "56호기": {"x": 25, "y": 80},
-}
-
-# ==========================================
 # 🌟 1. 기본 설정 및 테마
 # ==========================================
 st.set_page_config(page_title="듀링 사출생산팀 설비 분석 대시보드", layout="wide", initial_sidebar_state="collapsed")
@@ -560,7 +549,6 @@ if data_to_process:
     # =========================================================
     # 🌟 5. 레이아웃 및 필터
     # =========================================================
-    # 🚨 상단 타이틀 구역은 이전과 동일 (우측 상단 26년 6월 평균 요약 복구된 상태 유지)
     title_col1, title_col2, title_col3 = st.columns([1, 5.5, 3.5], gap="small", vertical_alignment="center")
     
     with title_col1:
@@ -602,7 +590,6 @@ if data_to_process:
 
     st.markdown("<hr style='border: 1px solid #E2E8F0; margin-top: 10px; margin-bottom: 10px;'>", unsafe_allow_html=True)
 
-    # 🚨 1번 요청: 필터와 전광판 가로 비율 파격 조정 (0.8 : 0.8 : 3.5) 및 수직 중앙 정렬
     f1, f2, f3 = st.columns([0.8, 0.8, 3.5], gap="large", vertical_alignment="center")
     all_months = [m for m in df['생산월'].unique() if str(m).strip() != ""]
     with f1: sel_m_side = st.multiselect("📅 생산월 선택", all_months, default=[all_months[-1]] if all_months else [])
@@ -637,7 +624,6 @@ if data_to_process:
                         if len(p_name) > 10: p_name = p_name[:10] + ".."
                         oee = safe_float(row['종합효율'])
                         
-                        # 🚨 3번 해결: space-between 적용 및 여백 최소화로 줄바꿈 방어
                         res_html += f"""
                         <div style="background: {bg_color}; padding: 6px 8px; border-radius: 6px; border: 1px solid {border_color}; flex: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0;">
                             <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px; width: 100%;">
@@ -694,7 +680,8 @@ if data_to_process:
 
     st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
     
-    tab1, tab2, tab3 = st.tabs(["📈 사출생산팀 종합효율 추이", "🎯 설비별 생산성 및 오픈이슈 분석", "🗺️ 현장 도면 OEE 오버레이"])
+    # 🚨 탭 3개를 2개로 줄임
+    tab1, tab2 = st.tabs(["📈 사출생산팀 종합효율 추이", "🎯 설비별 생산성 및 오픈이슈 분석"])
 
     # -----------------------------------------------------
     # TAB 1: 종합 효율 추이 
@@ -800,3 +787,5 @@ if data_to_process:
                         show_machine_popup(mach, t7_df, df, sel_m_side)
 
         else: st.info("분석할 설비 데이터가 존재하지 않습니다.")
+
+else: st.info("GitHub data 폴더에 CSV/Excel 파일을 넣어주세요.")
