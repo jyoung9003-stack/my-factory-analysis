@@ -801,63 +801,6 @@ if data_to_process:
 
         else: st.info("분석할 설비 데이터가 존재하지 않습니다.")
 
-    # -----------------------------------------------------
-    # TAB 3: 현장 도면(사진) 기반 OEE 오버레이 
-    # -----------------------------------------------------
-    with tab3:
-        render_section_title("🗺️ 현장 레이아웃 OEE 라이브 뷰")
-        
-        latest_date = None
-        if not daily_df.empty: latest_date = daily_df.iloc[-1]['생산일']
-        
-        if latest_date:
-            st.markdown(f"<div style='background-color:#1E293B; color:white; padding:10px 20px; border-radius:8px; display:inline-block; font-weight:800; margin-bottom:15px;'>🕒 조회 시점: {latest_date}</div>", unsafe_allow_html=True)
-            latest_f_df = f_df[f_df['생산일'] == latest_date]
-        else:
-            latest_f_df = pd.DataFrame()
-            
-        img_path = None
-        if os.path.exists("layout.jpg"): img_path = "layout.jpg"
-        elif os.path.exists("layout.png"): img_path = "layout.png"
-        
-        if img_path:
-            img_b64 = get_image_base64(img_path)
-            
-            overlay_html = ""
-            for mach, coords in LAYOUT_COORDS.items():
-                x, y = coords['x'], coords['y']
-                
-                mach_row = latest_f_df[latest_f_df['설비명'].str.contains(mach, na=False)]
-                if not mach_row.empty and safe_float(mach_row.iloc[0]['종합효율']) > 0:
-                    oee_val = safe_float(mach_row.iloc[0]['종합효율'])
-                    bg_color = "rgba(37, 99, 235, 0.9)" if oee_val >= 0.86 else "rgba(220, 38, 38, 0.9)" 
-                    oee_str = f"{oee_val:.1%}"
-                else:
-                    bg_color = "rgba(100, 116, 139, 0.8)" 
-                    oee_str = "OFF"
-
-                overlay_html += f"""
-                <div style="position: absolute; top: {y}%; left: {x}%; transform: translate(-50%, -50%); 
-                            background-color: {bg_color}; color: white; padding: 6px 10px; border-radius: 6px; 
-                            text-align: center; border: 2px solid white; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-                            cursor: pointer; transition: transform 0.2s;"
-                            onmouseover="this.style.transform='translate(-50%, -50%) scale(1.1)';"
-                            onmouseout="this.style.transform='translate(-50%, -50%) scale(1)';">
-                    <div style="font-size: 11px; font-weight: 700; margin-bottom: 2px; opacity: 0.9;">{mach}</div>
-                    <div style="font-size: 16px; font-weight: 900;">{oee_str}</div>
-                </div>
-                """
-
-            map_html = f"""
-            <div style="position: relative; width: 100%; max-width: 1400px; margin: 0 auto; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); border: 1px solid #CBD5E1;">
-                <img src="data:image/jpeg;base64,{img_b64}" style="width: 100%; height: auto; display: block;">
-                {overlay_html}
-            </div>
-            """
-            st.markdown(map_html, unsafe_allow_html=True)
-            
-            st.info("💡 **관리자님!** 코드 맨 위쪽의 `LAYOUT_COORDS` 설정에서 엑셀처럼 `x`와 `y` 숫자를 변경하시면 화면상의 스티커 위치를 원하시는 곳으로 완벽하게 맞출 수 있습니다.")
-        else:
             st.warning("🚨 GitHub 데이터 폴더에 현장 도면 사진을 `layout.jpg` 또는 `layout.png` 이름으로 먼저 업로드해주세요!")
 
 else: st.info("GitHub data 폴더에 CSV/Excel 파일을 넣어주세요.")
